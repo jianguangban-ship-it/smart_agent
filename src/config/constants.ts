@@ -9,18 +9,18 @@ export const TASK_TYPES: TaskTypeConfig[] = [
 export const FIBONACCI_POINTS = [1, 2, 3, 5, 8] as const
 
 export const VEHICLE_OPTIONS = [
-  'GWM', 'GWM_DE09', 'GWM_EC15S', 'GWM_EC15G',
+  'Platform', 'GWM', 'GWM_DE09', 'GWM_EC15S', 'GWM_EC15G',
   'GWM_EC15SG', 'GWM_B26-A', 'GWM_B26-G'
 ]
 
 export const PRODUCT_OPTIONS = [
-  'ICC', 'EPS', 'ESP', 'IBC', 'IBC1.1',
-  'IBC1.2', 'IBC2.0', 'ABS', 'TCS', 'AEB'
+  'EPS', 'IBC', 'IBC1.1',
+  'IBC1.2', 'IBC2.0', 'EMB', 'ERC', 'MC01', 'HEM', 'EDC'
 ]
 
 export const LAYER_OPTIONS = ['SYS', 'SW', 'HW', 'ME']
 
 export const DEFAULT_COMPONENT_HISTORY = [
   'CAN_Driver', 'LIN_Stack', 'Diag_Module', 'PWM_Controller',
-  'Flash_Manager', 'OS_Task', 'Calibration', 'PID_Control'
+  'Flash_Manager', 'OS_Task', 'Calibration', 'CDD_MotCtrl', 'PID_Control'
 ]
