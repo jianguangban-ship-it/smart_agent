@@ -36,6 +36,7 @@ export default {
     confirmCreate: 'Create JIRA',
     creating: 'Creating...',
     analyzing: 'Analyzing...',
+    coaching: 'Coaching...',
     select: 'Select'
   },
   panel: {
@@ -109,7 +110,7 @@ export default {
     emptyHint: 'Get AI guidance to write better task descriptions',
     emptySubHint: 'Fill in basic info and description, then click the button below',
     analyzing: 'AI Coach is analyzing...',
-    requestBtn: 'Get Writing Guidance',
+    requestBtn: 'Writing Guidance',
     requesting: 'Requesting...',
     retryBtn: 'Retry',
     hint: 'Coach will help improve your description quality',

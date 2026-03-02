@@ -91,25 +91,13 @@
         </svg>
         <span>{{ t('settings.cancel') }}</span>
       </button>
-      <template v-else>
-        <button v-if="wasCancelled || hadError" class="retry-btn" :disabled="retryCountdown > 0" @click="handleRetry">
+      <template v-else-if="wasCancelled || hadError">
+        <button class="retry-btn" :disabled="retryCountdown > 0" @click="handleRetry">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
           </svg>
           <span>{{ retryCountdown > 0 ? `${retryCountdown}s` : t('coach.retryBtn') }}</span>
         </button>
-        <button
-          @click="$emit('request')"
-          :disabled="!canRequest"
-          class="coach-btn"
-          :class="{ active: canRequest }"
-        >
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-          </svg>
-          <span>{{ t('coach.requestBtn') }}</span>
-        </button>
-        <p class="coach-hint">{{ t('coach.hint') }}</p>
       </template>
     </template>
   </PanelShell>
@@ -129,7 +117,6 @@ import QuickChip from '@/components/shared/QuickChip.vue'
 const props = defineProps<{
   response: unknown
   isLoading: boolean
-  canRequest: boolean
   wasCancelled: boolean
   hadError: boolean
   streamSpeed: number
@@ -137,7 +124,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  request: []
   cancel: []
   retry: []
   applyChip: [key: string]
@@ -514,33 +500,9 @@ const chips = computed(() =>
   opacity: 0.5;
   cursor: not-allowed;
 }
-.coach-btn {
-  width: 100%;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.2s;
-  background-color: var(--bg-tertiary);
-  color: var(--text-muted);
-}
-.coach-btn.active {
-  background-color: var(--accent-green);
-  color: white;
-}
 .btn-icon {
   width: 16px;
   height: 16px;
-}
-.coach-hint {
-  font-size: 12px;
-  text-align: center;
-  color: var(--text-muted);
-  margin-top: 8px;
 }
 
 @keyframes spin {

@@ -36,6 +36,7 @@ export default {
     confirmCreate: '创建 JIRA',
     creating: '创建中...',
     analyzing: '分析中...',
+    coaching: '指导中...',
     select: '选择'
   },
   panel: {
@@ -109,7 +110,7 @@ export default {
     emptyHint: '获取 AI 辅导，写出更优质的任务描述',
     emptySubHint: '填写基本信息和描述后，点击下方按钮',
     analyzing: 'AI Coach 正在分析...',
-    requestBtn: '获取写作指导',
+    requestBtn: '写作指导',
     requesting: '请求中...',
     retryBtn: '重试',
     hint: 'Coach 将帮助提升您的描述质量',

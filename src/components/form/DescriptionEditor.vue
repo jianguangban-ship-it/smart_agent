@@ -5,6 +5,7 @@
       <span class="required-tag">* {{ t('form.required') }}</span>
     </h2>
     <textarea
+      ref="textareaRef"
       v-model="model"
       class="input-base desc-textarea"
       :placeholder="t('form.descriptionPlaceholder')"
@@ -16,11 +17,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useI18n } from '@/i18n'
 
 const model = defineModel<string>({ required: true })
 const { t } = useI18n()
+const textareaRef = ref<HTMLTextAreaElement>()
+
+function autoGrow() {
+  const el = textareaRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
+watch(model, () => nextTick(autoGrow))
 
 const wordCount = computed(() =>
   model.value.trim() ? model.value.trim().split(/\s+/).filter(Boolean).length : 0
@@ -51,8 +62,9 @@ const sentenceCount = computed(() =>
 }
 .desc-textarea {
   min-height: 160px;
-  resize: vertical;
+  resize: none;
   font-size: 14px;
+  overflow: hidden;
 }
 .desc-footer {
   display: flex;

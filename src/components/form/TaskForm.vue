@@ -37,44 +37,66 @@
 
       <!-- Action Buttons -->
       <div class="form-actions">
-        <button class="btn btn-ghost" :disabled="isSubmitting" @click="$emit('reset')">
-          {{ t('form.reset') }}
+        <button
+          class="action-btn action-reset"
+          :disabled="isSubmitting || isCoachLoading"
+          :title="t('form.reset')"
+          @click="$emit('reset')"
+        >
+          <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
         </button>
         <div class="action-group">
-          <Transition name="fade">
-            <button
-              v-if="hasAiResponse"
-              @click="$emit('create')"
-              :disabled="isSubmitting"
-              class="btn btn-success"
-            >
-              <svg v-if="isSubmitting && currentAction === 'create'" class="btn-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
-                <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
-                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
-              </svg>
-              <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-              </svg>
-              <span>{{ isSubmitting && currentAction === 'create' ? t('form.creating') : t('form.confirmCreate') }}</span>
-              <kbd class="shortcut-hint">{{ t('shortcuts.create') }}</kbd>
-            </button>
-          </Transition>
+          <!-- Writing Guidance -->
           <button
-            @click="$emit('analyze')"
-            :disabled="!canSubmit || isSubmitting"
-            class="btn btn-primary"
-            :class="{ dimmed: hasAiResponse }"
+            class="action-btn action-coach"
+            :disabled="!canSubmit || isSubmitting || isCoachLoading"
+            :title="t('coach.requestBtn')"
+            @click="$emit('coach')"
           >
-            <svg v-if="isSubmitting && currentAction === 'analyze'" class="btn-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
+            <svg v-if="isCoachLoading" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
               <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
               <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
             </svg>
-            <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </button>
+          <!-- Analyze Task -->
+          <button
+            class="action-btn action-analyze"
+            :class="{ dimmed: hasAiResponse }"
+            :disabled="!canSubmit || isSubmitting || isCoachLoading"
+            :title="t('form.aiAnalyze')"
+            @click="$emit('analyze')"
+          >
+            <svg v-if="isSubmitting && currentAction === 'analyze'" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
+              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+            </svg>
+            <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
             </svg>
-            <span>{{ isSubmitting && currentAction === 'analyze' ? t('form.analyzing') : t('form.aiAnalyze') }}</span>
-            <kbd class="shortcut-hint">{{ t('shortcuts.analyze') }}</kbd>
           </button>
+          <!-- Create JIRA -->
+          <Transition name="fade">
+            <button
+              v-if="hasAiResponse"
+              class="action-btn action-create"
+              :disabled="isSubmitting || isCoachLoading"
+              :title="t('form.confirmCreate')"
+              @click="$emit('create')"
+            >
+              <svg v-if="isSubmitting && currentAction === 'create'" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
+                <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+              </svg>
+              <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+            </button>
+          </Transition>
         </div>
       </div>
     </div>
@@ -98,12 +120,14 @@ defineProps<{
   qualityScoreLabel: string
   canSubmit: boolean
   isSubmitting: boolean
+  isCoachLoading: boolean
   currentAction: string
   hasAiResponse: boolean
   errorMessage: string
 }>()
 
 defineEmits<{
+  coach: []
   analyze: []
   create: []
   reset: []
@@ -168,7 +192,7 @@ const { t } = useI18n()
   flex-direction: column;
 }
 .form-actions {
-  padding: 20px;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -176,58 +200,78 @@ const { t } = useI18n()
 .action-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
-/* Buttons */
-.btn {
+/* Icon-only action buttons */
+.action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 20px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-md);
-  font-size: 14px;
-  font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
   transition: all 0.2s;
-  border: none;
+  position: relative;
 }
-.btn-icon {
-  width: 16px;
-  height: 16px;
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
-.btn-ghost {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
+.action-icon {
+  width: 18px;
+  height: 18px;
 }
-.btn-ghost:hover:not(:disabled) {
-  background-color: var(--bg-tertiary);
+
+/* Reset — red */
+.action-reset {
+  background-color: var(--accent-red);
+  color: white;
 }
-.btn-ghost:disabled {
-  opacity: 0.5;
+.action-reset:hover:not(:disabled) {
+  filter: brightness(1.15);
 }
-.btn-primary {
+
+/* Writing Guidance — yellow/orange */
+.action-coach {
+  background-color: var(--accent-orange);
+  color: white;
+}
+.action-coach:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+/* Analyze — blue */
+.action-analyze {
   background-color: var(--accent-blue);
   color: white;
 }
-.btn-primary:disabled {
-  background-color: var(--bg-tertiary);
-  color: var(--text-muted);
+.action-analyze:hover:not(:disabled) {
+  filter: brightness(1.15);
 }
-.btn-primary.dimmed {
-  opacity: 0.7;
+.action-analyze.dimmed {
+  opacity: 0.65;
 }
-.btn-success {
+
+/* Create JIRA — green */
+.action-create {
   background-color: var(--accent-green);
   color: white;
   animation: fadeIn 0.3s ease-out;
 }
-.shortcut-hint {
-  font-size: 10px;
-  padding: 2px 4px;
-  border-radius: 3px;
-  background-color: rgba(255,255,255,0.15);
-  font-family: var(--font-sans);
-  opacity: 0.7;
+.action-create:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+/* Disabled overrides for colored buttons */
+.action-reset:disabled,
+.action-coach:disabled,
+.action-analyze:disabled,
+.action-create:disabled {
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
+  filter: none;
 }
 </style>
