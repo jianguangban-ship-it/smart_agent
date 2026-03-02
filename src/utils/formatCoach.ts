@@ -11,11 +11,11 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;')
 }
 
-// Extract math delimiters from escaped text, replace with placeholders,
-// return the cleaned text and a restore function that swaps placeholders
-// back with rendered KaTeX HTML. This must run BEFORE markdown formatting
-// so that \n→<br> conversion doesn't corrupt TeX content.
-function extractMath(escapedText: string): { text: string; restore: (html: string) => string } {
+// Extract math delimiters from RAW text (before HTML escaping), replace with
+// placeholders. This must run BEFORE escapeHtml so that < > inside TeX are
+// preserved for KaTeX, and BEFORE markdown formatting so \n→<br> doesn't
+// corrupt TeX content.
+function extractMath(rawText: string): { text: string; restore: (html: string) => string } {
   const slots: string[] = []
   const placeholder = (i: number) => `\x00MATH${i}\x00`
 
@@ -28,7 +28,7 @@ function extractMath(escapedText: string): { text: string; restore: (html: strin
     return placeholder(slots.length - 1)
   }
 
-  let t = escapedText
+  let t = rawText
   // Display math: $$ ... $$ and \[ ... \] (must come before inline)
   t = t.replace(/\$\$([\s\S]+?)\$\$/g, (m, tex) => collect(tex, true, m))
   t = t.replace(/\\\[([\s\S]+?)\\\]/g, (m, tex) => collect(tex, true, m))
@@ -44,9 +44,14 @@ function extractMath(escapedText: string): { text: string; restore: (html: strin
 
 function formatMarkdownText(text: string): string {
   if (!text) return ''
-  const escaped = escapeHtml(text)
-  const math = extractMath(escaped)
-  let t = math.text
+  const math = extractMath(text)
+  let t = escapeHtml(math.text)
+
+  // Markdown escape sequences → HTML entities (before bold/italic regex)
+  // Prevents \* from pairing with other * and triggering bold formatting
+  t = t.replace(/\\\*/g, '&#42;')
+  t = t.replace(/\\_/g, '&#95;')
+  t = t.replace(/\\\\/g, '&#92;')
 
   // Headers
   t = t.replace(/^### (.+)$/gm, '<h4 class="coach-h4">$1</h4>')
