@@ -11,31 +11,42 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;')
 }
 
-function renderMath(html: string): string {
-  // Display math: $$ ... $$ and \[ ... \]
-  html = html.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }) }
-    catch { return `$$${tex}$$` }
-  })
-  html = html.replace(/\\\[([\s\S]+?)\\\]/g, (_, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }) }
-    catch { return `\\[${tex}\\]` }
-  })
+// Extract math delimiters from escaped text, replace with placeholders,
+// return the cleaned text and a restore function that swaps placeholders
+// back with rendered KaTeX HTML. This must run BEFORE markdown formatting
+// so that \n→<br> conversion doesn't corrupt TeX content.
+function extractMath(escapedText: string): { text: string; restore: (html: string) => string } {
+  const slots: string[] = []
+  const placeholder = (i: number) => `\x00MATH${i}\x00`
+
+  function collect(tex: string, display: boolean, fallback: string): string {
+    try {
+      slots.push(katex.renderToString(tex.trim(), { displayMode: display, throwOnError: false }))
+    } catch {
+      slots.push(fallback)
+    }
+    return placeholder(slots.length - 1)
+  }
+
+  let t = escapedText
+  // Display math: $$ ... $$ and \[ ... \] (must come before inline)
+  t = t.replace(/\$\$([\s\S]+?)\$\$/g, (m, tex) => collect(tex, true, m))
+  t = t.replace(/\\\[([\s\S]+?)\\\]/g, (m, tex) => collect(tex, true, m))
   // Inline math: \( ... \) and single $ ... $ (not $$)
-  html = html.replace(/\\\(([\s\S]+?)\\\)/g, (_, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }) }
-    catch { return `\\(${tex}\\)` }
-  })
-  html = html.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g, (_, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }) }
-    catch { return `$${tex}$` }
-  })
-  return html
+  t = t.replace(/\\\(([\s\S]+?)\\\)/g, (m, tex) => collect(tex, false, m))
+  t = t.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g, (m, tex) => collect(tex, false, m))
+
+  return {
+    text: t,
+    restore: (html: string) => html.replace(/\x00MATH(\d+)\x00/g, (_, i) => slots[+i] ?? '')
+  }
 }
 
 function formatMarkdownText(text: string): string {
   if (!text) return ''
-  let t = escapeHtml(text)
+  const escaped = escapeHtml(text)
+  const math = extractMath(escaped)
+  let t = math.text
 
   // Headers
   t = t.replace(/^### (.+)$/gm, '<h4 class="coach-h4">$1</h4>')
@@ -73,7 +84,7 @@ function formatMarkdownText(text: string): string {
   t = '<p class="coach-para">' + t + '</p>'
   t = t.replace(/<p class="coach-para"><\/p>/g, '')
 
-  return renderMath(t)
+  return math.restore(t)
 }
 
 function formatCommentList(comment: string): string {
