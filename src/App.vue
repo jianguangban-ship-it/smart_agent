@@ -10,9 +10,9 @@
 
     <!-- Confirmation Modal -->
     <Transition name="modal">
-      <div v-if="showConfirmModal" class="modal-overlay" @click.self="showConfirmModal = false">
+      <div v-if="showConfirmModal" class="modal-overlay" ref="confirmModalRef" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" @click.self="showConfirmModal = false">
         <div class="modal-content">
-          <h3 class="modal-title">{{ t('modal.confirmTitle') }}</h3>
+          <h3 id="confirm-modal-title" class="modal-title">{{ t('modal.confirmTitle') }}</h3>
           <p class="modal-hint">{{ t('modal.confirmHint') }}</p>
           <div class="modal-payload">
             <JsonViewer :data="jsonPayload" :copyable="true" />
@@ -126,13 +126,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { WebhookPayload } from '@/types/api'
 import { useI18n } from '@/i18n'
 import { useForm } from '@/composables/useForm'
 import { useWebhook } from '@/composables/useWebhook'
 import { useLLM } from '@/composables/useLLM'
 import { useToast } from '@/composables/useToast'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 import { addTicket } from '@/composables/useTicketHistory'
 import { getTemplateContent, effectiveTemplates, setCustomTemplates, customTemplatesModified } from '@/config/templates/index'
 import type { TemplateDefinition } from '@/types/template'
@@ -182,6 +183,13 @@ const errorMessage = ref('')
 const showConfirmModal = ref(false)
 const showSettingsModal = ref(false)
 const showHotkeyModal = ref(false)
+const confirmModalRef = ref<HTMLElement>()
+const { activate: activateConfirmTrap, deactivate: deactivateConfirmTrap } = useFocusTrap(confirmModalRef)
+
+watch(showConfirmModal, (open) => {
+  if (open) nextTick(() => activateConfirmTrap())
+  else deactivateConfirmTrap()
+})
 
 // Shims so TaskForm buttons reflect both JIRA-submitting and LLM-analyzing states
 const formIsSubmitting = computed(() => isSubmitting.value || isAnalyzeLoading.value)
@@ -207,7 +215,20 @@ function buildPayload(action: 'analyze' | 'create' | 'coach' | 'preview'): Webho
   }
 }
 
-const jsonPayload = computed(() => JSON.stringify(buildPayload('preview'), null, 2))
+// Debounced to avoid JSON.stringify on every keystroke — DevTools tolerates slight staleness
+const jsonPayload = ref('')
+let _payloadTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  [() => form.description, () => form.projectKey, () => form.issueType,
+   computedSummary, () => form.assignee, () => form.estimatedPoints],
+  () => {
+    if (_payloadTimer) clearTimeout(_payloadTimer)
+    _payloadTimer = setTimeout(() => {
+      jsonPayload.value = JSON.stringify(buildPayload('preview'), null, 2)
+    }, 500)
+  },
+  { immediate: true }
+)
 
 // ─── Response persistence ──────────────────────────────────────────────────
 
@@ -240,7 +261,8 @@ function clearResponsesFromStorage() {
   localStorage.removeItem(LS_RESPONSE_SNAPSHOT)
 }
 
-// Invalidate stored responses whenever any snapshot field changes
+// Invalidate stored responses whenever any snapshot field changes (debounced)
+let _clearTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   [
     () => form.projectKey,
@@ -250,7 +272,10 @@ watch(
     () => form.assignee,
     () => form.estimatedPoints
   ],
-  clearResponsesFromStorage
+  () => {
+    if (_clearTimer) clearTimeout(_clearTimer)
+    _clearTimer = setTimeout(clearResponsesFromStorage, 500)
+  }
 )
 
 function restoreResponsesFromStorage() {
@@ -375,7 +400,7 @@ function handleTemplateImport(incoming: TemplateDefinition[]) {
   const existingKeys = new Set(effectiveTemplates.value.map(t => t.key))
   const toAdd = incoming.filter(t => t.key && !existingKeys.has(t.key))
   if (toAdd.length === 0) {
-    addToast('info', 'No new templates to import (duplicates skipped)')
+    addToast('info', t('toast.noDuplicateTemplates'))
     return
   }
   setCustomTemplates([...effectiveTemplates.value, ...toAdd])

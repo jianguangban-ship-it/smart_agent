@@ -17,7 +17,7 @@
           </span>
         </div>
         <div class="config-row">
-          <span class="config-label">Active URL:</span>
+          <span class="config-label">{{ t('dev.activeUrl') }}:</span>
           <code class="config-url">{{ activeUrl }}</code>
         </div>
         <div class="config-hint">
@@ -53,14 +53,14 @@
         </div>
         <div class="state-divider" />
         <div class="config-row">
-          <span class="config-label">Coach {{ t('dev.streaming') }}:</span>
+          <span class="config-label">{{ t('dev.coach') }} {{ t('dev.streaming') }}:</span>
           <span :style="{ color: isCoachLoading ? 'var(--accent-green)' : 'var(--text-muted)' }">
             {{ isCoachLoading ? t('dev.yes') : t('dev.no') }}
             <span v-if="isCoachLoading && coachStreamSpeed > 0" class="speed-badge">{{ coachStreamSpeed }} {{ t('dev.streamSpeed') }}</span>
           </span>
         </div>
         <div class="config-row">
-          <span class="config-label">Analyze {{ t('dev.streaming') }}:</span>
+          <span class="config-label">{{ t('dev.analyze') }} {{ t('dev.streaming') }}:</span>
           <span :style="{ color: isAnalyzeLoading ? 'var(--accent-purple)' : 'var(--text-muted)' }">
             {{ isAnalyzeLoading ? t('dev.yes') : t('dev.no') }}
             <span v-if="isAnalyzeLoading && analyzeStreamSpeed > 0" class="speed-badge">{{ analyzeStreamSpeed }} {{ t('dev.streamSpeed') }}</span>
@@ -69,20 +69,20 @@
         <div v-if="coachBackoffSecs > 0 || analyzeBackoffSecs > 0" class="config-row">
           <span class="config-label">{{ t('dev.backoff') }}:</span>
           <span style="color: var(--accent-orange)">
-            <span v-if="coachBackoffSecs > 0">Coach {{ coachBackoffSecs }}s</span>
-            <span v-if="analyzeBackoffSecs > 0">Analyze {{ analyzeBackoffSecs }}s</span>
+            <span v-if="coachBackoffSecs > 0">{{ t('dev.coach') }} {{ coachBackoffSecs }}s</span>
+            <span v-if="analyzeBackoffSecs > 0">{{ t('dev.analyze') }} {{ analyzeBackoffSecs }}s</span>
           </span>
         </div>
         <div class="config-row">
-          <span class="config-label">Coach Error/Cancel:</span>
+          <span class="config-label">{{ t('dev.coachErrorCancel') }}:</span>
           <span :style="{ color: coachHadError ? 'var(--accent-red)' : coachWasCancelled ? 'var(--accent-orange)' : 'var(--text-muted)' }">
-            {{ coachHadError ? 'error' : coachWasCancelled ? 'cancelled' : t('dev.no') }}
+            {{ coachHadError ? t('dev.error') : coachWasCancelled ? t('dev.cancelled') : t('dev.no') }}
           </span>
         </div>
         <div class="config-row">
-          <span class="config-label">Analyze Error/Cancel:</span>
+          <span class="config-label">{{ t('dev.analyzeErrorCancel') }}:</span>
           <span :style="{ color: analyzeHadError ? 'var(--accent-red)' : analyzeWasCancelled ? 'var(--accent-orange)' : 'var(--text-muted)' }">
-            {{ analyzeHadError ? 'error' : analyzeWasCancelled ? 'cancelled' : t('dev.no') }}
+            {{ analyzeHadError ? t('dev.error') : analyzeWasCancelled ? t('dev.cancelled') : t('dev.no') }}
           </span>
         </div>
       </div>

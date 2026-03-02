@@ -1,6 +1,6 @@
 export default {
   header: {
-    title: 'JIRA AI-Powered Task Workstation',
+    title: 'Agentic Engineering Platform',
     themeDark: 'Switch to dark mode',
     themeLight: 'Switch to light mode'
   },
@@ -52,7 +52,8 @@ export default {
     items: 'items',
     backoffLabel: 'Rate limited — retrying in',
     showDiff: 'Diff',
-    hideDiff: 'Normal'
+    hideDiff: 'Normal',
+    jiraTicket: 'JIRA Ticket'
   },
   status: {
     idle: 'Idle',
@@ -80,7 +81,14 @@ export default {
     streamSpeed: 'tok/s',
     yes: 'Yes',
     no: 'No',
-    backoff: 'Backoff'
+    backoff: 'Backoff',
+    activeUrl: 'Active URL',
+    coach: 'Coach',
+    analyze: 'Analyze',
+    coachErrorCancel: 'Coach Error/Cancel',
+    analyzeErrorCancel: 'Analyze Error/Cancel',
+    error: 'error',
+    cancelled: 'cancelled'
   },
   error: {
     timeout: 'Request timeout, please check if n8n service is running',
@@ -89,7 +97,8 @@ export default {
     emptyResponse: 'Server returned empty response, please check n8n workflow configuration',
     glm401: 'Invalid API key. Click ⚙ Settings to update it.',
     glm429: 'Rate limit exceeded. Please wait a moment and retry.',
-    glm5xx: 'LLM service is temporarily unavailable. Please retry shortly.'
+    glm5xx: 'LLM service is temporarily unavailable. Please retry shortly.',
+    maxRetries: 'Rate limit exceeded after 3 retries. Please try again later.'
   },
   urlMode: {
     testTooltip: 'Test Mode: Requires clicking "Listen" in n8n editor',
@@ -131,7 +140,10 @@ export default {
     draftRestored: 'Draft restored from previous session',
     draftCleared: 'Form reset and draft cleared',
     copied: 'Copied to clipboard',
-    templatesImported: 'templates imported'
+    templatesImported: 'templates imported',
+    invalidDropFile: 'Please drop a valid .json file',
+    invalidTemplateJson: 'Invalid template JSON file',
+    noDuplicateTemplates: 'No new templates to import (duplicates skipped)'
   },
   shortcuts: {
     analyze: 'Ctrl+Enter',
@@ -141,7 +153,11 @@ export default {
     title: 'Ticket History',
     empty: 'No tickets created yet',
     clear: 'Clear',
-    ticketKey: 'Ticket'
+    ticketKey: 'Ticket',
+    justNow: 'just now',
+    minsAgo: 'm ago',
+    hoursAgo: 'h ago',
+    daysAgo: 'd ago'
   },
   hotkeys: {
     title: 'Keyboard Shortcuts',

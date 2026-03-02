@@ -13,10 +13,11 @@
         :class="{ 'diff-active': showDiff }"
         @click="showDiff = !showDiff"
         :title="showDiff ? t('panel.hideDiff') : t('panel.showDiff')"
+        :aria-label="showDiff ? t('panel.hideDiff') : t('panel.showDiff')"
       >
         {{ showDiff ? t('panel.hideDiff') : t('panel.showDiff') }}
       </button>
-      <button v-if="response && !isAnalyzing" class="copy-btn" @click="copyResponse" :title="t('toast.copied')">
+      <button v-if="response && !isAnalyzing" class="copy-btn" @click="copyResponse" :title="t('toast.copied')" :aria-label="t('toast.copied')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="9" y="2" width="13" height="13" rx="2"/>
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke-linecap="round"/>
@@ -104,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from '@/i18n'
 import { formatCoachResponse } from '@/utils/formatCoach'
 import { diffWords } from '@/utils/diffText'
@@ -145,7 +146,11 @@ function handleRetry() {
   }, 1000)
 }
 
-onUnmounted(() => { if (_cooldownTimer !== null) clearInterval(_cooldownTimer) })
+let _rafId: number | null = null
+onUnmounted(() => {
+  if (_cooldownTimer !== null) clearInterval(_cooldownTimer)
+  if (_rafId !== null) cancelAnimationFrame(_rafId)
+})
 
 const statusInfo = computed(() => {
   if (props.isAnalyzing) return { status: 'loading' as const, key: 'loading' }
@@ -159,7 +164,15 @@ const isMarkdownResponse = computed(() => {
   return !!r && ('markdown_msg' in r || 'message' in r)
 })
 
-const formattedAnalysis = computed(() => formatCoachResponse(props.response))
+// rAF-throttled to avoid running 12-regex formatter on every streaming token
+const formattedAnalysis = ref('')
+watch(() => props.response, (val) => {
+  if (_rafId !== null) return
+  _rafId = requestAnimationFrame(() => {
+    formattedAnalysis.value = formatCoachResponse(val)
+    _rafId = null
+  })
+}, { immediate: true })
 
 const rawText = computed(() => {
   const r = props.response as Record<string, unknown>

@@ -14,10 +14,11 @@
         :class="{ 'skill-on': coachSkillEnabled, 'skill-off': !coachSkillEnabled }"
         @click="setCoachSkillEnabled(!coachSkillEnabled)"
         :title="coachSkillEnabled ? t('coach.skillOn') : t('coach.skillOff')"
+        :aria-label="coachSkillEnabled ? t('coach.skillOn') : t('coach.skillOff')"
       >
         {{ coachSkillEnabled ? t('coach.skillOn') : t('coach.skillOff') }}
       </button>
-      <button v-if="response && !isLoading" class="copy-btn" @click="copyResponse" :title="t('toast.copied')">
+      <button v-if="response && !isLoading" class="copy-btn" @click="copyResponse" :title="t('toast.copied')" :aria-label="t('toast.copied')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="9" y="2" width="13" height="13" rx="2"/>
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke-linecap="round"/>
@@ -117,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from '@/i18n'
 import { formatCoachResponse } from '@/utils/formatCoach'
 import { effectiveTemplates } from '@/config/templates/index'
@@ -164,13 +165,16 @@ function handleRetry() {
   }, 1000)
 }
 
-onUnmounted(() => { if (_cooldownTimer !== null) clearInterval(_cooldownTimer) })
+onUnmounted(() => {
+  if (_cooldownTimer !== null) clearInterval(_cooldownTimer)
+  if (_rafId !== null) cancelAnimationFrame(_rafId)
+})
 
 function handleDrop(e: DragEvent) {
   isDragging.value = false
   const file = e.dataTransfer?.files?.[0]
   if (!file || !file.name.endsWith('.json')) {
-    addToast('error', 'Please drop a valid .json file')
+    addToast('error', t('toast.invalidDropFile'))
     return
   }
   const reader = new FileReader()
@@ -180,7 +184,7 @@ function handleDrop(e: DragEvent) {
       if (!Array.isArray(data)) throw new Error('Not an array')
       emit('importTemplates', data)
     } catch {
-      addToast('error', 'Invalid template JSON file')
+      addToast('error', t('toast.invalidTemplateJson'))
     }
   }
   reader.readAsText(file)
@@ -192,7 +196,16 @@ const statusInfo = computed(() => {
   return { status: 'idle' as const, key: 'idle' }
 })
 
-const formattedResponse = computed(() => formatCoachResponse(props.response))
+// rAF-throttled to avoid running 12-regex formatter on every streaming token
+const formattedResponse = ref('')
+let _rafId: number | null = null
+watch(() => props.response, (val) => {
+  if (_rafId !== null) return
+  _rafId = requestAnimationFrame(() => {
+    formattedResponse.value = formatCoachResponse(val)
+    _rafId = null
+  })
+}, { immediate: true })
 
 const rawText = computed(() => {
   const r = props.response as Record<string, unknown>

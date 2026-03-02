@@ -20,7 +20,7 @@
           </span>
         </div>
         <div v-if="jiraKey" class="summary-row jira-row">
-          <span class="row-label">JIRA Ticket</span>
+          <span class="row-label">{{ t('panel.jiraTicket') }}</span>
           <a :href="'https://jira.gwm.cn/browse/' + jiraKey" target="_blank" class="jira-link">
             {{ jiraKey }}
           </a>

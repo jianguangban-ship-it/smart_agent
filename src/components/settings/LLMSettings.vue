@@ -1,8 +1,8 @@
 <template>
   <Transition name="modal">
-    <div v-if="modelValue" class="modal-overlay" @click.self="$emit('update:modelValue', false)">
+    <div v-if="modelValue" class="modal-overlay" ref="settingsModalRef" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" @click.self="$emit('update:modelValue', false)">
       <div class="modal-content">
-        <h3 class="modal-title">{{ t('settings.title') }}</h3>
+        <h3 id="settings-modal-title" class="modal-title">{{ t('settings.title') }}</h3>
 
         <!-- Provider Base URL -->
         <div class="field-group">
@@ -145,8 +145,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue' // computed kept for allModelPresets
+import { ref, computed, watch, nextTick } from 'vue' // computed kept for allModelPresets
 import { useI18n } from '@/i18n'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 import {
   getApiKey, setApiKey, getModel, setModel,
   getProviderUrl, setProviderUrl,
@@ -169,6 +170,9 @@ const emit = defineEmits<{
 }>()
 
 const { t, isZh } = useI18n()
+
+const settingsModalRef = ref<HTMLElement>()
+const { activate: activateSettingsTrap, deactivate: deactivateSettingsTrap } = useFocusTrap(settingsModalRef)
 
 const localApiKey = ref(getApiKey())
 const localModel = ref(getModel())
@@ -206,6 +210,9 @@ watch(() => props.modelValue, (open) => {
     editingChipIndex.value = -1
     validationState.value = 'idle'
     validationError.value = ''
+    nextTick(() => activateSettingsTrap())
+  } else {
+    deactivateSettingsTrap()
   }
 })
 

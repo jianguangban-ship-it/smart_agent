@@ -1,6 +1,6 @@
 export default {
   header: {
-    title: 'JIRA 智能任务工作站',
+    title: '智能工程平台',
     themeDark: '切换深色模式',
     themeLight: '切换浅色模式'
   },
@@ -52,7 +52,8 @@ export default {
     items: '个',
     backoffLabel: '请求频率超限，自动重试剩余',
     showDiff: '差异',
-    hideDiff: '正常'
+    hideDiff: '正常',
+    jiraTicket: 'JIRA 工单'
   },
   status: {
     idle: '空闲',
@@ -80,7 +81,14 @@ export default {
     streamSpeed: 'tok/s',
     yes: '是',
     no: '否',
-    backoff: '退避'
+    backoff: '退避',
+    activeUrl: '当前 URL',
+    coach: 'Coach',
+    analyze: '分析',
+    coachErrorCancel: 'Coach 错误/取消',
+    analyzeErrorCancel: '分析 错误/取消',
+    error: '错误',
+    cancelled: '已取消'
   },
   error: {
     timeout: '请求超时，请检查 n8n 服务是否运行',
@@ -89,7 +97,8 @@ export default {
     emptyResponse: '服务器返回空响应，请检查 n8n 工作流中 Respond_to_Webhook 节点配置',
     glm401: 'API Key 无效，请点击 ⚙ 设置进行更新。',
     glm429: '请求频率超限，请稍候后重试。',
-    glm5xx: 'LLM 服务暂时不可用，请稍后重试。'
+    glm5xx: 'LLM 服务暂时不可用，请稍后重试。',
+    maxRetries: '连续 3 次重试后仍被限流，请稍后再试。'
   },
   urlMode: {
     testTooltip: '测试模式：需要在 n8n 编辑器中点击 "Listen" 按钮',
@@ -131,7 +140,10 @@ export default {
     draftRestored: '已恢复上次未完成的草稿',
     draftCleared: '表单已重置，草稿已清除',
     copied: '已复制到剪贴板',
-    templatesImported: '个模板已导入'
+    templatesImported: '个模板已导入',
+    invalidDropFile: '请拖入有效的 .json 文件',
+    invalidTemplateJson: '模板 JSON 文件格式无效',
+    noDuplicateTemplates: '无新模板可导入（重复项已跳过）'
   },
   shortcuts: {
     analyze: 'Ctrl+Enter',
@@ -141,7 +153,11 @@ export default {
     title: '工单历史',
     empty: '暂无已创建的工单',
     clear: '清空',
-    ticketKey: '工单'
+    ticketKey: '工单',
+    justNow: '刚刚',
+    minsAgo: '分钟前',
+    hoursAgo: '小时前',
+    daysAgo: '天前'
   },
   hotkeys: {
     title: '键盘快捷键',

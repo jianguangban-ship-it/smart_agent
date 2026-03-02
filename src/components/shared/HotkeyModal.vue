@@ -1,10 +1,10 @@
 <template>
   <Transition name="modal">
-    <div v-if="modelValue" class="modal-overlay" @click.self="$emit('update:modelValue', false)">
+    <div v-if="modelValue" class="modal-overlay" ref="hotkeyModalRef" role="dialog" aria-modal="true" aria-labelledby="hotkey-modal-title" @click.self="$emit('update:modelValue', false)">
       <div class="modal-content">
         <div class="modal-header">
-          <h3 class="modal-title">⌨️ {{ t('hotkeys.title') }}</h3>
-          <button class="close-btn" @click="$emit('update:modelValue', false)">✕</button>
+          <h3 id="hotkey-modal-title" class="modal-title">⌨️ {{ t('hotkeys.title') }}</h3>
+          <button class="close-btn" :aria-label="t('modal.cancel')" @click="$emit('update:modelValue', false)">✕</button>
         </div>
 
         <table class="hotkey-table">
@@ -21,13 +21,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useI18n } from '@/i18n'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 
-defineProps<{ modelValue: boolean }>()
+const props = defineProps<{ modelValue: boolean }>()
 defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
 const { t } = useI18n()
+
+const hotkeyModalRef = ref<HTMLElement>()
+const { activate: activateHotkeyTrap, deactivate: deactivateHotkeyTrap } = useFocusTrap(hotkeyModalRef)
+
+watch(() => props.modelValue, (open) => {
+  if (open) nextTick(() => activateHotkeyTrap())
+  else deactivateHotkeyTrap()
+})
 
 const hotkeys = computed(() => [
   { key: 'Ctrl+Enter',       desc: t('hotkeys.analyze') },

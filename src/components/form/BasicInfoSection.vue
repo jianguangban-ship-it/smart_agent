@@ -5,8 +5,8 @@
     <div class="row-2col">
       <!-- Project -->
       <div class="field">
-        <label class="field-label">{{ t('form.projectName') }}</label>
-        <select v-model="form.projectKey" @change="$emit('projectChange')" class="input-base field-select">
+        <label class="field-label" for="basic-project">{{ t('form.projectName') }}</label>
+        <select id="basic-project" v-model="form.projectKey" @change="$emit('projectChange')" class="input-base field-select">
           <option v-for="project in PROJECT_CONFIG" :key="project.key" :value="project.key">
             {{ project.name }} ({{ project.teamName }})
           </option>
@@ -35,7 +35,7 @@
     <div class="row-2col mt">
       <div class="field">
         <label class="field-label">{{ t('form.taskType') }}</label>
-        <div class="type-buttons">
+        <div class="type-buttons" role="group" :aria-label="t('form.taskType')" ref="typeGroupRef" @keydown="typeRoving.handleKeydown">
           <button
             v-for="type in TASK_TYPES"
             :key="type.value"
@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { FormState } from '@/types/form'
 import type { TeamMember } from '@/types/team'
 import { PROJECT_CONFIG, TEAM_MEMBERS } from '@/config/projects'
@@ -72,6 +72,7 @@ import { TASK_TYPES } from '@/config/constants'
 import { useI18n } from '@/i18n'
 import AssigneeCombobox from './AssigneeCombobox.vue'
 import StoryPointsPicker from './StoryPointsPicker.vue'
+import { useRovingIndex } from '@/composables/useRovingIndex'
 
 const props = defineProps<{
   form: FormState
@@ -82,6 +83,9 @@ defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+const typeGroupRef = ref<HTMLElement>()
+const typeRoving = useRovingIndex(typeGroupRef)
 
 const teamMembers = computed<TeamMember[]>(() => TEAM_MEMBERS[props.form.projectKey] || [])
 const memberCount = computed(() => teamMembers.value.length)

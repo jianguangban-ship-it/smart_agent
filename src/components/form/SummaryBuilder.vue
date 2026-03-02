@@ -6,30 +6,31 @@
     </h2>
     <div class="fields-grid">
       <div class="field">
-        <label class="field-label">{{ t('form.vehicle') }}</label>
-        <select v-model="summary.vehicle" class="input-base field-select">
+        <label class="field-label" for="summary-vehicle">{{ t('form.vehicle') }}</label>
+        <select id="summary-vehicle" v-model="summary.vehicle" class="input-base field-select">
           <option value="">{{ t('form.select') }}</option>
           <option v-for="v in VEHICLE_OPTIONS" :key="v" :value="v">{{ v }}</option>
         </select>
       </div>
       <div class="field">
-        <label class="field-label">{{ t('form.product') }}</label>
-        <select v-model="summary.product" class="input-base field-select">
+        <label class="field-label" for="summary-product">{{ t('form.product') }}</label>
+        <select id="summary-product" v-model="summary.product" class="input-base field-select">
           <option value="">{{ t('form.select') }}</option>
           <option v-for="p in PRODUCT_OPTIONS" :key="p" :value="p">{{ p }}</option>
         </select>
       </div>
       <div class="field">
-        <label class="field-label">{{ t('form.layer') }}</label>
-        <select v-model="summary.layer" class="input-base field-select">
+        <label class="field-label" for="summary-layer">{{ t('form.layer') }}</label>
+        <select id="summary-layer" v-model="summary.layer" class="input-base field-select">
           <option value="">{{ t('form.select') }}</option>
           <option v-for="l in LAYER_OPTIONS" :key="l" :value="l">{{ l }}</option>
         </select>
       </div>
       <div class="field">
-        <label class="field-label">{{ t('form.component') }}</label>
+        <label class="field-label" for="summary-component">{{ t('form.component') }}</label>
         <div class="field-input-wrap">
           <input
+            id="summary-component"
             type="text"
             v-model="summary.component"
             list="component-history"
@@ -47,9 +48,10 @@
       </div>
     </div>
     <div class="detail-field">
-      <label class="field-label">{{ t('form.taskDetail') }}</label>
+      <label class="field-label" for="summary-detail">{{ t('form.taskDetail') }}</label>
       <div class="field-input-wrap">
         <input
+          id="summary-detail"
           type="text"
           v-model="summary.detail"
           class="input-base field-input"
@@ -75,6 +77,7 @@
           class="copy-btn"
           @click="copySummary"
           :title="t('toast.copied')"
+          :aria-label="t('toast.copied')"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="2" width="13" height="13" rx="2"/>

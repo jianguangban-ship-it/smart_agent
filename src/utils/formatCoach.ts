@@ -1,5 +1,8 @@
 import { useI18n } from '@/i18n'
 
+// Hoist to module scope — avoids creating new closures on every streaming token
+const { t } = useI18n()
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -83,8 +86,6 @@ function formatCommentList(comment: string): string {
 
 export function formatCoachResponse(data: unknown): string {
   if (!data) return ''
-
-  const { t } = useI18n()
 
   let item: Record<string, unknown> | null = null
   if (Array.isArray(data)) {

@@ -9,13 +9,18 @@
       @keydown="handleKeydown"
       class="combobox-input"
       :placeholder="selectedName || placeholder"
+      role="combobox"
+      :aria-expanded="isOpen"
+      aria-autocomplete="list"
+      aria-controls="assignee-listbox"
+      :aria-activedescendant="isOpen && highlightedIndex >= 0 ? `assignee-opt-${highlightedIndex}` : undefined"
     />
     <svg class="combobox-arrow" :class="{ open: isOpen }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
     </svg>
 
     <Transition name="dropdown">
-      <div v-if="isOpen" class="combobox-dropdown">
+      <div v-if="isOpen" class="combobox-dropdown" id="assignee-listbox" role="listbox">
         <div class="combobox-group-header">
           {{ groupLabel }} - {{ filtered.length }} {{ resultsLabel }}
         </div>
@@ -30,6 +35,9 @@
               highlighted: highlightedIndex === index,
               selected: modelValue === user.id
             }"
+            role="option"
+            :id="`assignee-opt-${index}`"
+            :aria-selected="modelValue === user.id"
           >
             <div class="avatar" :style="{ backgroundColor: getAvatarColor(user.id) }">
               {{ getInitials(user.name) }}

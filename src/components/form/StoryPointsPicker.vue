@@ -1,5 +1,5 @@
 <template>
-  <div class="points-picker">
+  <div class="points-picker" role="group" aria-label="Story Points" ref="pickerRef" @keydown="pickerRoving.handleKeydown">
     <button
       v-for="point in points"
       :key="point"
@@ -26,6 +26,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { FIBONACCI_POINTS } from '@/config/constants'
+import { useRovingIndex } from '@/composables/useRovingIndex'
 
 const props = defineProps<{
   modelValue: number
@@ -34,6 +35,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: number]
 }>()
+
+const pickerRef = ref<HTMLElement>()
+const pickerRoving = useRovingIndex(pickerRef)
 
 const points = FIBONACCI_POINTS
 

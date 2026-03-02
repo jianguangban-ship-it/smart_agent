@@ -19,39 +19,149 @@ class GLM429Error extends Error {
   constructor(msg: string) { super(msg); this.name = 'GLM429Error' }
 }
 
+// ─── Stream flow factory ──────────────────────────────────────────────────────
+// Eliminates duplication between Coach and Analyze flows.
+// Fixes: timer leak on concurrent 429, infinite retry loop (max 3).
+
+const MAX_429_RETRIES = 3
+
+interface StreamFlowOptions {
+  getSystemPrompt: (lang: 'en' | 'zh', payload: WebhookPayload) => string
+  getUserMessage: (payload: WebhookPayload, isZh: boolean) => string
+  onBeforeRequest?: (currentResponse: unknown) => void
+}
+
+function createStreamFlow(
+  opts: StreamFlowOptions,
+  callStream: (
+    systemPrompt: string,
+    userMessage: string,
+    onChunk: (text: string) => void,
+    signal: AbortSignal
+  ) => Promise<void>,
+  t: (key: string) => string,
+  isZh: { value: boolean }
+) {
+  const isLoading = ref(false)
+  const response = ref<unknown>(null)
+  const wasCancelled = ref(false)
+  const hadError = ref(false)
+  const streamSpeed = ref(0)
+  const backoffSecs = ref(0)
+
+  let _ac: AbortController | null = null
+  let _lastPayload: WebhookPayload | null = null
+  let _backoffTimer: number | null = null
+  let _retryCount = 0
+
+  async function request(payload: WebhookPayload, _isAutoRetry = false): Promise<string | null> {
+    // Clear any existing backoff timer to prevent timer leak
+    if (_backoffTimer !== null) {
+      clearInterval(_backoffTimer)
+      _backoffTimer = null
+    }
+
+    // Reset retry count on fresh user-initiated calls
+    if (!_isAutoRetry) _retryCount = 0
+
+    _lastPayload = payload
+    wasCancelled.value = false
+    hadError.value = false
+    streamSpeed.value = 0
+    backoffSecs.value = 0
+    isLoading.value = true
+
+    opts.onBeforeRequest?.(response.value)
+    response.value = null
+    _ac = new AbortController()
+
+    try {
+      const lang: 'en' | 'zh' = isZh.value ? 'zh' : 'en'
+      let accumulated = ''
+      let tokenCount = 0
+      let streamStart = 0
+
+      const systemPrompt = opts.getSystemPrompt(lang, payload)
+      const userMessage = opts.getUserMessage(payload, isZh.value)
+
+      await callStream(systemPrompt, userMessage, (chunk) => {
+        if (tokenCount === 0) streamStart = Date.now()
+        tokenCount++
+        accumulated += chunk
+        response.value = { markdown_msg: accumulated, message: accumulated }
+        const elapsed = (Date.now() - streamStart) / 1000
+        if (elapsed > 0) streamSpeed.value = Math.round(tokenCount / elapsed)
+      }, _ac.signal)
+      return null
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        wasCancelled.value = true
+        streamSpeed.value = 0
+        return 'cancelled'
+      }
+      if (error instanceof GLM429Error) {
+        _retryCount++
+        if (_retryCount >= MAX_429_RETRIES) {
+          streamSpeed.value = 0
+          hadError.value = true
+          return t('error.maxRetries')
+        }
+        backoffSecs.value = 10
+        _backoffTimer = window.setInterval(async () => {
+          backoffSecs.value--
+          if (backoffSecs.value <= 0) {
+            clearInterval(_backoffTimer!)
+            _backoffTimer = null
+            if (_lastPayload) await request(_lastPayload, true)
+          }
+        }, 1000)
+        return null
+      }
+      streamSpeed.value = 0
+      hadError.value = true
+      return error instanceof Error ? error.message : t('error.requestFailed')
+    } finally {
+      _ac = null
+      isLoading.value = false
+    }
+  }
+
+  function cancel() {
+    _ac?.abort()
+    if (_backoffTimer !== null) {
+      clearInterval(_backoffTimer)
+      _backoffTimer = null
+      backoffSecs.value = 0
+    }
+  }
+
+  async function retry(): Promise<string | null> {
+    if (!_lastPayload) return null
+    return request(_lastPayload)
+  }
+
+  function clear() {
+    response.value = null
+    wasCancelled.value = false
+    hadError.value = false
+    streamSpeed.value = 0
+    backoffSecs.value = 0
+  }
+
+  return { isLoading, response, wasCancelled, hadError, streamSpeed, backoffSecs,
+           request, cancel, retry, clear }
+}
+
+// ─── Main composable ──────────────────────────────────────────────────────────
+
 export function useLLM() {
   const { isZh, t } = useI18n()
 
-  // ─── Coach state ───────────────────────────────────────────────────────────
-  const isCoachLoading = ref(false)
-  const coachResponse = ref<unknown>(null)
-  const coachWasCancelled = ref(false)
-  const coachHadError = ref(false)
-  const coachStreamSpeed = ref(0)   // tokens/sec during streaming
-  const coachBackoffSecs = ref(0)   // countdown before auto-retry after 429
-
-  // ─── Analyze state ─────────────────────────────────────────────────────────
-  const isAnalyzeLoading = ref(false)
-  const analyzeResponse = ref<unknown>(null)
-  const previousAnalyzeResponse = ref<unknown>(null)
-  const analyzeWasCancelled = ref(false)
-  const analyzeHadError = ref(false)
-  const analyzeStreamSpeed = ref(0)
-  const analyzeBackoffSecs = ref(0)
-
-  // Plain vars — no reactivity needed
-  let _coachAC: AbortController | null = null
-  let _analyzeAC: AbortController | null = null
-  let _lastCoachPayload: WebhookPayload | null = null
-  let _lastAnalyzePayload: WebhookPayload | null = null
-  let _coachBackoffTimer: number | null = null
-  let _analyzeBackoffTimer: number | null = null
-
   // ─── Shared helpers ────────────────────────────────────────────────────────
 
-  function buildUserMessage(payload: WebhookPayload): string {
+  function buildUserMessage(payload: WebhookPayload, zh: boolean): string {
     const d = payload.data
-    if (isZh.value) {
+    if (zh) {
       return `请帮我审阅以下 JIRA 任务描述并给出改进建议：
 
 **项目**: ${d.project_name}
@@ -154,174 +264,62 @@ ${d.description || '(empty)'}
     }
   }
 
-  // ─── Coach ────────────────────────────────────────────────────────────────
+  // ─── Coach flow ─────────────────────────────────────────────────────────────
 
-  async function requestCoach(payload: WebhookPayload): Promise<string | null> {
-    _lastCoachPayload = payload
-    coachWasCancelled.value = false
-    coachHadError.value = false
-    coachStreamSpeed.value = 0
-    coachBackoffSecs.value = 0
-    isCoachLoading.value = true
-    coachResponse.value = null
-    _coachAC = new AbortController()
-
-    try {
-      const lang = isZh.value ? 'zh' : 'en'
-      let accumulated = ''
-      let tokenCount = 0
-      let streamStart = 0
-
-      // Skill ON  → structured JIRA review request with system prompt
-      // Skill OFF → free-form chat: send the description text as-is
+  const coach = createStreamFlow({
+    getSystemPrompt: (lang, payload) => {
       const skillOn = coachSkillEnabled.value
-      const systemPrompt = skillOn ? getCoachSkill(lang) : ''
-      const userMessage = skillOn
-        ? buildUserMessage(payload)
+      return skillOn ? getCoachSkill(lang) : ''
+    },
+    getUserMessage: (payload, zh) => {
+      const skillOn = coachSkillEnabled.value
+      return skillOn
+        ? buildUserMessage(payload, zh)
         : (payload.data.description || payload.data.summary || '')
-
-      await _callGLMStream(systemPrompt, userMessage, (chunk) => {
-        if (tokenCount === 0) streamStart = Date.now()
-        tokenCount++
-        accumulated += chunk
-        coachResponse.value = { markdown_msg: accumulated, message: accumulated }
-        const elapsed = (Date.now() - streamStart) / 1000
-        if (elapsed > 0) coachStreamSpeed.value = Math.round(tokenCount / elapsed)
-      }, _coachAC.signal)
-      return null
-    } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        coachWasCancelled.value = true
-        coachStreamSpeed.value = 0
-        return 'cancelled'
-      }
-      if (error instanceof GLM429Error) {
-        coachBackoffSecs.value = 10
-        _coachBackoffTimer = window.setInterval(async () => {
-          coachBackoffSecs.value--
-          if (coachBackoffSecs.value <= 0) {
-            clearInterval(_coachBackoffTimer!)
-            _coachBackoffTimer = null
-            if (_lastCoachPayload) await requestCoach(_lastCoachPayload)
-          }
-        }, 1000)
-        return null
-      }
-      coachStreamSpeed.value = 0
-      coachHadError.value = true
-      return error instanceof Error ? error.message : t('error.requestFailed')
-    } finally {
-      _coachAC = null
-      isCoachLoading.value = false
     }
-  }
+  }, _callGLMStream, t, isZh)
 
-  function cancelCoach() {
-    _coachAC?.abort()
-    if (_coachBackoffTimer !== null) {
-      clearInterval(_coachBackoffTimer)
-      _coachBackoffTimer = null
-      coachBackoffSecs.value = 0
+  // ─── Analyze flow ───────────────────────────────────────────────────────────
+
+  const previousAnalyzeResponse = ref<unknown>(null)
+
+  const analyze = createStreamFlow({
+    getSystemPrompt: (lang) => getAnalyzeSkill(lang),
+    getUserMessage: (payload, zh) => buildUserMessage(payload, zh),
+    onBeforeRequest: (currentResponse) => {
+      previousAnalyzeResponse.value = currentResponse
     }
-  }
+  }, _callGLMStream, t, isZh)
 
-  async function retryCoach(): Promise<string | null> {
-    if (!_lastCoachPayload) return null
-    return requestCoach(_lastCoachPayload)
-  }
-
-  function clearCoachResponse() {
-    coachResponse.value = null
-    coachWasCancelled.value = false
-    coachHadError.value = false
-    coachStreamSpeed.value = 0
-    coachBackoffSecs.value = 0
-  }
-
-  // ─── Analyze ──────────────────────────────────────────────────────────────
-
-  async function requestAnalyze(payload: WebhookPayload): Promise<string | null> {
-    _lastAnalyzePayload = payload
-    analyzeWasCancelled.value = false
-    analyzeHadError.value = false
-    analyzeStreamSpeed.value = 0
-    analyzeBackoffSecs.value = 0
-    isAnalyzeLoading.value = true
-    previousAnalyzeResponse.value = analyzeResponse.value
-    analyzeResponse.value = null
-    _analyzeAC = new AbortController()
-
-    try {
-      const lang = isZh.value ? 'zh' : 'en'
-      let accumulated = ''
-      let tokenCount = 0
-      let streamStart = 0
-
-      await _callGLMStream(getAnalyzeSkill(lang), buildUserMessage(payload), (chunk) => {
-        if (tokenCount === 0) streamStart = Date.now()
-        tokenCount++
-        accumulated += chunk
-        analyzeResponse.value = { markdown_msg: accumulated, message: accumulated }
-        const elapsed = (Date.now() - streamStart) / 1000
-        if (elapsed > 0) analyzeStreamSpeed.value = Math.round(tokenCount / elapsed)
-      }, _analyzeAC.signal)
-      return null
-    } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        analyzeWasCancelled.value = true
-        analyzeStreamSpeed.value = 0
-        return 'cancelled'
-      }
-      if (error instanceof GLM429Error) {
-        analyzeBackoffSecs.value = 10
-        _analyzeBackoffTimer = window.setInterval(async () => {
-          analyzeBackoffSecs.value--
-          if (analyzeBackoffSecs.value <= 0) {
-            clearInterval(_analyzeBackoffTimer!)
-            _analyzeBackoffTimer = null
-            if (_lastAnalyzePayload) await requestAnalyze(_lastAnalyzePayload)
-          }
-        }, 1000)
-        return null
-      }
-      analyzeStreamSpeed.value = 0
-      analyzeHadError.value = true
-      return error instanceof Error ? error.message : t('error.requestFailed')
-    } finally {
-      _analyzeAC = null
-      isAnalyzeLoading.value = false
-    }
-  }
-
-  function cancelAnalyze() {
-    _analyzeAC?.abort()
-    if (_analyzeBackoffTimer !== null) {
-      clearInterval(_analyzeBackoffTimer)
-      _analyzeBackoffTimer = null
-      analyzeBackoffSecs.value = 0
-    }
-  }
-
-  async function retryAnalyze(): Promise<string | null> {
-    if (!_lastAnalyzePayload) return null
-    return requestAnalyze(_lastAnalyzePayload)
-  }
-
-  function clearAnalyzeResponse() {
-    analyzeResponse.value = null
-    previousAnalyzeResponse.value = null
-    analyzeWasCancelled.value = false
-    analyzeHadError.value = false
-    analyzeStreamSpeed.value = 0
-    analyzeBackoffSecs.value = 0
-  }
+  // ─── Public API (preserve existing interface) ───────────────────────────────
 
   return {
-    isCoachLoading, coachResponse, coachWasCancelled, coachHadError,
-    coachStreamSpeed, coachBackoffSecs,
-    requestCoach, cancelCoach, retryCoach, clearCoachResponse,
-    isAnalyzeLoading, analyzeResponse, previousAnalyzeResponse, analyzeWasCancelled, analyzeHadError,
-    analyzeStreamSpeed, analyzeBackoffSecs,
-    requestAnalyze, cancelAnalyze, retryAnalyze, clearAnalyzeResponse
+    // Coach
+    isCoachLoading: coach.isLoading,
+    coachResponse: coach.response,
+    coachWasCancelled: coach.wasCancelled,
+    coachHadError: coach.hadError,
+    coachStreamSpeed: coach.streamSpeed,
+    coachBackoffSecs: coach.backoffSecs,
+    requestCoach: (payload: WebhookPayload) => coach.request(payload),
+    cancelCoach: coach.cancel,
+    retryCoach: coach.retry,
+    clearCoachResponse: coach.clear,
+
+    // Analyze
+    isAnalyzeLoading: analyze.isLoading,
+    analyzeResponse: analyze.response,
+    previousAnalyzeResponse,
+    analyzeWasCancelled: analyze.wasCancelled,
+    analyzeHadError: analyze.hadError,
+    analyzeStreamSpeed: analyze.streamSpeed,
+    analyzeBackoffSecs: analyze.backoffSecs,
+    requestAnalyze: (payload: WebhookPayload) => analyze.request(payload),
+    cancelAnalyze: analyze.cancel,
+    retryAnalyze: analyze.retry,
+    clearAnalyzeResponse: () => {
+      analyze.clear()
+      previousAnalyzeResponse.value = null
+    }
   }
 }

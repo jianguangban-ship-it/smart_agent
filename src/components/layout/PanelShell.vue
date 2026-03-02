@@ -1,5 +1,5 @@
 <template>
-  <div class="panel">
+  <div class="panel" role="region" :aria-label="title">
     <div class="panel-header">
       <div class="panel-title">
         <slot name="icon"></slot>

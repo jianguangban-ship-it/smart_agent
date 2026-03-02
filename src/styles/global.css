@@ -80,6 +80,9 @@ body {
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
 }
+.input-base:focus-visible {
+  outline: none; /* already has box-shadow ring */
+}
 .input-base::placeholder {
   color: var(--text-muted);
 }
@@ -102,6 +105,12 @@ button:disabled {
 }
 button:active:not(:disabled) {
   transform: scale(0.97);
+}
+
+/* Visible focus ring for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 
 /* Selection */

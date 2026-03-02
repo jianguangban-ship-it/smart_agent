@@ -1,5 +1,5 @@
-# JIRA AI-Powered Task Workstation — User Manual
-# JIRA 智能任务工作站 — 用户手册
+# Agentic Engineering Platform — User Manual
+# 智能工程平台 — 用户手册
 
 > Version / 版本: v8.28 | Language / 语言: English · 中文
 
@@ -45,7 +45,7 @@ The app is divided into three columns plus a top header bar.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Header: Title | Language | Mode | Status | Theme | Settings │
+│ Header: Title | Language | Mode | Status | Theme | Settings │
 ├──────────────────┬──────────────────┬───────────────────────┤
 │                  │                  │                       │
 │  LEFT COLUMN     │  CENTER COLUMN   │  RIGHT COLUMN         │
