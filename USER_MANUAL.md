@@ -1,7 +1,7 @@
 # Agentic Engineering Platform — User Manual
 # 智能工程平台 — 用户手册
 
-> Version / 版本: v8.28 | Language / 语言: English · 中文
+> Version / 版本: v8.32 | Language / 语言: English · 中文
 
 ---
 
