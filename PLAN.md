@@ -1422,3 +1422,12 @@ Added ARIA roles, labels, and focus management across the entire app. Screen rea
 - [x] **Icon-only action buttons** — all action buttons converted to compact 36px icon-only squares with hover tooltips; removes text clutter from the action bar
 - [x] **Color-coded buttons** — Reset (red), Writing Guidance (yellow), Analyze Task (blue), Create JIRA (green) for instant visual recognition
 - [x] **i18n updates** — shortened "Get Writing Guidance" → "Writing Guidance" / "获取写作指导" → "写作指导"; added `coaching` loading-state key
+
+## v8.32 — Dynamic Focus Layout, Response Dividers & LaTeX Fix
+
+### Changes
+- [x] **Dynamic Focus Layout** — when Skill OFF is active, right panel (AI Review, JIRA, DevTools) collapses to `0fr` and left panel expands from `3fr` → `5fr` via CSS grid transition (250ms ease-in-out); toggling Skill ON restores the 3-column layout with smooth animation; mobile breakpoint unaffected
+- [x] **Hide Analyze button in free-chat mode** — Analyze Task button auto-hides (`v-show`) when `coachSkillEnabled` is OFF; prevents accidental clicks since task analysis is irrelevant in free-form chat mode
+- [x] **Unified response dividers** — response boundary between accumulated AI Coach turns now uses a distinct `===COACH_TURN===` marker rendered as a `2px solid #58a6ff` blue line (`coach-response-divider`); in-response `---` horizontal rules remain as subtle `1px dashed` separators (`coach-hr`); enables clear visual distinction between complete AI answers
+- [x] **LaTeX Markdown-escape fix** — AI models that pre-escape `*` and `_` for Markdown safety (e.g. `$i_d^{\*}$`) now have these stripped inside math delimiters before KaTeX rendering; `\*` → `*` and `\_` → `_` (when not part of a LaTeX command); prevents broken formula output
+- [x] **New test cases** — 5 tests added to `formatCoach.test.ts` covering LaTeX escape stripping, response-boundary divider rendering, and in-response `---` rendering

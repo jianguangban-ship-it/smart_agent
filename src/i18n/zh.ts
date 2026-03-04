@@ -120,7 +120,9 @@ export default {
     backoffLabel: '请求频率超限，自动重试剩余',
     backoffCancel: '取消自动重试',
     skillOn: '技能 开',
-    skillOff: '技能 关'
+    skillOff: '技能 关',
+    taskCoachOn: '任务辅导 开',
+    taskCoachOff: '任务辅导 关'
   },
   quality: {
     excellent: '优秀',

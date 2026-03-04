@@ -30,7 +30,7 @@
     </Transition>
 
     <main class="app-main">
-      <div class="grid-layout">
+      <div class="grid-layout" :class="{ 'layout-focus': !coachSkillEnabled }">
         <!-- LEFT: AI Coach -->
         <div class="col-left">
           <CoachPanel
@@ -58,6 +58,7 @@
             :quality-score-color="qualityScoreColor"
             :quality-score-label="qualityScoreLabel"
             :can-submit="canSubmit"
+            :can-coach-submit="canCoachSubmit"
             :is-submitting="formIsSubmitting"
             :is-coach-loading="isCoachLoading"
             :current-action="formCurrentAction"
@@ -73,7 +74,7 @@
         </div>
 
         <!-- RIGHT: AI Review + JIRA -->
-        <div class="col-right">
+        <div class="col-right" v-show="coachSkillEnabled">
           <AIReviewPanel
             :response="analyzeResponse"
             :previous-response="previousAnalyzeResponse"
@@ -131,7 +132,7 @@ import type { WebhookPayload } from '@/types/api'
 import { useI18n } from '@/i18n'
 import { useForm } from '@/composables/useForm'
 import { useWebhook } from '@/composables/useWebhook'
-import { useLLM } from '@/composables/useLLM'
+import { useLLM, coachSkillEnabled, taskCoachEnabled } from '@/composables/useLLM'
 import { useToast } from '@/composables/useToast'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { addTicket } from '@/composables/useTicketHistory'
@@ -194,6 +195,14 @@ watch(showConfirmModal, (open) => {
 // Shims so TaskForm buttons reflect both JIRA-submitting and LLM-analyzing states
 const formIsSubmitting = computed(() => isSubmitting.value || isAnalyzeLoading.value)
 const formCurrentAction = computed(() => isAnalyzeLoading.value ? 'analyze' : currentAction.value)
+
+// Coach only needs description when Task Coach is OFF or Skill is OFF (free-form chat mode)
+const canCoachSubmit = computed(() => {
+  if (!coachSkillEnabled.value || !taskCoachEnabled.value) {
+    return !!form.description.trim()
+  }
+  return canSubmit.value
+})
 
 // Build payload
 function buildPayload(action: 'analyze' | 'create' | 'coach' | 'preview'): WebhookPayload {
@@ -332,7 +341,7 @@ async function confirmCreate() {
 }
 
 async function handleCoachRequest() {
-  if (!canSubmit.value || isCoachLoading.value) return
+  if (!canCoachSubmit.value || isCoachLoading.value) return
   errorMessage.value = ''
   const err = await requestCoach(buildPayload('coach'))
   if (!err) {
@@ -467,6 +476,14 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 3fr 3fr 2fr;
   gap: 20px;
+  transition: grid-template-columns 250ms ease-in-out;
+}
+.grid-layout.layout-focus {
+  grid-template-columns: 5fr 3fr 0fr;
+}
+.layout-focus .col-right {
+  overflow: hidden;
+  pointer-events: none;
 }
 .col-left,
 .col-center {

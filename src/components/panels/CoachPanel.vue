@@ -3,7 +3,7 @@
     :title="t('coach.title')"
     :status="statusInfo.status"
     :status-label="t('status.' + statusInfo.key)"
-    max-height="none"
+    max-height="2500px"
   >
     <template #header-actions>
       <span class="mode-badge badge-llm" :title="currentModel">{{ currentModel }}</span>
@@ -15,6 +15,20 @@
         :aria-label="coachSkillEnabled ? t('coach.skillOn') : t('coach.skillOff')"
       >
         {{ coachSkillEnabled ? t('coach.skillOn') : t('coach.skillOff') }}
+      </button>
+      <button
+        class="skill-toggle"
+        :class="{
+          'skill-on': taskCoachEnabled && coachSkillEnabled,
+          'skill-off': !taskCoachEnabled || !coachSkillEnabled,
+          'skill-disabled': !coachSkillEnabled
+        }"
+        :disabled="!coachSkillEnabled"
+        @click="setTaskCoachEnabled(!taskCoachEnabled)"
+        :title="taskCoachEnabled ? t('coach.taskCoachOn') : t('coach.taskCoachOff')"
+        :aria-label="taskCoachEnabled ? t('coach.taskCoachOn') : t('coach.taskCoachOff')"
+      >
+        {{ taskCoachEnabled ? t('coach.taskCoachOn') : t('coach.taskCoachOff') }}
       </button>
       <button v-if="response && !isLoading" class="copy-btn" @click="copyResponse" :title="t('toast.copied')" :aria-label="t('toast.copied')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -73,33 +87,38 @@
         <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
       </svg>
       <p class="loading-text green">{{ t('coach.analyzing') }}</p>
+      <button class="cancel-btn" @click="$emit('cancel')">
+        <svg class="cancel-icon" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="6" width="12" height="12" rx="2" />
+        </svg>
+        {{ t('settings.cancel') }}
+      </button>
     </div>
 
     <!-- Coach response (streaming or complete) -->
     <div v-else>
+      <div v-if="isLoading" class="cancel-row">
+        <button class="cancel-btn" @click="$emit('cancel')">
+          <svg class="cancel-icon" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+          {{ t('settings.cancel') }}
+        </button>
+      </div>
       <div class="coach-response" v-html="formattedResponse" />
       <div v-if="isLoading" class="stream-footer">
         <span class="streaming-cursor green" />
         <span v-if="streamSpeed > 0" class="stream-speed">{{ streamSpeed }} {{ t('dev.streamSpeed') }}</span>
       </div>
-    </div>
-
-    <template #footer>
-      <button v-if="isLoading" class="cancel-btn" @click="$emit('cancel')">
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="6" y="6" width="12" height="12" rx="2" />
-        </svg>
-        <span>{{ t('settings.cancel') }}</span>
-      </button>
-      <template v-else-if="wasCancelled || hadError">
+      <div v-if="!isLoading && (wasCancelled || hadError)" class="retry-row">
         <button class="retry-btn" :disabled="retryCountdown > 0" @click="handleRetry">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="retry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
           </svg>
-          <span>{{ retryCountdown > 0 ? `${retryCountdown}s` : t('coach.retryBtn') }}</span>
+          {{ retryCountdown > 0 ? `${retryCountdown}s` : t('coach.retryBtn') }}
         </button>
-      </template>
-    </template>
+      </div>
+    </div>
   </PanelShell>
 </template>
 
@@ -109,7 +128,7 @@ import { useI18n } from '@/i18n'
 import { formatCoachResponse } from '@/utils/formatCoach'
 import { effectiveTemplates } from '@/config/templates/index'
 import { useToast } from '@/composables/useToast'
-import { coachSkillEnabled, setCoachSkillEnabled } from '@/composables/useLLM'
+import { coachSkillEnabled, setCoachSkillEnabled, taskCoachEnabled, setTaskCoachEnabled } from '@/composables/useLLM'
 import { currentModel } from '@/config/llm'
 import PanelShell from '@/components/layout/PanelShell.vue'
 import QuickChip from '@/components/shared/QuickChip.vue'
@@ -368,6 +387,7 @@ const chips = computed(() =>
 .coach-response :deep(.coach-h3) { font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 10px 0 5px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
 .coach-response :deep(.coach-h4) { font-size: 12px; font-weight: 600; color: var(--accent-blue); margin: 8px 0 4px; }
 .coach-response :deep(.coach-hr) { border: none; border-top: 1px dashed var(--border-color); margin: 10px 0; }
+.coach-response :deep(.coach-response-divider) { border: none; border-top: 2px solid #58a6ff; margin: 16px 0; }
 .coach-response :deep(.coach-bold) { color: var(--accent-green); font-weight: 600; }
 .coach-response :deep(.coach-code) { background-color: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: var(--font-mono); color: var(--accent-blue); }
 .coach-response :deep(.coach-list-item) { display: flex; align-items: baseline; gap: 5px; margin: 0; padding: 0 0 0 4px; }
@@ -426,9 +446,14 @@ const chips = computed(() =>
   color: var(--text-muted);
   border-color: var(--border-color);
 }
-.skill-off:hover {
+.skill-off:hover:not(:disabled) {
   color: var(--text-secondary);
   border-color: var(--text-muted);
+}
+.skill-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* Copy button */
@@ -455,42 +480,47 @@ const chips = computed(() =>
   height: 13px;
 }
 
-/* Footer */
-.cancel-btn {
-  width: 100%;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  font-weight: 500;
+/* Cancel & retry (inline, matching AIReviewPanel) */
+.cancel-row {
   display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.cancel-btn {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.2s;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
   background-color: rgba(248, 81, 73, 0.1);
   color: var(--accent-red);
   border: 1px solid rgba(248, 81, 73, 0.3);
   cursor: pointer;
+  transition: background-color 0.15s;
+  margin-top: 12px;
 }
-.cancel-btn:hover {
-  background-color: rgba(248, 81, 73, 0.2);
+.cancel-btn:hover { background-color: rgba(248, 81, 73, 0.2); }
+.cancel-icon { width: 12px; height: 12px; }
+.retry-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 .retry-btn {
-  width: 100%;
-  padding: 7px 16px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  transition: all 0.2s;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
   cursor: pointer;
+  transition: all 0.15s;
 }
 .retry-btn:hover:not(:disabled) {
   color: var(--accent-green);
@@ -500,10 +530,7 @@ const chips = computed(() =>
   opacity: 0.5;
   cursor: not-allowed;
 }
-.btn-icon {
-  width: 16px;
-  height: 16px;
-}
+.retry-icon { width: 12px; height: 12px; }
 
 @keyframes spin {
   to { transform: rotate(360deg); }

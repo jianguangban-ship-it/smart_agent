@@ -51,7 +51,7 @@
           <!-- Writing Guidance -->
           <button
             class="action-btn action-coach"
-            :disabled="!canSubmit || isSubmitting || isCoachLoading"
+            :disabled="!canCoachSubmit || isSubmitting || isCoachLoading"
             :title="t('coach.requestBtn')"
             @click="$emit('coach')"
           >
@@ -63,8 +63,9 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
           </button>
-          <!-- Analyze Task -->
+          <!-- Analyze Task (hidden in free-chat mode) -->
           <button
+            v-show="coachSkillEnabled"
             class="action-btn action-analyze"
             :class="{ dimmed: hasAiResponse }"
             :disabled="!canSubmit || isSubmitting || isCoachLoading"
@@ -106,6 +107,7 @@
 <script setup lang="ts">
 import type { FormState, SummaryState } from '@/types/form'
 import { useI18n } from '@/i18n'
+import { coachSkillEnabled } from '@/composables/useLLM'
 import BasicInfoSection from './BasicInfoSection.vue'
 import SummaryBuilder from './SummaryBuilder.vue'
 import DescriptionEditor from './DescriptionEditor.vue'
@@ -119,6 +121,7 @@ defineProps<{
   qualityScoreColor: string
   qualityScoreLabel: string
   canSubmit: boolean
+  canCoachSubmit: boolean
   isSubmitting: boolean
   isCoachLoading: boolean
   currentAction: string

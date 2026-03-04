@@ -120,7 +120,9 @@ export default {
     backoffLabel: 'Rate limited — retrying in',
     backoffCancel: 'Cancel auto-retry',
     skillOn: 'Skill ON',
-    skillOff: 'Skill OFF'
+    skillOff: 'Skill OFF',
+    taskCoachOn: 'Task Coach ON',
+    taskCoachOff: 'Task Coach OFF'
   },
   quality: {
     excellent: 'Excellent',

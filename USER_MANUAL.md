@@ -183,6 +183,20 @@ In the panel header, you will see a **Skill ON / Skill OFF** toggle button.
 
 点击切换按钮可随时开启或关闭技能提示词，**关闭**后 AI 将自由回答，适合头脑风暴或非 JIRA 相关问题。
 
+**Dynamic Focus Layout / 动态聚焦布局:**
+When **Skill OFF** is active, the interface automatically enters **Free-Chat Mode**:
+- The right panel (AI Review, JIRA Response, DevTools) collapses with a smooth 250ms animation
+- The left Coach panel expands to fill the freed space, improving readability
+- The **Analyze Task** button is hidden since task analysis is irrelevant in free-chat mode
+- Toggling **Skill ON** restores the standard 3-column layout with animation
+
+当**技能关闭**时，界面自动进入**自由聊天模式**：右列面板折叠，左列扩展以提升阅读体验；「分析任务」按钮隐藏，避免误操作。重新开启技能后恢复标准三列布局。
+
+**Response Dividers / 回复分隔线:**
+When you send multiple coach requests in a session, each complete AI answer is separated by a **solid blue divider line**. This visual anchor makes it easy to distinguish between sequential AI responses. Section breaks within a single response use a subtle dashed line.
+
+在同一会话中发送多次 Coach 请求时，每条完整 AI 回复之间以**蓝色实线**分隔，方便区分不同轮次的回复；单条回复内部的分节线为淡色虚线。
+
 ### Template Chips / 快捷模板
 
 Below the empty-state hint, you will see a row of **template chips** — pre-defined prompt shortcuts. Click any chip to instantly send that template to the AI Coach.
@@ -287,7 +301,7 @@ The counter below the text area shows real-time **word count** and **sentence co
 | Button | Shortcut | When available | Action |
 |--------|----------|----------------|--------|
 | **Reset / 重置** | — | Always | Clears the entire form and removes the draft from local storage |
-| **Analyze Task / 分析任务** | `Ctrl+Enter` | When required fields are filled | Sends the task to the AI Agent for review |
+| **Analyze Task / 分析任务** | `Ctrl+Enter` | When required fields are filled (hidden in free-chat mode) | Sends the task to the AI Agent for review |
 | **Create JIRA / 创建 JIRA** | `Ctrl+Shift+Enter` | After AI analysis completes | Opens the payload preview modal |
 
 > **Note:** The **Create JIRA** button only appears after a successful AI analysis. You must analyze before creating.
@@ -502,6 +516,9 @@ Press **`?`** anywhere (outside a text input) to open the shortcuts reference mo
 
 - **Check the model badge.** The active model name is shown as a badge in both the Writing Coach and Task Review panel headers, so you always know which model is being used.
   **查看模型标识。**写作辅导和任务审核面板标题均显示当前模型名称，方便随时确认。
+
+- **LaTeX math is supported.** AI responses can include mathematical formulas using `$...$` (inline) and `$$...$$` (display) delimiters. The app renders them with KaTeX. Markdown escape conflicts (e.g. `\*` inside formulas) are handled automatically.
+  **支持 LaTeX 数学公式。**AI 回复中可使用 `$...$`（行内）和 `$$...$$`（独立行）公式，由 KaTeX 渲染。Markdown 转义冲突（如公式内的 `\*`）已自动处理。
 
 ---
 

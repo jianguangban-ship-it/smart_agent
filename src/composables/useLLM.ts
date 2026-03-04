@@ -5,6 +5,7 @@ import { getCoachSkill, getAnalyzeSkill } from '@/config/skills/index'
 import { useI18n } from '@/i18n'
 
 const LS_KEY_COACH_SKILL_ENABLED = 'coach-skill-enabled'
+const LS_KEY_TASK_COACH_ENABLED = 'task-coach-enabled'
 
 /** Whether the coach system-prompt skill is active. Toggle from the UI for free-form chat. Persisted to localStorage. */
 export const coachSkillEnabled = ref(localStorage.getItem(LS_KEY_COACH_SKILL_ENABLED) !== 'false')
@@ -12,6 +13,14 @@ export const coachSkillEnabled = ref(localStorage.getItem(LS_KEY_COACH_SKILL_ENA
 export function setCoachSkillEnabled(val: boolean): void {
   coachSkillEnabled.value = val
   localStorage.setItem(LS_KEY_COACH_SKILL_ENABLED, String(val))
+}
+
+/** Whether full task fields (project, type, summary, assignee, points) are included in the coach user message. Only effective when coachSkillEnabled is true. Persisted to localStorage. */
+export const taskCoachEnabled = ref(localStorage.getItem(LS_KEY_TASK_COACH_ENABLED) !== 'false')
+
+export function setTaskCoachEnabled(val: boolean): void {
+  taskCoachEnabled.value = val
+  localStorage.setItem(LS_KEY_TASK_COACH_ENABLED, String(val))
 }
 
 /** Tagged error class for HTTP 429 so callers can start backoff instead of showing an error */
@@ -29,6 +38,8 @@ interface StreamFlowOptions {
   getSystemPrompt: (lang: 'en' | 'zh', payload: WebhookPayload) => string
   getUserMessage: (payload: WebhookPayload, isZh: boolean) => string
   onBeforeRequest?: (currentResponse: unknown) => void
+  /** When true, new responses are appended after previous ones with a --- separator */
+  preserveHistory?: boolean
 }
 
 function createStreamFlow(
@@ -53,6 +64,7 @@ function createStreamFlow(
   let _lastPayload: WebhookPayload | null = null
   let _backoffTimer: number | null = null
   let _retryCount = 0
+  let _historyPrefix = ''
 
   async function request(payload: WebhookPayload, _isAutoRetry = false): Promise<string | null> {
     // Clear any existing backoff timer to prevent timer leak
@@ -63,6 +75,13 @@ function createStreamFlow(
 
     // Reset retry count on fresh user-initiated calls
     if (!_isAutoRetry) _retryCount = 0
+
+    // Capture current response as history prefix before clearing
+    if (!_isAutoRetry && opts.preserveHistory && response.value) {
+      const r = response.value as Record<string, unknown>
+      const text = typeof r?.message === 'string' ? r.message : ''
+      if (text) _historyPrefix = text
+    }
 
     _lastPayload = payload
     wasCancelled.value = false
@@ -84,11 +103,14 @@ function createStreamFlow(
       const systemPrompt = opts.getSystemPrompt(lang, payload)
       const userMessage = opts.getUserMessage(payload, isZh.value)
 
+      const historyPrefix = _historyPrefix ? _historyPrefix + '\n\n===COACH_TURN===\n\n' : ''
+
       await callStream(systemPrompt, userMessage, (chunk) => {
         if (tokenCount === 0) streamStart = Date.now()
         tokenCount++
         accumulated += chunk
-        response.value = { markdown_msg: accumulated, message: accumulated }
+        const full = historyPrefix + accumulated
+        response.value = { markdown_msg: full, message: full }
         const elapsed = (Date.now() - streamStart) / 1000
         if (elapsed > 0) streamSpeed.value = Math.round(tokenCount / elapsed)
       }, _ac.signal)
@@ -141,6 +163,7 @@ function createStreamFlow(
   }
 
   function clear() {
+    _historyPrefix = ''
     response.value = null
     wasCancelled.value = false
     hadError.value = false
@@ -267,13 +290,15 @@ ${d.description || '(empty)'}
   // ─── Coach flow ─────────────────────────────────────────────────────────────
 
   const coach = createStreamFlow({
+    preserveHistory: true,
     getSystemPrompt: (lang, payload) => {
       const skillOn = coachSkillEnabled.value
       return skillOn ? getCoachSkill(lang) : ''
     },
     getUserMessage: (payload, zh) => {
       const skillOn = coachSkillEnabled.value
-      return skillOn
+      const taskOn = taskCoachEnabled.value
+      return (skillOn && taskOn)
         ? buildUserMessage(payload, zh)
         : (payload.data.description || payload.data.summary || '')
     }

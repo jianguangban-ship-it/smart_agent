@@ -21,7 +21,13 @@ function extractMath(rawText: string): { text: string; restore: (html: string) =
 
   function collect(tex: string, display: boolean, fallback: string): string {
     try {
-      slots.push(katex.renderToString(tex.trim(), { displayMode: display, throwOnError: false }))
+      // AI models often pre-escape * and _ for Markdown safety (e.g. i_d^{\*}),
+      // but \* and \_ are not valid LaTeX math commands.
+      // Strip these Markdown escapes so KaTeX receives clean TeX (e.g. i_d^{*}).
+      const clean = tex.trim()
+        .replace(/\\\*/g, '*')
+        .replace(/\\_(?![a-zA-Z])/g, '_')  // \_ → _ only when not part of a command like \_text
+      slots.push(katex.renderToString(clean, { displayMode: display, throwOnError: false }))
     } catch {
       slots.push(fallback)
     }
@@ -57,7 +63,10 @@ function formatMarkdownText(text: string): string {
   t = t.replace(/^### (.+)$/gm, '<h4 class="coach-h4">$1</h4>')
   t = t.replace(/^## (.+)$/gm, '<h3 class="coach-h3">$1</h3>')
 
-  // Horizontal rule
+  // Response-boundary divider (between accumulated coach turns)
+  t = t.replace(/^===COACH_TURN===$/gm, '<hr class="coach-response-divider">')
+
+  // Horizontal rule (within a single response)
   t = t.replace(/^---+$/gm, '<hr class="coach-hr">')
 
   // Bold

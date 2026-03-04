@@ -107,6 +107,39 @@ describe('formatCoachResponse', () => {
     })
   })
 
+  describe('LaTeX math rendering', () => {
+    it('renders inline math with $...$ delimiters', () => {
+      const result = formatCoachResponse({ message: 'Set $i_d^* = 0$ for FOC' })
+      expect(result).toContain('katex')
+      expect(result).not.toContain('\\*')
+    })
+
+    it('strips markdown-escaped \\* inside math delimiters', () => {
+      const result = formatCoachResponse({ message: 'Use $i_d^{\\*} = 0$ control' })
+      expect(result).toContain('katex')
+      expect(result).not.toContain('\\*')
+    })
+
+    it('strips markdown-escaped \\_ inside math delimiters', () => {
+      const result = formatCoachResponse({ message: 'Variable $x\\_1 + x\\_2$' })
+      expect(result).toContain('katex')
+    })
+  })
+
+  describe('response boundary divider', () => {
+    it('renders ===COACH_TURN=== as response-divider (not coach-hr)', () => {
+      const result = formatCoachResponse({ message: 'answer one\n\n===COACH_TURN===\n\nanswer two' })
+      expect(result).toContain('coach-response-divider')
+      expect(result).not.toContain('coach-hr')
+    })
+
+    it('renders --- as coach-hr', () => {
+      const result = formatCoachResponse({ message: '---' })
+      expect(result).toContain('coach-hr')
+      expect(result).not.toContain('coach-response-divider')
+    })
+  })
+
   describe('array input', () => {
     it('uses first element of array', () => {
       const result = formatCoachResponse([{ status: 'PASS' }])
