@@ -96,6 +96,20 @@ describe('formatCoachResponse', () => {
       expect(result).toContain('<code')
     })
 
+    it('syntax-highlights C++ code blocks', () => {
+      const msg = '```cpp\nint main() {\n  return 0;\n}\n```'
+      const result = formatCoachResponse({ message: msg })
+      expect(result).toContain('hljs')
+      expect(result).toContain('hljs-keyword')
+    })
+
+    it('syntax-highlights Python code blocks', () => {
+      const msg = '```python\ndef hello():\n    print("world")\n```'
+      const result = formatCoachResponse({ message: msg })
+      expect(result).toContain('hljs')
+      expect(result).toContain('hljs-keyword')
+    })
+
     it('renders blockquotes', () => {
       const result = formatCoachResponse({ message: '> quoted text' })
       expect(result).toContain('<blockquote>')

@@ -1504,3 +1504,75 @@ Analyze and Create actions always use the full payload regardless of toggles (th
 | `src/App.vue` | `buildPayload()` branches by Skill/Task-Coach toggles for coach/preview; watch includes toggle refs |
 | `src/composables/useLLM.ts` | `buildUserMessage()` dynamic field inclusion; coach `getUserMessage` aligned with payload content |
 | `src/utils/__tests__/formatCoach.test.ts` | Updated for markdown-it output; added table, code block, blockquote tests |
+
+## v8.34 — Syntax Highlighting & Interactive JSON Viewer
+
+### Design: Code syntax highlighting with highlight.js
+
+AI Coach and Task Review panels frequently return fenced code blocks (C/C++, Python, shell scripts). Without syntax highlighting, code blocks are monochrome and hard to read.
+
+**Decision:** Integrate **highlight.js** via markdown-it's built-in `highlight` callback — no extra plugin needed. Tree-shaken imports register only the languages relevant to automotive SW engineering, keeping the bundle small (~70 KB added).
+
+**Registered languages:** C, C++, Python, JavaScript, TypeScript, Java, Bash/Shell, JSON, XML/HTML, YAML, SQL, CMake, Makefile
+
+**Theme:** `github-dark-dimmed` — matches the app's dark UI color palette.
+
+**Why highlight.js over alternatives:**
+- markdown-it has native `highlight` option in its constructor — zero-plugin integration
+- Tree-shakable: import only the languages needed, not the full 190+ language bundle
+- `react-syntax-highlighter` (user's suggestion) is a React wrapper around highlight.js/Prism — same engine, but won't work in Vue
+
+### Design: Interactive JSON Viewer (react-json-view style)
+
+The old `JsonViewer` was a flat `v-html` dump using `formatJson()` — just regex-colored text with no interactivity. For a capable AI agent, users need to inspect structured API responses (JIRA results, webhook payloads) with the same UX as browser DevTools or react-json-view.
+
+**Decision:** Rebuild `JsonViewer` as a recursive Vue component tree (`JsonNode`) with:
+
+| Feature | Implementation |
+|---------|---------------|
+| Collapsible nodes | Click caret or bracket to fold/unfold objects and arrays |
+| Type-colored values | `.jv-string` (blue), `.jv-number` (cyan), `.jv-boolean` (red), `.jv-null` (gray italic) |
+| Purple keys | Object property names in `.jv-key` for visual distinction |
+| Item count metadata | "3 items" / "5 keys" shown after brackets |
+| Indentation guides | Dashed vertical `border-left` connecting parent to children |
+| Row hover | Subtle blue tint on `.jv-row:hover` |
+| Expand/Collapse All | Toolbar buttons; controlled via `generation` + `expandDepth` props |
+| Default expand depth | 2 levels — shows top-level structure without overwhelming detail |
+| Copy JSON | Preserved from original component |
+
+**Why custom Vue component over a library:**
+- `react-json-view` is React-only
+- Vue JSON viewer libraries are poorly maintained or bloated
+- Custom component is ~120 lines, perfectly themed, zero dependencies
+
+### Changes
+
+#### Syntax highlighting
+- [x] **highlight.js integration** — `src/utils/markdown.ts` imports `highlight.js/lib/core` with 13 tree-shaken language registrations; markdown-it `highlight` callback tries exact language match, falls back to auto-detection
+- [x] **Theme CSS** — `highlight.js/styles/github-dark-dimmed.min.css` imported in `src/styles/global.css`
+- [x] **Panel CSS update** — `CoachPanel.vue` and `AIReviewPanel.vue` code block styles updated: `<pre>` keeps structural styles (border-radius, padding, border), `<pre code.hljs>` gets transparent background so highlight.js theme colors show through
+- [x] **Syntax highlighting tests** — 2 new tests in `formatCoach.test.ts` verify `hljs-keyword` spans appear for C++ and Python code blocks (28 total)
+
+#### Interactive JSON Viewer
+- [x] **JsonNode.vue** — new recursive tree component with collapse/expand toggle, type-colored values, key/index rendering, comma placement, item count metadata, indentation guides
+- [x] **JsonViewer.vue rewrite** — toolbar with Copy / Expand All / Collapse All buttons; delegates rendering to `JsonNode`; parses string input to object; controls `expandDepth` and `generation` props
+- [x] **Deleted `formatJson.ts`** — dead utility no longer imported by any component
+- [x] **Test rewrite** — replaced 8 dead `formatJson()` tests with 21 real `JsonNode` component tests covering primitives, objects, arrays, collapse/expand, commas, empty containers
+- [x] **i18n** — added `dev.expandAll` / `dev.collapseAll` keys in EN and ZH
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `package.json` | Added `highlight.js` dependency |
+| `src/utils/markdown.ts` | highlight.js core + 13 language imports; `highlight` callback in markdown-it config |
+| `src/styles/global.css` | Added `highlight.js/styles/github-dark-dimmed.min.css` import |
+| `src/components/panels/CoachPanel.vue` | Code block CSS: transparent background for `.hljs` inside `<pre>` |
+| `src/components/panels/AIReviewPanel.vue` | Same code block CSS update |
+| `src/components/shared/JsonViewer.vue` | Rewritten with toolbar + `JsonNode` delegation |
+| `src/components/shared/JsonNode.vue` | **New** — recursive collapsible JSON tree renderer |
+| `src/utils/formatJson.ts` | **Deleted** — no longer used |
+| `src/utils/__tests__/formatJson.test.ts` | Rewritten: 8 dead tests → 21 real `JsonNode` component tests |
+| `src/utils/__tests__/formatCoach.test.ts` | Added 2 syntax highlighting tests (C++, Python) |
+| `src/i18n/en.ts` | Added `dev.expandAll`, `dev.collapseAll` |
+| `src/i18n/zh.ts` | Added `dev.expandAll`, `dev.collapseAll` |

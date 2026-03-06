@@ -319,9 +319,10 @@ const chips = computed(() =>
 .coach-response :deep(em) { font-style: italic; }
 /* Inline code */
 .coach-response :deep(code) { background-color: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: var(--font-mono); color: var(--accent-blue); }
-/* Code blocks */
-.coach-response :deep(pre) { background-color: var(--bg-tertiary); border-radius: 6px; padding: 10px 12px; margin: 6px 0; overflow-x: auto; border: 1px solid var(--border-color); }
-.coach-response :deep(pre code) { padding: 0; background: none; font-size: 12px; color: var(--text-secondary); }
+/* Code blocks — structural styles; colors from highlight.js theme */
+.coach-response :deep(pre) { border-radius: 6px; padding: 10px 12px; margin: 6px 0; overflow-x: auto; border: 1px solid var(--border-color); background-color: var(--bg-tertiary); }
+.coach-response :deep(pre code) { padding: 0; background: transparent; font-size: 12px; font-family: var(--font-mono); }
+.coach-response :deep(pre code.hljs) { background: transparent; padding: 0; }
 /* Horizontal rules */
 .coach-response :deep(hr) { border: none; border-top: 1px dashed var(--border-color); margin: 10px 0; }
 .coach-response :deep(hr.coach-response-divider) { border-top: 2px solid var(--accent-blue); margin: 16px 0; }

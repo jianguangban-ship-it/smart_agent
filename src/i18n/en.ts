@@ -89,7 +89,9 @@ export default {
     coachErrorCancel: 'Coach Error/Cancel',
     analyzeErrorCancel: 'Analyze Error/Cancel',
     error: 'error',
-    cancelled: 'cancelled'
+    cancelled: 'cancelled',
+    expandAll: 'Expand All',
+    collapseAll: 'Collapse All'
   },
   error: {
     timeout: 'Request timeout, please check if n8n service is running',

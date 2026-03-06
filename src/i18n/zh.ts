@@ -89,7 +89,9 @@ export default {
     coachErrorCancel: 'Coach 错误/取消',
     analyzeErrorCancel: '分析 错误/取消',
     error: '错误',
-    cancelled: '已取消'
+    cancelled: '已取消',
+    expandAll: '全部展开',
+    collapseAll: '全部折叠'
   },
   error: {
     timeout: '请求超时，请检查 n8n 服务是否运行',
