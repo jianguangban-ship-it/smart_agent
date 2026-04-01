@@ -3,7 +3,8 @@ import type { TaskTypeConfig } from '@/types/form'
 export const TASK_TYPES: TaskTypeConfig[] = [
   { value: 'Story', label: 'Story', color: '#3fb950', bgActive: 'rgba(63, 185, 80, 0.15)' },
   { value: 'Task', label: 'Task', color: '#58a6ff', bgActive: 'rgba(88, 166, 255, 0.15)' },
-  { value: 'Bug', label: 'Bug', color: '#f85149', bgActive: 'rgba(248, 81, 73, 0.15)' }
+  { value: 'Bug', label: 'Bug', color: '#f85149', bgActive: 'rgba(248, 81, 73, 0.15)' },
+  { value: 'Feature', label: 'Feature', color: '#d2a8ff', bgActive: 'rgba(210, 168, 255, 0.15)' }
 ]
 
 export const FIBONACCI_POINTS = [1, 2, 3, 5, 8] as const
@@ -69,9 +70,29 @@ export const VEHICLE_OPTIONS = [
 
 export const PRODUCT_OPTIONS = [
   'EPS', 'IBC', 'IBC1.1', 'iBooster', 'IBC1.2', 'IBC2.0', 'EMB',
-  'ERC', 'HEM', 'EDC', 'EAS', 'EDC&EAS',
+  'ERC', 'HEM', 'EDC', 'EAS', 'EDC&EAS', 'ECS',
   'DP-EPS-100fit', 'R-EPS-100fit', 'RWS-100fit', 'SBW-10fit', 'R-EPS-10fit',
   'PB011A01', 'PB012A01', 'SB0042XA1',
+]
+
+export const CLASSIFICATION_OPTIONS = [
+  // Functional
+  'Functional',
+  'Non-Functional',
+
+  // Safety — ISO 26262 ASIL levels
+  'Safety-QM',
+  'Safety-ASIL-A',
+  'Safety-ASIL-B',
+  'Safety-ASIL-C',
+  'Safety-ASIL-D',
+
+  // Constraints & others
+  'Constraint',
+  'Interface',
+  'Performance',
+  'Legal/Regulatory',
+  'Cybersecurity',
 ]
 
 export const LAYER_OPTIONS = ['SYS', 'SW', 'APP', 'HW', 'ME', 'TEST', 'SWF']

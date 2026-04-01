@@ -1,6 +1,6 @@
 <template>
   <PanelShell
-    :title="ICONS.coachPanel + ' ' + (appMode === 'task' ? t('coach.titleTask') : appMode === 'explore' ? t('coach.titleExplore') : t('coach.title'))"
+    :title="ICONS.coachPanel + ' ' + (appMode === 'task' ? t('coach.titleTask') : t('coach.titleExplore'))"
     :status="statusInfo.status"
     :status-label="t('status.' + statusInfo.key)"
     max-height="2500px"
@@ -66,8 +66,8 @@
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
         </svg>
-        <p class="empty-hint">{{ appMode === 'design' ? t('coach.emptyHintDesign') : appMode === 'explore' ? t('coach.emptyHintExplore') : t('coach.emptyHint') }}</p>
-        <p class="empty-sub">{{ appMode === 'design' ? t('coach.emptySubHintDesign') : appMode === 'explore' ? t('coach.emptySubHintExplore') : t('coach.emptySubHint') }}</p>
+        <p class="empty-hint">{{ appMode === 'explore' ? t('coach.emptyHintExplore') : t('coach.emptyHint') }}</p>
+        <p class="empty-sub">{{ appMode === 'explore' ? t('coach.emptySubHintExplore') : t('coach.emptySubHint') }}</p>
         <div
           class="chips"
           :class="{ 'drag-over': isDragging }"
@@ -75,8 +75,8 @@
           @dragleave="isDragging = false"
           @drop.prevent="handleDrop"
         >
-          <!-- Elicitation + Conflict Check only in Design mode -->
-          <div class="guided-chips" v-if="appMode === 'design'">
+          <!-- Elicitation + Conflict Check only in Explore mode -->
+          <div class="guided-chips" v-if="appMode === 'explore'">
             <button
               class="elicit-chip"
               :title="t('elicitation.chipHint')"

@@ -6,9 +6,10 @@
       <!-- Project -->
       <div class="field">
         <label class="field-label" for="basic-project">{{ t('form.projectName') }}</label>
-        <select id="basic-project" v-model="form.projectKey" @change="$emit('projectChange')" class="input-base field-select">
+        <select id="basic-project" v-model="form.projectKey" @change="$emit('projectChange')" class="input-base field-select" :class="{ 'select-placeholder': !form.projectKey }">
+          <option value="" disabled>{{ t('form.selectProject') }}</option>
           <option v-for="project in PROJECT_CONFIG" :key="project.key" :value="project.key">
-            {{ project.name }} ({{ project.teamName }})
+            {{ project.teamName }} ({{ project.name }})
           </option>
         </select>
       </div>
@@ -87,7 +88,7 @@ const { t } = useI18n()
 const typeGroupRef = ref<HTMLElement>()
 const typeRoving = useRovingIndex(typeGroupRef)
 
-const teamMembers = computed<TeamMember[]>(() => TEAM_MEMBERS[props.form.projectKey] || [])
+const teamMembers = computed<TeamMember[]>(() => (props.form.projectKey ? TEAM_MEMBERS[props.form.projectKey] : undefined) || [])
 const memberCount = computed(() => teamMembers.value.length)
 const teamName = computed(() => PROJECT_CONFIG.find(p => p.key === props.form.projectKey)?.teamName || '')
 const selectedAssigneeName = computed(() => {

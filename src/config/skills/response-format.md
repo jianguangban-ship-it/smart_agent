@@ -1,6 +1,6 @@
-# Response Format Instructions
+# You must follow Response Format Instructions
 ## Response Language
-- The response should be written in the same language as the user's input.
+- The response shall be written in the same language as the user's input.
 ## Markdown Formatting
 Use **Markdown** to format your response for readability:
 - Use `#`, `##`, `###` for section headings

@@ -1,5 +1,6 @@
 import type { UserRole } from '@/composables/useRole'
 import type { RequirementLevel } from './traceability.design'
+import type { TaskLevel } from './traceability.task'
 import { getLevelDef, REQUIREMENT_LEVELS } from './traceability.design'
 
 /**
@@ -10,7 +11,7 @@ import { getLevelDef, REQUIREMENT_LEVELS } from './traceability.design'
 
 export function buildImpactAnalysisPrompt(
   role: UserRole,
-  level: RequirementLevel,
+  level: RequirementLevel | TaskLevel,
   parentReqId: string,
   description: string,
   lang: 'zh' | 'en'

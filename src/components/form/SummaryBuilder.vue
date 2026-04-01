@@ -7,21 +7,21 @@
     <div class="fields-grid">
       <div class="field">
         <label class="field-label" for="summary-vehicle">{{ t('form.vehicle') }}</label>
-        <select id="summary-vehicle" v-model="summary.vehicle" class="input-base field-select">
+        <select id="summary-vehicle" v-model="summary.vehicle" class="input-base field-select" :class="{ 'select-placeholder': !summary.vehicle }">
           <option value="">{{ t('form.select') }}</option>
           <option v-for="v in VEHICLE_OPTIONS" :key="v" :value="v">{{ v }}</option>
         </select>
       </div>
       <div class="field">
         <label class="field-label" for="summary-product">{{ t('form.product') }}</label>
-        <select id="summary-product" v-model="summary.product" class="input-base field-select">
+        <select id="summary-product" v-model="summary.product" class="input-base field-select" :class="{ 'select-placeholder': !summary.product }">
           <option value="">{{ t('form.select') }}</option>
           <option v-for="p in PRODUCT_OPTIONS" :key="p" :value="p">{{ p }}</option>
         </select>
       </div>
       <div class="field">
         <label class="field-label" for="summary-layer">{{ t('form.layer') }}</label>
-        <select id="summary-layer" v-model="summary.layer" class="input-base field-select">
+        <select id="summary-layer" v-model="summary.layer" class="input-base field-select" :class="{ 'select-placeholder': !summary.layer }">
           <option value="">{{ t('form.select') }}</option>
           <option v-for="l in LAYER_OPTIONS" :key="l" :value="l">{{ l }}</option>
         </select>

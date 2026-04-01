@@ -26,7 +26,7 @@ export interface AspiceProfile {
 
 // ─── Mapping table: (role, issueType) → ASPICE process ──────────────────────
 
-type IssueType = 'Story' | 'Task' | 'Bug'
+type IssueType = 'Story' | 'Task' | 'Bug' | 'Feature'
 
 interface MappingKey {
   roles: UserRole[]

@@ -72,15 +72,12 @@
           </span>
         </div>
         <div class="config-row">
-          <span class="config-label">{{ t('dev.coachSkill') }}:</span>
-          <span :style="{ color: coachSkillModified ? 'var(--accent-orange)' : 'var(--text-muted)' }">
-            {{ coachSkillModified ? t('settings.skillModified') : t('dev.no') }}
+          <span class="config-label">{{ t('dev.taskCoachSkill') }}:</span>
+          <span :style="{ color: activeTaskSkillFile ? 'var(--accent-green)' : 'var(--text-muted)' }">
+            {{ activeTaskSkillFile || '—' }}
           </span>
-        </div>
-        <div class="config-row">
-          <span class="config-label">Task Coach Skill:</span>
-          <span :style="{ color: coachSkillTaskModified ? 'var(--accent-orange)' : 'var(--text-muted)' }">
-            {{ coachSkillTaskModified ? t('settings.skillModified') : t('dev.no') }}
+          <span v-if="coachSkillTaskModified" style="color: var(--accent-orange); margin-left: 4px; font-size: 10px; font-weight: 600">
+            [{{ t('settings.skillModified') }}]
           </span>
         </div>
         <div class="config-row">
@@ -129,30 +126,25 @@
             {{ analyzeHadError ? t('dev.error') : analyzeWasCancelled ? t('dev.cancelled') : t('dev.no') }}
           </span>
         </div>
+        <template v-if="jiraResponse">
+          <div class="state-divider" />
+          <div class="config-row">
+            <span class="config-label">JIRA:</span>
+            <a v-if="jiraKey" :href="'https://jira.gwm.cn/browse/' + jiraKey" target="_blank" rel="noopener noreferrer" class="jira-key-link">{{ jiraKey }}</a>
+            <span v-else style="color: var(--text-muted)">—</span>
+          </div>
+          <div v-if="jiraAiPoints != null" class="config-row">
+            <span class="config-label">AI Points:</span>
+            <span style="color: var(--accent-green); font-weight: 600">{{ jiraAiPoints }}</span>
+          </div>
+          <div v-if="jiraViewUrl" class="config-row">
+            <span class="config-label">View:</span>
+            <a :href="jiraViewUrl" target="_blank" rel="noopener noreferrer" class="jira-view-link">{{ jiraViewUrl }}</a>
+          </div>
+        </template>
       </div>
     </details>
 
-    <details>
-      <summary class="dev-summary"><strong>{{ ICONS.devAgent }} Task Coach Skill</strong></summary>
-      <div class="dev-config">
-        <div class="skill-header">
-          <div class="skill-label-row">
-            <span v-if="coachSkillTaskModified" class="skill-modified-badge">● {{ t('settings.skillModified') }}</span>
-          </div>
-          <div class="skill-actions">
-            <button class="btn-reset" @click="handleResetTaskCoach">{{ t('settings.skillReset') }}</button>
-          </div>
-        </div>
-        <textarea
-          class="skill-textarea"
-          :value="localTaskCoachSkill"
-          @input="onTaskCoachSkillInput"
-        />
-        <div class="skill-footer">
-          <span class="skill-counter">{{ localTaskCoachSkill.length }} chars · ~{{ Math.floor(localTaskCoachSkill.length / 4) }} tokens</span>
-        </div>
-      </div>
-    </details>
   </div>
 </template>
 
@@ -167,15 +159,14 @@ import { currentRoleDefinition } from '@/composables/useRole'
 import { activeSkill } from '@/composables/useLLM'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
 import {
-  getCoachSkillTaskRaw, setCoachSkillTask, resetCoachSkillTask,
-  coachSkillTaskModified, getCoachSkillTaskDefault
+  coachSkillTaskModified,
+  activeTaskSkillFile
 } from '@/config/skills/index'
 
 const props = defineProps<{
   payload: string
   coachMessages: ChatMessage[]
   activeModel: string
-  coachSkillModified: boolean
   analyzeSkillModified: boolean
   customTemplatesModified: boolean
   isCoachLoading: boolean
@@ -188,6 +179,7 @@ const props = defineProps<{
   analyzeStreamSpeed: number
   coachBackoffSecs: number
   analyzeBackoffSecs: number
+  jiraResponse?: unknown
 }>()
 
 const { t, isZh } = useI18n()
@@ -201,6 +193,20 @@ const lastCoachRaw = computed(() => {
   }
   return ''
 })
+
+// JIRA response parsed fields for Agent State
+const parsedJira = computed(() => {
+  if (!props.jiraResponse) return null
+  try {
+    return typeof props.jiraResponse === 'string' ? JSON.parse(props.jiraResponse) : props.jiraResponse
+  } catch { return null }
+})
+const jiraKey = computed(() => (parsedJira.value as Record<string, string>)?.key || '')
+const jiraAiPoints = computed(() => {
+  const pts = (parsedJira.value as Record<string, unknown>)?.ai_points
+  return typeof pts === 'number' ? pts : null
+})
+const jiraViewUrl = computed(() => (parsedJira.value as Record<string, string>)?.view_tasks_created || '')
 
 const rawExpanded = ref(true)
 
@@ -216,21 +222,6 @@ const activeUrl = computed(() =>
   isProd.value ? WEBHOOK_CONFIG.prodUrl : WEBHOOK_CONFIG.testUrl
 )
 
-// ─── Task Coach Skill editing ─────────────────────────────────────────────
-function currentLang(): 'zh' | 'en' { return isZh.value ? 'zh' : 'en' }
-
-const localTaskCoachSkill = ref(getCoachSkillTaskRaw(currentLang()))
-
-function onTaskCoachSkillInput(e: Event) {
-  const val = (e.target as HTMLTextAreaElement).value
-  localTaskCoachSkill.value = val
-  setCoachSkillTask(val)
-}
-
-function handleResetTaskCoach() {
-  resetCoachSkillTask()
-  localTaskCoachSkill.value = getCoachSkillTaskDefault(currentLang())
-}
 </script>
 
 <style scoped>
@@ -282,6 +273,22 @@ function handleResetTaskCoach() {
   font-family: var(--font-mono);
   font-size: 11px;
 }
+.jira-key-link {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+.jira-key-link:hover { text-decoration: underline; }
+.jira-view-link {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-blue);
+  text-decoration: none;
+  word-break: break-all;
+}
+.jira-view-link:hover { text-decoration: underline; }
 .config-hint {
   padding-top: 8px;
   border-top: 1px solid var(--border-color);
@@ -371,23 +378,4 @@ function handleResetTaskCoach() {
   width: 13px;
   height: 13px;
 }
-/* Skill editing section */
-.skill-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
-.skill-label-row { display: flex; align-items: center; gap: 8px; }
-.skill-actions { display: flex; align-items: center; gap: 6px; }
-.skill-modified-badge { font-size: 10px; font-weight: 600; color: var(--accent-orange); }
-.btn-reset {
-  font-size: 11px; padding: 3px 8px; border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
-}
-.btn-reset:hover:not(:disabled) { color: var(--text-primary); background: var(--bg-tertiary); }
-.skill-textarea {
-  width: 100%; height: 200px; padding: var(--space-2) var(--space-3); resize: vertical;
-  border-radius: var(--radius-md); border: 1px solid var(--border-color);
-  background-color: var(--bg-tertiary); color: var(--text-primary);
-  font-size: var(--font-base); font-family: var(--font-mono); line-height: 1.6; outline: none; box-sizing: border-box;
-}
-.skill-textarea:focus { border-color: var(--accent-blue); }
-.skill-footer { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; }
-.skill-counter { font-size: var(--font-sm); color: var(--text-muted); white-space: nowrap; }
 </style>

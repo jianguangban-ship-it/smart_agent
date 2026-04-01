@@ -1,11 +1,32 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch, reactive } from 'vue'
 import type { ReviewStatus } from '@/config/domain/types'
 import { getModeReviewSteps, getModeReviewChecklist } from '@/config/domain'
 import { currentRole } from '@/composables/useRole'
 import { appMode } from '@/composables/useAppMode'
+import type { AppMode } from '@/composables/useAppMode'
+
+// Per-mode review state — each mode tracks its own workflow independently
+const modeReviewStatus = reactive<Record<AppMode, ReviewStatus>>({
+  explore: 'draft',
+  task: 'draft'
+})
+const modeCheckedItems = reactive<Record<AppMode, Set<string>>>({
+  explore: new Set(),
+  task: new Set()
+})
 
 const reviewStatus = ref<ReviewStatus>('draft')
 const checkedItems = ref<Set<string>>(new Set())
+
+// Sync per-mode state ↔ active refs on mode switch
+watch(appMode, (newMode, oldMode) => {
+  // Save outgoing mode state
+  modeReviewStatus[oldMode] = reviewStatus.value
+  modeCheckedItems[oldMode] = new Set(checkedItems.value)
+  // Restore incoming mode state
+  reviewStatus.value = modeReviewStatus[newMode]
+  checkedItems.value = new Set(modeCheckedItems[newMode])
+}, { immediate: false })
 
 export function useReviewWorkflow() {
   const currentStepIndex = computed(() =>
@@ -25,6 +46,7 @@ export function useReviewWorkflow() {
 
   function advanceTo(status: ReviewStatus) {
     reviewStatus.value = status
+    modeReviewStatus[appMode.value] = status
   }
 
   function toggleCheck(itemId: string) {
@@ -35,11 +57,14 @@ export function useReviewWorkflow() {
       next.add(itemId)
     }
     checkedItems.value = next
+    modeCheckedItems[appMode.value] = new Set(next)
   }
 
   function resetWorkflow() {
     reviewStatus.value = 'draft'
     checkedItems.value = new Set()
+    modeReviewStatus[appMode.value] = 'draft'
+    modeCheckedItems[appMode.value] = new Set()
   }
 
   return {

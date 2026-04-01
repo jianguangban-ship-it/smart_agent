@@ -1,15 +1,14 @@
 import type { ProjectKey } from './team'
-import type { RequirementLevel } from '@/config/domain/traceability.design'
 import type { TaskLevel } from '@/config/domain/traceability.task'
 
 export interface FormState {
   projectKey: ProjectKey | ''
-  issueType: '' | 'Story' | 'Task' | 'Bug'
+  issueType: '' | 'Story' | 'Task' | 'Bug' | 'Feature'
   assignee: string
   estimatedPoints: number
   description: string
-  /** Requirement/task hierarchy level (traceability) — supports both design and task mode levels */
-  requirementLevel: RequirementLevel | TaskLevel
+  /** Task hierarchy level (traceability) */
+  requirementLevel: TaskLevel
   /** Parent/source requirement ID (traceability) */
   parentReqId: string
   /** Verification method (traceability) */
@@ -25,7 +24,7 @@ export interface SummaryState {
 }
 
 export interface TaskTypeConfig {
-  value: 'Story' | 'Task' | 'Bug'
+  value: 'Story' | 'Task' | 'Bug' | 'Feature'
   label: string
   color: string
   bgActive: string

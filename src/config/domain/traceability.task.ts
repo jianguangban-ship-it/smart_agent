@@ -1,7 +1,7 @@
 import type { UserRole } from '@/composables/useRole'
 import type { TraceabilityGap } from './types'
 
-export type TaskLevel = 'epic' | 'story' | 'task' | 'subtask' | 'bug'
+export type TaskLevel = 'none' | 'epic' | 'story' | 'task' | 'subtask' | 'bug'
 
 export interface TaskLevelDef {
   id: TaskLevel

@@ -1,11 +1,11 @@
 import { ref } from 'vue'
 import { setCoachSkillEnabled, setTaskCoachEnabled } from '@/composables/useLLM'
 
-export type AppMode = 'explore' | 'design' | 'task'
+export type AppMode = 'explore' | 'task'
 
 const LS_KEY_MODE = 'app-mode'
 
-const validModes: AppMode[] = ['explore', 'design', 'task']
+const validModes: AppMode[] = ['explore', 'task']
 
 /** Drive coachSkillEnabled + taskCoachEnabled from the current mode. */
 export function applyModeFlags(mode: AppMode): void {
@@ -13,14 +13,13 @@ export function applyModeFlags(mode: AppMode): void {
     setCoachSkillEnabled(false)
     setTaskCoachEnabled(false)
   } else {
-    // design + task: skill ON, task-coach ON
     setCoachSkillEnabled(true)
     setTaskCoachEnabled(true)
   }
 }
 
-const stored = localStorage.getItem(LS_KEY_MODE) as AppMode | null
-const initial: AppMode = stored && validModes.includes(stored) ? stored : 'design'
+const stored = localStorage.getItem(LS_KEY_MODE)
+const initial: AppMode = stored && (validModes as string[]).includes(stored) ? (stored as AppMode) : 'task'
 
 export const appMode = ref<AppMode>(initial)
 
@@ -29,8 +28,7 @@ applyModeFlags(initial)
 
 /**
  * Switch to a new mode. Sets appMode and drives skill flags.
- * Cleanup (resetForm, resetWorkflow, clearAnalyzeResponse) is handled
- * by a watch(appMode) in App.vue — those instances are owned there.
+ * Form/workflow/AI state is preserved on mode switch — only the visible UI changes.
  */
 export function setMode(mode: AppMode): void {
   appMode.value = mode

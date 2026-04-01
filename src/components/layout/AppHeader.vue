@@ -8,13 +8,13 @@
       </div>
       <h1 v-if="currentLang === 'en'" class="header-title"><span class="logo-a">A</span><span class="logo-g">G</span><span class="logo-ec">ec</span></h1>
       <h1 v-else class="header-title">{{ t('header.title') }}</h1>
-      <span class="header-version">v10.48</span>
+      <span class="header-version">v10.73</span>
     </div>
     <div class="header-right">
       <!-- Mode Switcher -->
       <div class="toggle-group mode-group">
         <button
-          v-for="m in (['explore', 'design', 'task'] as AppMode[])"
+          v-for="m in (['explore', 'task'] as AppMode[])"
           :key="m"
           class="toggle-btn mode-btn"
           :class="{ active: appMode === m, ['mode-' + m]: appMode === m }"
@@ -35,18 +35,6 @@
           :class="{ active: currentLang === 'zh', 'lang-zh': currentLang === 'zh' }"
           @click="setLang('zh')"
         >中文</button>
-      </div>
-
-      <!-- Role Selector -->
-      <div class="toggle-group role-group" v-show="appMode === 'design'">
-        <button
-          v-for="role in ROLES"
-          :key="role.id"
-          class="toggle-btn role-btn"
-          :class="{ active: currentRole === role.id, ['role-' + role.id]: currentRole === role.id }"
-          @click="setRole(role.id)"
-          :title="isZh ? role.labelZh : role.labelEn"
-        ><strong>{{ isZh ? role.shortZh : role.shortEn }}</strong></button>
       </div>
 
       <!-- URL Mode Toggle -->
@@ -112,7 +100,6 @@ import { useI18n } from '@/i18n'
 import { useProductionMode, setUrlMode } from '@/config/webhook'
 import { useTheme } from '@/composables/useTheme'
 import { ICONS } from '@/config/icons'
-import { ROLES, currentRole, setRole } from '@/composables/useRole'
 import { appMode, setMode } from '@/composables/useAppMode'
 import type { AppMode } from '@/composables/useAppMode'
 
@@ -300,21 +287,6 @@ function openHelp() {
   background-color: var(--bg-tertiary);
 }
 
-/* Role selector */
-.role-group {
-  gap: 0;
-}
-.role-btn {
-  font-size: var(--font-xs, 10px);
-  padding: var(--space-1) var(--space-2);
-  letter-spacing: 0.3px;
-  font-weight: 700;
-}
-.role-btn.role-system-architect { background-color: #0d9488; color: white; }
-.role-btn.role-sw-developer { background-color: #16a34a; color: white; }
-.role-btn.role-hw-designer { background-color: #d97706; color: white; }
-.role-btn.role-me-designer { background-color: #64748b; color: white; }
-.role-btn.role-vv-engineer { background-color: #7c3aed; color: white; }
 
 @media (max-width: 768px) {
   .app-header {
@@ -338,6 +310,5 @@ function openHelp() {
   font-weight: 700;
 }
 .mode-btn.mode-explore.active { background: #a78bfa; color: #fff; }
-.mode-btn.mode-design.active  { background: var(--accent-blue); color: #fff; }
 .mode-btn.mode-task.active    { background: #34d399; color: #fff; }
 </style>

@@ -1,122 +1,132 @@
 <template>
-  <PanelShell
-    :title="ICONS.reviewPanel + ' ' + t('panel.aiAgentResponse')"
-    :status="statusInfo.status"
-    :status-label="t('status.' + statusInfo.key)"
-    max-height="2500px"
-  >
-    <template #header-actions>
-      <span class="mode-badge badge-llm" :title="currentModel">{{ currentModel }}</span>
-      <button
-        v-if="canShowDiff && !isAnalyzing"
-        class="copy-btn"
-        :class="{ 'diff-active': showDiff }"
-        @click="showDiff = !showDiff"
-        :title="showDiff ? t('panel.hideDiff') : t('panel.showDiff')"
-        :aria-label="showDiff ? t('panel.hideDiff') : t('panel.showDiff')"
-      >
-        {{ showDiff ? t('panel.hideDiff') : t('panel.showDiff') }}
-      </button>
-      <button v-if="response && !isAnalyzing" class="copy-btn" @click="copyResponse" :title="t('toast.copied')" :aria-label="t('toast.copied')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="9" y="2" width="13" height="13" rx="2"/>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke-linecap="round"/>
-        </svg>
-      </button>
-    </template>
-
-    <template #icon>
-      <svg class="panel-icon" style="color: var(--accent-purple);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-      </svg>
-    </template>
-
-    <!-- Empty state / backoff state -->
-    <div v-if="!response && !isAnalyzing" class="empty-state">
-      <!-- 429 backoff countdown -->
-      <template v-if="backoffSecs > 0">
-        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--accent-orange)">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-        <p class="backoff-text">{{ t('panel.backoffLabel') }} <strong>{{ backoffSecs }}s</strong></p>
-        <button class="cancel-btn" @click="$emit('cancel')">{{ t('coach.backoffCancel') }}</button>
-      </template>
-      <!-- Normal empty state -->
-      <template v-else>
-        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-        </svg>
-        <p class="empty-text">{{ t('panel.waitingAI') }}</p>
-        <div v-if="hadError" class="retry-row">
-          <button class="retry-btn" :disabled="retryCountdown > 0" @click="handleRetry">
-            <svg class="retry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+  <div class="review-panel">
+    <details :open="hasContent || isAnalyzing">
+      <summary class="review-header" @click.prevent="toggle">
+        <span class="header-title">{{ ICONS.reviewPanel }} {{ t('panel.aiAgentResponse') }}</span>
+        <span class="header-actions" @click.stop>
+          <span class="mode-badge badge-llm" :title="currentModel">{{ currentModel }}</span>
+          <span v-if="isAnalyzing" class="status-badge status-loading">
+            <svg class="mini-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
+              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
             </svg>
-            {{ retryCountdown > 0 ? `${retryCountdown}s` : t('panel.retryBtn') }}
+            {{ t('status.loading') }}
+          </span>
+          <span v-else-if="response && !hasError" class="status-badge status-success">{{ t('status.success') }}</span>
+          <span v-else-if="hasError" class="status-badge status-error">{{ t('status.error') }}</span>
+          <!-- AI result badges (visible even when collapsed) -->
+          <span v-if="aiPoints != null && !isAnalyzing" class="result-badge points-badge">
+            <span class="points-old">{{ estimatedPoints }}</span>
+            <span class="points-arrow">&rarr;</span>
+            <span class="points-new">{{ aiPoints }}</span>
+          </span>
+          <span v-if="subtaskCount > 0 && !isAnalyzing" class="result-badge subtask-badge">
+            {{ subtaskCount }} {{ t('panel.subtasks') }}
+          </span>
+          <button
+            v-if="canShowDiff && !isAnalyzing"
+            class="copy-btn"
+            :class="{ 'diff-active': showDiff }"
+            @click="showDiff = !showDiff"
+            :title="showDiff ? t('panel.hideDiff') : t('panel.showDiff')"
+          >
+            {{ showDiff ? t('panel.hideDiff') : t('panel.showDiff') }}
+          </button>
+          <button v-if="response && !isAnalyzing" class="copy-btn" @click="copyResponse" :title="t('toast.copied')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="2" width="13" height="13" rx="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </span>
+      </summary>
+
+      <div class="review-body">
+        <!-- Empty state / backoff state -->
+        <div v-if="!response && !isAnalyzing" class="empty-state">
+          <template v-if="backoffSecs > 0">
+            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--accent-orange)">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <p class="backoff-text">{{ t('panel.backoffLabel') }} <strong>{{ backoffSecs }}s</strong></p>
+            <button class="cancel-btn" @click="$emit('cancel')">{{ t('coach.backoffCancel') }}</button>
+          </template>
+          <template v-else>
+            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+            <p class="empty-text">{{ t('panel.waitingAI') }}</p>
+            <div v-if="hadError" class="retry-row">
+              <button class="retry-btn" :disabled="retryCountdown > 0" @click="handleRetry">
+                <svg class="retry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                {{ retryCountdown > 0 ? `${retryCountdown}s` : t('panel.retryBtn') }}
+              </button>
+            </div>
+          </template>
+        </div>
+
+        <!-- Loading state (waiting for first token) -->
+        <div v-else-if="isAnalyzing && !response" class="empty-state">
+          <svg class="spinner" style="color: var(--accent-purple);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
+            <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+          </svg>
+          <p class="loading-text" style="color: var(--accent-purple);">{{ t('panel.aiAnalyzing') }}</p>
+          <button class="cancel-btn" @click="$emit('cancel')">
+            <svg class="cancel-icon" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+            {{ t('settings.cancel') }}
           </button>
         </div>
-      </template>
-    </div>
 
-    <!-- Loading state (waiting for first token) -->
-    <div v-else-if="isAnalyzing && !response" class="empty-state">
-      <svg class="spinner" style="color: var(--accent-purple);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
-        <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
-        <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
-      </svg>
-      <p class="loading-text" style="color: var(--accent-purple);">{{ t('panel.aiAnalyzing') }}</p>
-      <button class="cancel-btn" @click="$emit('cancel')">
-        <svg class="cancel-icon" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="6" y="6" width="12" height="12" rx="2" />
-        </svg>
-        {{ t('settings.cancel') }}
-      </button>
-    </div>
+        <!-- LLM markdown result (streaming or complete) -->
+        <div v-else-if="isMarkdownResponse">
+          <div v-if="isAnalyzing" class="cancel-row">
+            <button class="cancel-btn" @click="$emit('cancel')">
+              <svg class="cancel-icon" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              {{ t('settings.cancel') }}
+            </button>
+          </div>
+          <div v-if="hasPerspectiveTabs && !showDiff" class="perspective-tabs">
+            <button
+              class="perspective-tab"
+              :class="{ 'tab-active': activeTab === 'all' }"
+              @click="activeTab = 'all'"
+            >{{ t('panel.allPerspectives') }}</button>
+            <button
+              v-for="s in perspectiveSections"
+              :key="s.id"
+              class="perspective-tab"
+              :class="{ 'tab-active': activeTab === s.id }"
+              @click="activeTab = s.id"
+            >{{ s.label }}</button>
+          </div>
+          <div v-if="showDiff && canShowDiff" class="coach-response diff-view" v-html="diffHtml" />
+          <div v-else class="coach-response" v-html="filteredAnalysisHtml" />
+          <div v-if="isAnalyzing" class="stream-footer">
+            <span class="streaming-cursor" />
+            <span v-if="streamSpeed > 0" class="stream-speed">{{ streamSpeed }} {{ t('dev.streamSpeed') }}</span>
+          </div>
+          <div v-if="!isAnalyzing && (wasCancelled || hadError)" class="retry-row">
+            <button class="retry-btn" :disabled="retryCountdown > 0" @click="handleRetry">
+              <svg class="retry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              {{ retryCountdown > 0 ? `${retryCountdown}s` : t('panel.retryBtn') }}
+            </button>
+          </div>
+        </div>
 
-    <!-- LLM markdown result (streaming or complete) -->
-    <div v-else-if="isMarkdownResponse">
-      <div v-if="isAnalyzing" class="cancel-row">
-        <button class="cancel-btn" @click="$emit('cancel')">
-          <svg class="cancel-icon" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="6" width="12" height="12" rx="2" />
-          </svg>
-          {{ t('settings.cancel') }}
-        </button>
+        <!-- Webhook JSON result -->
+        <JsonViewer v-else :data="response" />
       </div>
-      <!-- Deep review perspective tabs -->
-      <div v-if="hasPerspectiveTabs && !showDiff" class="perspective-tabs">
-        <button
-          class="perspective-tab"
-          :class="{ 'tab-active': activeTab === 'all' }"
-          @click="activeTab = 'all'"
-        >{{ t('panel.allPerspectives') }}</button>
-        <button
-          v-for="s in perspectiveSections"
-          :key="s.id"
-          class="perspective-tab"
-          :class="{ 'tab-active': activeTab === s.id }"
-          @click="activeTab = s.id"
-        >{{ s.label }}</button>
-      </div>
-      <div v-if="showDiff && canShowDiff" class="coach-response diff-view" v-html="diffHtml" />
-      <div v-else class="coach-response" v-html="filteredAnalysisHtml" />
-      <div v-if="isAnalyzing" class="stream-footer">
-        <span class="streaming-cursor" />
-        <span v-if="streamSpeed > 0" class="stream-speed">{{ streamSpeed }} {{ t('dev.streamSpeed') }}</span>
-      </div>
-      <div v-if="!isAnalyzing && (wasCancelled || hadError)" class="retry-row">
-        <button class="retry-btn" :disabled="retryCountdown > 0" @click="handleRetry">
-          <svg class="retry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-          </svg>
-          {{ retryCountdown > 0 ? `${retryCountdown}s` : t('panel.retryBtn') }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Webhook JSON result -->
-    <JsonViewer v-else :data="response" />
-  </PanelShell>
+    </details>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -126,9 +136,9 @@ import { formatCoachResponse } from '@/utils/formatCoach'
 import { diffWords } from '@/utils/diffText'
 import { useToast } from '@/composables/useToast'
 import { currentModel } from '@/config/llm'
-import PanelShell from '@/components/layout/PanelShell.vue'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
 import { ICONS } from '@/config/icons'
+import { appMode } from '@/composables/useAppMode'
 
 const props = defineProps<{
   response: unknown
@@ -140,6 +150,7 @@ const props = defineProps<{
   hadError: boolean
   streamSpeed: number
   backoffSecs: number
+  estimatedPoints?: number
 }>()
 
 const emit = defineEmits<{ cancel: []; retry: [] }>()
@@ -150,7 +161,13 @@ const { addToast } = useToast()
 const retryCountdown = ref(0)
 const showDiff = ref(false)
 const activeTab = ref('all')
+const detailsEl = ref<HTMLDetailsElement | null>(null)
 let _cooldownTimer: number | null = null
+
+function toggle(e: Event) {
+  const details = (e.target as HTMLElement).closest('details')
+  if (details) details.open = !details.open
+}
 
 function handleRetry() {
   emit('retry')
@@ -170,11 +187,36 @@ onUnmounted(() => {
   if (_rafId !== null) cancelAnimationFrame(_rafId)
 })
 
-const statusInfo = computed(() => {
-  if (props.isAnalyzing) return { status: 'loading' as const, key: 'loading' }
-  if (props.response) return { status: 'success' as const, key: 'success' }
-  if (props.hasError) return { status: 'error' as const, key: 'error' }
-  return { status: 'idle' as const, key: 'idle' }
+const hasContent = computed(() => !!props.response || props.isAnalyzing)
+
+// AI result badges — parse final_points / split_number from the LLM JSON response
+// The response is { message: '{"final_points":5,"split_number":4,...}' }
+// LLM may wrap JSON in ```json ... ``` code fences despite instructions — strip them
+const analysisData = computed<Record<string, unknown> | null>(() => {
+  if (!props.response || props.isAnalyzing) return null
+  try {
+    const r = props.response as Record<string, unknown>
+    let msg = typeof r?.message === 'string' ? r.message : null
+    if (!msg) return null
+    // Strip markdown code fences if present
+    msg = msg.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/, '').trim()
+    const parsed = JSON.parse(msg)
+    // DEBUG: remove after confirming badges work
+    console.log('[AIReviewPanel] analysisData parsed:', parsed)
+    return typeof parsed === 'object' && parsed !== null ? parsed : null
+  } catch (e) {
+    // DEBUG: remove after confirming badges work
+    console.log('[AIReviewPanel] JSON parse failed:', e, 'raw message:', (props.response as Record<string, unknown>)?.message)
+    return null
+  }
+})
+const aiPoints = computed(() => {
+  const pts = analysisData.value?.final_points
+  return typeof pts === 'number' ? pts : null
+})
+const subtaskCount = computed(() => {
+  const n = analysisData.value?.split_number
+  return typeof n === 'number' ? n : 0
 })
 
 const isMarkdownResponse = computed(() => {
@@ -209,7 +251,6 @@ const PERSPECTIVE_IDS = [
 const perspectiveSections = computed<PerspectiveSection[]>(() => {
   if (!props.isDeepReview || !formattedAnalysis.value) return []
   const html = formattedAnalysis.value
-  // Split by <h2> tags (rendered from ## headers)
   const parts = html.split(/(?=<h2[^>]*>)/i)
   if (parts.length <= 1) return []
 
@@ -217,7 +258,7 @@ const perspectiveSections = computed<PerspectiveSection[]>(() => {
   for (const part of parts) {
     const headerMatch = part.match(/<h2[^>]*>(.*?)<\/h2>/i)
     if (!headerMatch) continue
-    const headerText = headerMatch[1].replace(/<[^>]*>/g, '') // strip inner tags
+    const headerText = headerMatch[1].replace(/<[^>]*>/g, '')
     const matched = PERSPECTIVE_IDS.find(p => p.pattern.test(headerText))
     sections.push({
       id: matched?.id || `section-${sections.length}`,
@@ -236,7 +277,6 @@ const filteredAnalysisHtml = computed(() => {
   return section?.html || formattedAnalysis.value
 })
 
-// Reset tab when response changes
 watch(() => props.response, () => { activeTab.value = 'all' })
 
 const rawText = computed(() => {
@@ -267,62 +307,150 @@ async function copyResponse() {
 </script>
 
 <style scoped>
-.panel-icon { width: 16px; height: 16px; }
+.review-panel {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: var(--font-lg);
+}
+.review-header::-webkit-details-marker { display: none; }
+.header-title { flex: 1; }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Status badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+}
+.status-loading {
+  color: var(--accent-orange);
+  background-color: color-mix(in srgb, var(--accent-orange) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-orange) 25%, transparent);
+}
+.status-success {
+  color: var(--accent-green);
+  background-color: color-mix(in srgb, var(--accent-green) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-green) 25%, transparent);
+}
+.status-error {
+  color: var(--accent-red);
+  background-color: color-mix(in srgb, var(--accent-red) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-red) 25%, transparent);
+}
+
+.mini-spinner {
+  width: 12px;
+  height: 12px;
+  animation: spin 1s linear infinite;
+}
+
+/* AI result badges */
+.result-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+}
+.points-badge {
+  color: var(--accent-green);
+  background-color: color-mix(in srgb, var(--accent-green) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-green) 25%, transparent);
+}
+.points-old {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.points-arrow {
+  opacity: 0.5;
+  font-size: 10px;
+}
+.points-new {
+  font-weight: 600;
+}
+.subtask-badge {
+  color: var(--accent-orange);
+  background-color: color-mix(in srgb, var(--accent-orange) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-orange) 25%, transparent);
+}
+
+.review-body {
+  border-top: 1px solid var(--border-color);
+  padding: 8px 12px 10px;
+  max-height: 2500px;
+  overflow-y: auto;
+}
+
+/* Empty / loading states */
 .empty-state {
-  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 32px 16px;
+  padding: 24px 16px;
 }
-.empty-icon { width: 40px; height: 40px; color: var(--text-muted); margin-bottom: 8px; }
+.empty-icon { width: 36px; height: 36px; color: var(--text-muted); margin-bottom: 8px; }
 .empty-text { font-size: 12px; color: var(--text-muted); }
-.spinner { width: 32px; height: 32px; margin-bottom: 8px; animation: spin 1s linear infinite; }
+.spinner { width: 28px; height: 28px; margin-bottom: 8px; animation: spin 1s linear infinite; }
 .loading-text { font-size: 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Markdown response styles (mirrors CoachPanel) — markdown-it output */
+/* Markdown response styles (mirrors CoachPanel) */
 .coach-response {
   font-size: 13px;
   line-height: 1.55;
   color: var(--text-secondary);
 }
-/* Headings */
 .coach-response :deep(h1),
 .coach-response :deep(h2) { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
 .coach-response :deep(h3) { font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 10px 0 5px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
 .coach-response :deep(h4),
 .coach-response :deep(h5),
 .coach-response :deep(h6) { font-size: 12px; font-weight: 600; color: var(--accent-purple); margin: 8px 0 4px; }
-/* Paragraphs */
 .coach-response :deep(p) { margin: 0 0 6px; }
-/* Bold & italic */
 .coach-response :deep(strong) { color: var(--accent-purple); font-weight: 600; }
 .coach-response :deep(em) { font-style: italic; }
-/* Inline code */
 .coach-response :deep(code) { background-color: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: var(--font-mono); color: var(--accent-blue); }
-/* Code blocks — structural styles; colors from highlight.js theme */
 .coach-response :deep(pre) { border-radius: 6px; padding: 10px 12px; margin: 6px 0; overflow-x: auto; border: 1px solid var(--border-color); background-color: var(--bg-tertiary); }
 .coach-response :deep(pre code) { padding: 0; background: transparent; font-size: 12px; font-family: var(--font-mono); }
 .coach-response :deep(pre code.hljs) { background: transparent; padding: 0; }
-/* Horizontal rules */
 .coach-response :deep(hr) { border: none; border-top: 1px dashed var(--border-color); margin: 10px 0; }
 .coach-response :deep(hr.coach-response-divider) { border-top: 2px solid var(--accent-purple); margin: 16px 0; opacity: 0.4; }
-/* Lists */
 .coach-response :deep(ul),
 .coach-response :deep(ol) { margin: 4px 0; padding-left: 20px; }
 .coach-response :deep(li) { margin: 2px 0; }
 .coach-response :deep(li::marker) { color: var(--text-muted); }
 .coach-response :deep(ol li::marker) { color: var(--accent-purple); font-weight: 600; }
-/* Blockquotes */
 .coach-response :deep(blockquote) { border-left: 3px solid var(--accent-purple); margin: 6px 0; padding: 4px 10px; background-color: var(--bg-tertiary); border-radius: 0 6px 6px 0; color: var(--text-secondary); }
 .coach-response :deep(blockquote p) { margin: 0; }
-/* Links */
 .coach-response :deep(a) { color: var(--accent-blue); text-decoration: none; }
 .coach-response :deep(a:hover) { text-decoration: underline; }
-/* Tables */
 .coach-response :deep(table) {
   width: 100%;
   border-collapse: collapse;
@@ -350,7 +478,6 @@ async function copyResponse() {
   line-height: 1.4;
 }
 .coach-response :deep(tbody tr:hover) { background-color: var(--bg-secondary); }
-/* Structured coach fields (status badges, info rows, etc.) */
 .coach-response :deep(.coach-status-badge) {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; margin-bottom: 8px;
@@ -387,12 +514,8 @@ async function copyResponse() {
   color: var(--accent-blue);
   border: 1px solid var(--blue-border);
 }
-.badge-n8n {
-  background-color: var(--orange-subtle);
-  color: var(--accent-orange);
-  border: 1px solid var(--orange-border);
-}
 
+/* Action buttons */
 .copy-btn {
   display: inline-flex;
   align-items: center;

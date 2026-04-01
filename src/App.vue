@@ -12,8 +12,8 @@
     <Transition name="modal">
       <div v-if="showConfirmModal" class="modal-overlay" ref="confirmModalRef" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" @click.self="showConfirmModal = false">
         <div class="modal-content">
-          <h3 id="confirm-modal-title" class="modal-title">{{ appMode === 'design' ? t('modal.confirmTitleDesign') : t('modal.confirmTitle') }}</h3>
-          <p class="modal-hint">{{ appMode === 'design' ? t('modal.confirmHintDesign') : t('modal.confirmHint') }}</p>
+          <h3 id="confirm-modal-title" class="modal-title">{{ t('modal.confirmTitle') }}</h3>
+          <p class="modal-hint">{{ t('modal.confirmHint') }}</p>
           <div class="modal-payload">
             <JsonViewer :data="jsonPayload" :copyable="true" />
           </div>
@@ -81,9 +81,6 @@
             :current-action="formCurrentAction"
             :has-ai-response="!!analyzeResponse"
             :has-coach-response="coachMessages.length > 0 && !isCoachLoading"
-            :domain-warnings="domainWarnings"
-            :aspice-badge="aspiceBadge"
-            :aspice-suggestions="aspiceSuggestions"
             :incose-violations="incoseViolations"
             :assumptions="assumptions"
             :traceability-gaps="traceabilityGaps"
@@ -133,28 +130,22 @@
             :had-error="analyzeHadError"
             :stream-speed="analyzeStreamSpeed"
             :backoff-secs="analyzeBackoffSecs"
+            :estimated-points="form.estimatedPoints"
             @cancel="cancelAnalyze"
             @retry="handleAnalyzeRetry"
           />
 
-          <JiraResponsePanel
+          <TicketHistoryPanel
             v-show="appMode !== 'explore'"
-            :response="jiraResponse"
+            :last-created-key="lastCreatedKey"
             :is-creating="isSubmitting && currentAction === 'create'"
-          />
-
-          <ProcessingSummary
-            v-show="appMode === 'task'"
-            :ai-response="analyzeResponse"
-            :jira-response="jiraResponse"
-            :estimated-points="form.estimatedPoints"
           />
 
           <DevTools
             :payload="jsonPayload"
             :coach-messages="coachMessages"
             :active-model="activeModel"
-            :coach-skill-modified="coachSkillModified"
+            :jira-response="jiraResponse"
             :analyze-skill-modified="analyzeSkillModified"
             :custom-templates-modified="customTemplatesModified"
             :is-coach-loading="isCoachLoading"
@@ -197,8 +188,6 @@
           />
 
           <ReviewDashboard v-show="appMode === 'task'" :stats="reviewStats" @clear="clearReviewHistory" />
-
-          <TicketHistoryPanel v-show="appMode !== 'explore'" />
         </div>
       </div>
     </main>
@@ -224,11 +213,12 @@ import { exportMarkdown, exportReqIF, exportExcelCSV, downloadFile } from '@/uti
 import { useJiraSearch } from '@/composables/useJiraSearch'
 import { useBatchOps } from '@/composables/useBatchOps'
 import { getModeElicitationPrompt, buildConflictCheckPrompt, buildTraceSuggestPrompt, buildImpactAnalysisPrompt } from '@/config/domain'
-import type { RequirementLevel } from '@/config/domain'
+import type { TaskLevel } from '@/config/domain/traceability.task'
 import { currentRole } from '@/composables/useRole'
+import { useAttachment } from '@/composables/useAttachment'
 import { getTemplateContent, effectiveTemplates, setCustomTemplates, customTemplatesModified } from '@/config/templates/index'
 import type { TemplateDefinition } from '@/types/template'
-import { coachSkillModified, analyzeSkillModified } from '@/config/skills/index'
+import { analyzeSkillModified } from '@/config/skills/index'
 import { getModel } from '@/config/llm'
 import { getSessionRecords, startNewSession } from '@/composables/useCoachHistory'
 
@@ -238,8 +228,7 @@ import HotkeyModal from '@/components/shared/HotkeyModal.vue'
 import TaskForm from '@/components/form/TaskForm.vue'
 import CoachPanel from '@/components/panels/CoachPanel.vue'
 import AIReviewPanel from '@/components/panels/AIReviewPanel.vue'
-import JiraResponsePanel from '@/components/panels/JiraResponsePanel.vue'
-import ProcessingSummary from '@/components/panels/ProcessingSummary.vue'
+// JiraResponsePanel removed in v10.73 — "Creating" indicator moved to TicketHistoryPanel
 import TicketHistoryPanel from '@/components/panels/TicketHistoryPanel.vue'
 import ReviewDashboard from '@/components/panels/ReviewDashboard.vue'
 import JiraSearchPanel from '@/components/panels/JiraSearchPanel.vue'
@@ -326,9 +315,11 @@ function stopDrag() {
 const {
   form, summary, componentHistory, computedSummary,
   canSubmit, qualityScore, qualityScoreColor, qualityScoreLabel,
-  domainWarnings, incoseViolations, assumptions, traceabilityGaps, aspiceProfile,
+  incoseViolations, assumptions, traceabilityGaps,
   getProjectName, resetForm, addComponentToHistory, restoreDraft
 } = useForm()
+
+const { attachedFile, detach: detachFile } = useAttachment()
 
 const {
   isSubmitting, currentAction,
@@ -363,6 +354,8 @@ const {
   checkDuplicates, searchParentReqs, getSprintContext, clearSearch
 } = useJiraSearch()
 
+const lastCreatedKey = ref('')
+
 const {
   batchItems, selectedCount,
   addItem: addBatchItem, removeItem: removeBatchItem,
@@ -381,7 +374,6 @@ const pendingPromptOverride = ref<string | null>(null)
 // On mode switch, the outgoing description is saved and the incoming one is restored.
 const modeDescriptions = reactive<Record<string, string>>({
   explore: '',
-  design: '',
   task: ''
 })
 const showHotkeyModal = ref(false)
@@ -393,10 +385,6 @@ watch(showConfirmModal, (open) => {
   else deactivateConfirmTrap()
 })
 
-// ASPICE badge + suggestions derived from profile
-const aspiceBadge = computed(() => aspiceProfile.value?.mapping.processId ?? undefined)
-const aspiceSuggestions = computed(() => aspiceProfile.value?.suggestions ?? [])
-
 // Shims so TaskForm buttons reflect both JIRA-submitting and LLM-analyzing states
 const formIsSubmitting = computed(() => isSubmitting.value || isAnalyzeLoading.value)
 const formCurrentAction = computed(() => isAnalyzeLoading.value ? 'analyze' : currentAction.value)
@@ -405,11 +393,10 @@ const formCurrentAction = computed(() => isAnalyzeLoading.value ? 'analyze' : cu
 const canCoachSubmit = computed(() => {
   switch (appMode.value) {
     case 'explore':
-      return !!form.description.trim()
+      return !!form.description.trim() || !!attachedFile.value
     case 'task':
       // All task fields required: project + assignee + type + points + 5-part summary + description
       return canSubmit.value && !!form.assignee && !!form.estimatedPoints && !!form.description.trim()
-    case 'design':
     default:
       return canSubmit.value
   }
@@ -445,25 +432,15 @@ function buildPayload(action: 'analyze' | 'create' | 'coach' | 'preview' | 'deep
     : form.description
 
   switch (appMode.value) {
-    case 'explore':
-      return { meta, data: { description: desc } }
+    case 'explore': {
+      // Prepend attached file content (markdown) if present
+      const exploreDesc = attachedFile.value
+        ? `[Attached file: ${attachedFile.value.name}]\n\n${attachedFile.value.content}\n\n---\n\n${desc}`
+        : desc
+      return { meta, data: { description: exploreDesc } }
+    }
 
     case 'task':
-      return {
-        meta,
-        data: {
-          project_key: form.projectKey,
-          project_name: getProjectName(),
-          issue_type: form.issueType,
-          summary: computedSummary.value,
-          description: desc,
-          assignee: form.assignee,
-          estimated_points: form.estimatedPoints
-          // requirementLevel, parentReqId, verificationMethod intentionally omitted
-        }
-      }
-
-    case 'design':
     default:
       return {
         meta,
@@ -474,10 +451,7 @@ function buildPayload(action: 'analyze' | 'create' | 'coach' | 'preview' | 'deep
           summary: computedSummary.value,
           description: desc,
           assignee: form.assignee,
-          estimated_points: form.estimatedPoints,
-          requirement_level: form.requirementLevel !== 'none' ? form.requirementLevel : undefined,
-          parent_req_id: form.parentReqId || undefined,
-          verification_method: form.verificationMethod || undefined
+          estimated_points: form.estimatedPoints
         }
       }
   }
@@ -573,7 +547,7 @@ function restoreResponsesFromStorage() {
 
 // Handlers
 async function handleAnalyze() {
-  const analyzeReady = appMode.value === 'task' ? canCoachSubmit.value : canSubmit.value
+  const analyzeReady = canCoachSubmit.value
   if (!analyzeReady || formIsSubmitting.value) return
   errorMessage.value = ''
   const err = await requestAnalyze(buildPayload('analyze'))
@@ -646,7 +620,7 @@ function handleAddCurrentToBatch() {
   addBatchItem({
     summary: computedSummary.value,
     description: form.description,
-    issueType: form.issueType as 'Story' | 'Task' | 'Bug',
+    issueType: form.issueType as 'Story' | 'Task' | 'Bug' | 'Feature',
     level: form.requirementLevel,
     parentReqId: form.parentReqId || ''
   })
@@ -678,13 +652,13 @@ async function handleBulkAnalyze() {
 }
 
 function handleCreateClick() {
-  if (appMode.value === 'task' && !canCoachSubmit.value) return
-  if (appMode.value === 'design' && !canSubmit.value) return
+  if (!canCoachSubmit.value) return
+  // Show the exact payload that will be sent (action: 'create', not 'preview')
+  jsonPayload.value = JSON.stringify(buildPayload('create'), null, 2)
   showConfirmModal.value = true
-  // Auto-check for duplicates before creating
-  if (form.projectKey && computedSummary.value) {
-    checkDuplicates(form.projectKey, computedSummary.value)
-  }
+  // Note: duplicate check removed — it sent a 'search' request to n8n which
+  // the n8n workflow interpreted as a create action, causing premature ticket creation.
+  // Duplicate checking should be done earlier in the workflow, not at create time.
 }
 
 async function confirmCreate() {
@@ -700,6 +674,7 @@ async function confirmCreate() {
     const resp = jiraResponse.value as Record<string, unknown> | null
     const key = (resp?.key || (resp?.jira_result as Record<string, unknown>)?.key) as string | undefined
     if (key) {
+      lastCreatedKey.value = key
       addTicket({
         key,
         summary: computedSummary.value,
@@ -736,8 +711,11 @@ async function handleCoachRequest(force = false) {
   errorMessage.value = ''
   const payload = buildPayload('coach')
   pendingPromptOverride.value = null  // consumed — clear so it doesn't affect anything else
-  // In Explore mode, clear description immediately (acts as chat input box)
-  if (appMode.value === 'explore') form.description = ''
+  // In Explore mode, clear description and attachment immediately (acts as chat input box)
+  if (appMode.value === 'explore') {
+    form.description = ''
+    detachFile()
+  }
   const err = await requestCoach(payload)
   // Re-assert mode flags — tool-triggered handlers may have temporarily overridden coachSkillEnabled
   applyModeFlags(appMode.value)
@@ -764,7 +742,7 @@ function handleSuggestLinks() {
   const lang = isZh.value ? 'zh' as const : 'en' as const
   const prompt = buildTraceSuggestPrompt(
     currentRole.value,
-    form.requirementLevel as RequirementLevel,
+    form.requirementLevel as TaskLevel,
     form.parentReqId,
     form.description,
     lang
@@ -784,7 +762,7 @@ function handleImpactAnalysis() {
   const lang = isZh.value ? 'zh' as const : 'en' as const
   const prompt = buildImpactAnalysisPrompt(
     currentRole.value,
-    form.requirementLevel as RequirementLevel,
+    form.requirementLevel as TaskLevel,
     form.parentReqId,
     form.description,
     lang

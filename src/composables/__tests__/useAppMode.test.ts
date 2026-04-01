@@ -22,8 +22,8 @@ describe('useAppMode', () => {
     vi.clearAllMocks()
   })
 
-  it('defaults to "design" when no localStorage value', () => {
-    expect(['explore', 'design', 'task']).toContain(appMode.value)
+  it('defaults to "task" when no localStorage value', () => {
+    expect(['explore', 'task']).toContain(appMode.value)
   })
 
   it('setMode("explore") sets appMode and persists to localStorage', () => {
@@ -38,22 +38,10 @@ describe('useAppMode', () => {
     expect(storage['app-mode']).toBe('task')
   })
 
-  it('setMode("design") sets appMode and persists to localStorage', () => {
-    setMode('design')
-    expect(appMode.value).toBe('design')
-    expect(storage['app-mode']).toBe('design')
-  })
-
   it('applyModeFlags explore → coachSkillEnabled=false, taskCoachEnabled=false', () => {
     applyModeFlags('explore')
     expect(setCoachSkillEnabled).toHaveBeenCalledWith(false)
     expect(setTaskCoachEnabled).toHaveBeenCalledWith(false)
-  })
-
-  it('applyModeFlags design → coachSkillEnabled=true, taskCoachEnabled=true', () => {
-    applyModeFlags('design')
-    expect(setCoachSkillEnabled).toHaveBeenCalledWith(true)
-    expect(setTaskCoachEnabled).toHaveBeenCalledWith(true)
   })
 
   it('applyModeFlags task → coachSkillEnabled=true, taskCoachEnabled=true', () => {
@@ -65,7 +53,7 @@ describe('useAppMode', () => {
   it('setMode calls applyModeFlags (flags are set)', () => {
     setMode('explore')
     expect(setCoachSkillEnabled).toHaveBeenCalledWith(false)
-    setMode('design')
+    setMode('task')
     expect(setCoachSkillEnabled).toHaveBeenCalledWith(true)
   })
 })

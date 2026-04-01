@@ -1,17 +1,29 @@
 <template>
   <div class="history-panel">
-    <details>
+    <details :open="!!lastCreatedKey || isCreating">
       <summary class="history-summary">
         <span class="summary-title">{{ ICONS.ticketHistory }} {{ t('history.title') }}</span>
-        <button
-          v-if="ticketHistory.length > 0"
-          class="clear-btn"
-          @click.prevent="clearHistory"
-          :title="t('history.clear')"
-          :aria-label="t('history.clear')"
-        >
-          {{ t('history.clear') }}
-        </button>
+        <span class="summary-right">
+          <Transition name="badge-fade" mode="out-in">
+            <span v-if="isCreating && !lastCreatedKey" key="creating" class="creating-badge">
+              <span class="creating-spinner"></span>
+              {{ t('panel.jiraCreating') }}
+            </span>
+            <span v-else-if="lastCreatedKey" key="created" class="created-badge">
+              <span class="created-dot"></span>
+              {{ t('status.created') }}
+            </span>
+          </Transition>
+          <button
+            v-if="ticketHistory.length > 0"
+            class="clear-btn"
+            @click.prevent="clearHistory"
+            :title="t('history.clear')"
+            :aria-label="t('history.clear')"
+          >
+            {{ t('history.clear') }}
+          </button>
+        </span>
       </summary>
 
       <div class="history-content">
@@ -19,14 +31,19 @@
           {{ t('history.empty') }}
         </div>
         <div v-else class="entry-list">
-          <div v-for="entry in ticketHistory" :key="entry.key + entry.date" class="entry-row">
+          <div
+            v-for="entry in ticketHistory"
+            :key="entry.key + entry.date"
+            class="entry-row"
+            :class="{ 'entry-new': entry.key === lastCreatedKey }"
+          >
             <a
               class="entry-key"
               :href="'https://jira.gwm.cn/browse/' + entry.key"
               target="_blank"
               rel="noopener noreferrer"
             >{{ entry.key }}</a>
-            <span class="entry-summary">{{ truncate(entry.summary, 40) }}</span>
+            <span class="entry-summary">{{ entry.summary }}</span>
             <div class="entry-meta">
               <span class="entry-badge">{{ entry.project }}</span>
               <span class="entry-badge">{{ entry.issueType }}</span>
@@ -44,11 +61,12 @@ import { useI18n } from '@/i18n'
 import { ticketHistory, clearHistory } from '@/composables/useTicketHistory'
 import { ICONS } from '@/config/icons'
 
-const { t } = useI18n()
+defineProps<{
+  lastCreatedKey?: string
+  isCreating?: boolean
+}>()
 
-function truncate(text: string, max: number): string {
-  return text.length > max ? text.slice(0, max) + '…' : text
-}
+const { t } = useI18n()
 
 function relativeDate(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -82,6 +100,64 @@ function relativeDate(iso: string): string {
 }
 .history-summary::-webkit-details-marker { display: none; }
 .summary-title { flex: 1; }
+
+.summary-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Created badge */
+.created-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-green);
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+  background-color: color-mix(in srgb, var(--accent-green) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-green) 25%, transparent);
+}
+.created-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-green);
+}
+
+/* Creating badge */
+.creating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-orange, #e0982e);
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+  background-color: color-mix(in srgb, var(--accent-orange, #e0982e) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-orange, #e0982e) 25%, transparent);
+}
+.creating-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid color-mix(in srgb, var(--accent-orange, #e0982e) 30%, transparent);
+  border-top-color: var(--accent-orange, #e0982e);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.badge-fade-enter-active { animation: badgeIn 0.3s ease-out; }
+.badge-fade-leave-active { animation: badgeIn 0.3s ease-out reverse; }
+@keyframes badgeIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
 
 .clear-btn {
   font-size: 11px;
@@ -125,6 +201,11 @@ function relativeDate(iso: string): string {
   border-radius: var(--radius-sm);
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.entry-row.entry-new {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-green) 20%, transparent);
 }
 
 .entry-key {
@@ -146,9 +227,7 @@ function relativeDate(iso: string): string {
   color: var(--text-primary);
   grid-row: 1;
   grid-column: 2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
 }
 
 .entry-meta {

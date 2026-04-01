@@ -7,9 +7,10 @@ import { useI18n } from '@/i18n'
 import { currentRole, setRole } from '@/composables/useRole'
 import type { UserRole } from '@/composables/useRole'
 import { appMode } from '@/composables/useAppMode'
-import { checkDomainWarnings, getAspiceProfile, getModeQualityCheck, getModeQualityPenalty, detectAssumptions, getDefaultLevel, getModeTraceGaps } from '@/config/domain'
+import { activeTaskLayer } from '@/config/skills/index'
+import { getModeQualityCheck, getModeQualityPenalty, detectAssumptions, getModeTraceGaps } from '@/config/domain'
 import { getDefaultTaskLevel } from '@/config/domain/traceability.task'
-import type { DomainWarning, AspiceProfile, QualityViolation, Assumption, TraceabilityGap } from '@/config/domain'
+import type { QualityViolation, Assumption, TraceabilityGap } from '@/config/domain'
 
 const DRAFT_KEY = 'jira-workstation-draft'
 
@@ -153,39 +154,49 @@ export function useForm() {
     return t('quality.empty')
   })
 
-  // Domain-specific validation warnings
-  const domainWarnings = computed<DomainWarning[]>(() =>
-    currentRole.value ? checkDomainWarnings(appMode.value, currentRole.value, form.description, form.issueType) : []
-  )
-
-  // INCOSE requirement quality checks
+  // Quality checks (mode-aware — task mode checks task quality, explore returns [])
   const incoseViolations = computed<QualityViolation[]>(() =>
     getModeQualityCheck(appMode.value, form.description)
   )
 
-  // Assumption detection
+  // Assumption detection (skip in explore mode — no constraints)
   const assumptions = computed<Assumption[]>(() =>
-    currentRole.value ? detectAssumptions(currentRole.value, form.description) : []
+    currentRole.value && appMode.value !== 'explore' ? detectAssumptions(currentRole.value, form.description) : []
   )
 
   // Traceability gaps
   const traceabilityGaps = computed<TraceabilityGap[]>(() =>
-    getModeTraceGaps(appMode.value, form.requirementLevel, form.parentReqId, form.verificationMethod)
+    getModeTraceGaps(appMode.value, form.requirementLevel, form.parentReqId)
   )
+
+  // ─── Layer → Role auto-routing ──────────────────────────────────────────────
+  // The Layer selection directly signals the user's engineering discipline.
+  // Auto-set role so the correct skill, context, and weights activate immediately.
+  const LAYER_ROLE_MAP: Record<string, UserRole> = {
+    SYS:  'system-architect',
+    SW:   'sw-developer',
+    APP:  'sw-developer',
+    SWF:  'sw-developer',
+    HW:   'hw-designer',
+    ME:   'me-designer',
+    TEST: 'vv-engineer',
+  }
+
+  watch(() => summary.layer, (layer) => {
+    const mapped = LAYER_ROLE_MAP[layer]
+    if (mapped && mapped !== currentRole.value) {
+      setRole(mapped)
+    }
+    // Drive layer-specific task skill selection
+    activeTaskLayer.value = layer
+  })
 
   // Auto-update requirement level when role is selected (not on initial empty state)
   watch(currentRole, (newRole) => {
     if (newRole) {
-      form.requirementLevel = appMode.value === 'task'
-        ? getDefaultTaskLevel(newRole)
-        : getDefaultLevel(newRole)
+      form.requirementLevel = getDefaultTaskLevel(newRole)
     }
   })
-
-  // ASPICE process mapping
-  const aspiceProfile = computed<AspiceProfile | null>(() =>
-    currentRole.value && form.issueType ? getAspiceProfile(currentRole.value, form.issueType as 'Story' | 'Task' | 'Bug') : null
-  )
 
   // Get current project name
   function getProjectName(): string {
@@ -258,11 +269,9 @@ export function useForm() {
     qualityScore,
     qualityScoreColor,
     qualityScoreLabel,
-    domainWarnings,
     incoseViolations,
     assumptions,
     traceabilityGaps,
-    aspiceProfile,
     getProjectName,
     resetForm,
     addComponentToHistory,

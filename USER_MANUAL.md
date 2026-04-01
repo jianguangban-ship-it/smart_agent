@@ -1,7 +1,7 @@
 # AGec — User Manual
 # 智能工程平台 — 用户手册
 
-> Version / 版本: v10.8 | Language / 语言: English · 中文
+> Version / 版本: v10.73 | Language / 语言: English · 中文
 
 ---
 
@@ -69,13 +69,13 @@ The app uses a resizable three-column layout with a top header bar. Drag the han
 │                  │                  │                                │
 │  LEFT COLUMN     │  CENTER COLUMN   │  RIGHT COLUMN                  │
 │  AI Coach Panel  │  Review Status   │  Task Analysis / Deep Review   │
-│  · Chat / History│  Task Form       │  JIRA Response                 │
-│  · Templates     │  · Basic Info    │  Processing Summary            │
-│  · Elicitation   │  · Traceability  │  Dev Tools                     │
-│                  │  · Summary       │  JIRA Search                   │
-│                  │  · Description   │  Batch Operations              │
-│                  │  · Actions       │  Review Dashboard              │
-│                  │  · Export        │  Ticket History                │
+│  · Chat / History│  Task Form       │  Task Analysis / Deep Review   │
+│  · Templates     │  · Basic Info    │  Ticket History                │
+│  · Elicitation   │  · Traceability  │  Processing Summary            │
+│                  │  · Summary       │  Dev Tools                     │
+│                  │  · Description   │  JIRA Search                   │
+│                  │  · Actions       │  Batch Operations              │
+│                  │  · Export        │  Review Dashboard              │
 │                  │                  │                                │
 └──────────────────┴──────────────────┴────────────────────────────────┘
 ```
@@ -84,7 +84,7 @@ The app uses a resizable three-column layout with a top header bar. Drag the han
 |--------|---------|
 | **Left / 左列** | AI Design Coach — writing guidance, elicitation, conflict checking |
 | **Center / 中列** | Main task form with review status bar, traceability, and action buttons |
-| **Right / 右列** | AI review, JIRA responses, search, batch ops, review dashboard, history |
+| **Right / 右列** | AI review, ticket history (with creation status), search, batch ops, review dashboard |
 
 **Column Resizing / 列宽调节：** Drag the thin vertical handles between columns to adjust widths. Your layout preference is saved to localStorage.
 
@@ -651,19 +651,23 @@ A modal opens showing the **full request payload** that will be sent to JIRA. Re
 | **Create Ticket / 创建工单** | Submits the payload to JIRA |
 | **Cancel / 取消** | Closes the modal without creating anything |
 
-### Step 3 — JIRA Response / JIRA 响应
+### Step 3 — Creation Progress / 创建进度
 
-| Result | Display |
+Creation status is shown directly in the **Ticket History** panel:
+
+创建状态直接显示在**工单历史**面板中：
+
+| State / 状态 | Display / 显示 |
 |--------|---------|
-| **Success** | Response JSON with the new ticket key (e.g., `PROJ-1234`) — clickable link |
-| **In progress** | Spinner in JIRA blue |
-| **Error** | Error message if creation failed |
+| **In progress / 创建中** | Panel auto-opens. Yellow **"Creating"** badge with spinner appears in the header. 面板自动展开，标题栏显示带旋转动画的黄色"创建中"标记。 |
+| **Success / 成功** | Yellow badge transitions to green **"Created"** badge. New ticket entry appears with clickable JIRA key. 黄色标记过渡为绿色"已创建"标记，新工单条目带可点击的 JIRA 链接。 |
+| **Error / 失败** | Badge disappears. Error toast shown. 标记消失，显示错误提示。 |
 
 ### Auto-Actions on Success / 成功后自动操作
 
 When a JIRA ticket is created successfully:
 1. Review status advances to **JIRA Created**
-2. Ticket is added to **Ticket History**
+2. Ticket is added to **Ticket History** with green highlight
 3. A **review record** is saved (including checklist pass/fail state) for learning context
 
 ---
@@ -785,9 +789,22 @@ Click **Clear** to remove all review records. Maximum **100 records** are stored
 
 ## 18. Ticket History / 工单历史
 
-The **Ticket History** panel at the bottom of the right column keeps a log of the last **20 successfully created tickets**, persisted in your browser.
+The **Ticket History** panel keeps a log of the last **20 successfully created tickets**, persisted in your browser. It also shows real-time creation status.
 
-右列底部的**工单历史**面板保存最近 **20 条**成功创建的工单记录。
+**工单历史**面板保存最近 **20 条**成功创建的工单记录，同时显示实时创建状态。
+
+### Creation Status Badges / 创建状态标记
+
+| Badge / 标记 | When / 时机 | Appearance / 外观 |
+|-------|-------------|-------------|
+| **Creating / 创建中** | JIRA creation is in progress | Yellow badge with spinning indicator 黄色标记 + 旋转动画 |
+| **Created / 已创建** | Ticket just created successfully | Green badge with dot 绿色标记 + 圆点 |
+
+The panel **auto-opens** when creation starts. Badges transition smoothly (yellow → green on success).
+
+创建开始时面板**自动展开**。标记平滑过渡（成功时黄 → 绿）。
+
+### Ticket Entries / 工单条目
 
 | Field | Description |
 |-------|-------------|
@@ -795,6 +812,10 @@ The **Ticket History** panel at the bottom of the right column keeps a log of th
 | **Summary** | Truncated task title |
 | **Project + Type badge** | Project code and issue type |
 | **Relative time** | How long ago the ticket was created |
+
+The most recently created ticket is highlighted with a green border.
+
+最新创建的工单以绿色边框高亮显示。
 
 Click **Clear / 清空** to remove all history entries.
 
@@ -817,14 +838,20 @@ Presets available from: **GLM (ZhipuAI)**, **OpenAI**, **Anthropic**, **DeepSeek
 
 ### AI Skills / AI 技能提示词
 
-Each feature (Writing Coach / Analyze Task) has an independent, editable **skill prompt**.
+Each feature (Writing Coach / Analyze Task) has an independent, editable **skill prompt**. The Coach skill **automatically changes based on the selected layer** (SYS, SW, APP, HW, ME, TEST, SWF) — each layer loads a domain-specific AI persona.
+
+每个功能（写作教练 / 分析任务）有独立可编辑的**技能提示词**。Coach 技能会**根据所选分层自动切换**（SYS、SW、APP、HW、ME、TEST、SWF），每个分层加载对应的领域 AI 角色。
 
 | Button | Action |
 |--------|--------|
 | **Import .md** | Load a skill prompt from a local Markdown file |
 | **Export .md** | Save the current skill prompt as a `.md` file |
-| **Reset to Default** | Restore the built-in prompt for the current language |
+| **Reset to Default** | Restore the built-in prompt for the current language and layer |
 | **modified badge** | Shown when the skill has been customised |
+
+> **Note / 注意:** A custom edit overrides the default for **all layers** until you click Reset. See [`docs/SKILL-ROUTER-DESIGN.md`](docs/SKILL-ROUTER-DESIGN.md) for the full skill routing architecture.
+>
+> 自定义编辑会覆盖**所有分层**的默认值，直到点击重置。完整技能路由架构请参见 [`docs/SKILL-ROUTER-DESIGN.md`](docs/SKILL-ROUTER-DESIGN.md)。
 
 ### Template Chips / 快捷模板管理
 

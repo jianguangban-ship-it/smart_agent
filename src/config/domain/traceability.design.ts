@@ -135,7 +135,7 @@ export function getLevelsForRole(role: UserRole): RequirementLevelDef[] {
 }
 
 /** Get a level definition by ID */
-export function getLevelDef(level: RequirementLevel): RequirementLevelDef | undefined {
+export function getLevelDef(level: string): RequirementLevelDef | undefined {
   return REQUIREMENT_LEVELS.find(l => l.id === level)
 }
 

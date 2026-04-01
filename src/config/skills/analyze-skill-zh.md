@@ -87,16 +87,16 @@ AI在每次任务估算审核后，应向项目经理或 Scrum Master 输出以�
 你必须且只能输出严格的 JSON 格式，不要包含任何 Markdown 代码块标记（如 ```json），也不要包含任何解释性文字。
 
 # JSON 结构模版：
-{
-  "analysis_reasoning": "管理建议：为什么给出这个点数，为什么需要/不需要拆分。",
-  "final_points": Integer,  // AI 最终评估的父任务点数（如果是拆分任务，通常为子任务点数之和或保持原Story点数）
-  "need_split": Boolean,
-  "split_number": Integer,
-  "subtasks_list": [             // 如果 need_split 为 false，此数组为空
-    {
-      "summary_suffix": "第五段的具体描述 (不含方括号)", 
-      "full_summary": "[全格式][Summary]",
-      "points": Integer     // 子任务估点
-    }
-  ]
-}
+{<br>
+  "analysis_reasoning": "管理建议：为什么给出这个点数，为什么需要/不需要拆分。",<br>
+  "final_points": Integer,  // AI 最终评估的父任务点数（如果是拆分任务，通常为子任务点数之和或保持原Story点数）,<br>
+  "need_split": Boolean,<br>
+  "split_number": Integer,<br>
+  "subtasks_list": [             // 如果 need_split 为 false，此数组为空<br>
+    {<br>
+      "summary_suffix": "第五段的具体描述 (不含方括号)", <br>
+      "full_summary": "[全格式][Summary]",<br>
+      "points": Integer     // 子任务估点<br>
+    }<br>
+  ]<br>
+}<br>

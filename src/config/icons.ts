@@ -17,7 +17,7 @@ export const ICONS = {
 
   // ─── Panel titles ─────────────────────────────────────────────────────────
   coachPanel: '',
-  reviewPanel: '',
+  reviewPanel: '🔍',
   jiraPanel: '',
   ticketHistory: '🎫',
   hotkeys: '⌨️',

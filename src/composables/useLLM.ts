@@ -6,11 +6,10 @@ import { getCoachSkill, getAnalyzeSkill, getResponseFormat } from '@/config/skil
 import { SKILL_REGISTRY, resolveSystemPrompt } from '@/config/skills/registry'
 import type { SkillEntry } from '@/config/skills/registry'
 import { matchSkill } from '@/utils/skillMatcher'
-import { getRoleContext, currentRole } from '@/composables/useRole'
+import { currentRole } from '@/composables/useRole'
 import { appMode } from '@/composables/useAppMode'
-import { buildDomainContext, getModeTraceContext, buildDeepReviewPrompt } from '@/config/domain'
+import { getModeTraceContext, buildDeepReviewPrompt } from '@/config/domain'
 import { useReviewHistory } from '@/composables/useReviewHistory'
-import type { RequirementLevel } from '@/config/domain'
 import type { TaskLevel } from '@/config/domain/traceability.task'
 import { useI18n } from '@/i18n'
 import { addRecord, currentSessionId } from '@/composables/useCoachHistory'
@@ -413,7 +412,6 @@ export function useLLM() {
       }
 
       const langKey = lang === 'zh' ? 'zh' as const : 'en' as const
-      const roleContext = getRoleContext(langKey)
 
       // Run skill auto-detection on the raw user input (description only, not full payload)
       const rawInput = payload.data.description || ''
@@ -434,17 +432,14 @@ export function useLLM() {
       }
 
       // Prepend context layers based on mode:
-      // Design: role + domain + trace + coach skill + response format
       // Task: trace + task coach skill + response format (no role/domain — task coaching is role-agnostic)
       // Explore: response format only (handled above via early return)
-      const isDesign = appMode.value === 'design'
-      const domainContext = isDesign ? buildDomainContext(currentRole.value, langKey) : ''
       const traceCtx = getModeTraceContext(appMode.value,
-        (payload.data.requirement_level || 'none') as RequirementLevel | TaskLevel,
+        (payload.data.requirement_level || 'none') as TaskLevel,
         payload.data.parent_req_id || '',
         langKey
       )
-      const parts = [isDesign ? roleContext : '', domainContext, traceCtx, basePrompt].filter(Boolean)
+      const parts = [traceCtx, basePrompt].filter(Boolean)
       return parts.join('\n\n')
     },
     getUserMessage: (payload, zh) => {
@@ -475,16 +470,13 @@ export function useLLM() {
   const analyze = createStreamFlow({
     getSystemPrompt: (lang, payload) => {
       const langKey = lang === 'zh' ? 'zh' as const : 'en' as const
-      // Design: role + domain + trace; Task: trace only; Explore: none
-      const isDesign = appMode.value === 'design'
-      const domainCtx = isDesign ? buildDomainContext(currentRole.value, langKey) : ''
       const traceCtx = getModeTraceContext(appMode.value,
-        (payload.data.requirement_level || 'none') as RequirementLevel | TaskLevel,
+        (payload.data.requirement_level || 'none') as TaskLevel,
         payload.data.parent_req_id || '',
         langKey
       )
       const learningCtx = buildLearningContext(langKey)
-      const parts = [isDesign ? getRoleContext(langKey) : '', domainCtx, traceCtx, learningCtx, getAnalyzeSkill(appMode.value, lang)].filter(Boolean)
+      const parts = [traceCtx, learningCtx, getAnalyzeSkill(appMode.value, lang)].filter(Boolean)
       return parts.join('\n\n')
     },
     getUserMessage: (payload, zh) => buildUserMessage(payload, zh),
@@ -558,17 +550,14 @@ export function useLLM() {
       isDeepReview.value = true
       // Override the analyze system prompt with multi-perspective review
       const langKey = isZh.value ? 'zh' as const : 'en' as const
-      // Design: role + domain + trace; Task: trace only; Explore: none
-      const isDesign = appMode.value === 'design'
-      const domainCtx = isDesign ? buildDomainContext(currentRole.value, langKey) : ''
       const traceCtx = getModeTraceContext(appMode.value,
-        (payload.data.requirement_level || 'none') as RequirementLevel | TaskLevel,
+        (payload.data.requirement_level || 'none') as TaskLevel,
         payload.data.parent_req_id || '',
         langKey
       )
       const reviewPrompt = buildDeepReviewPrompt(currentRole.value, langKey)
       const learningCtx = buildLearningContext(langKey)
-      const parts = [isDesign ? getRoleContext(langKey) : '', domainCtx, traceCtx, learningCtx, reviewPrompt].filter(Boolean)
+      const parts = [traceCtx, learningCtx, reviewPrompt].filter(Boolean)
       // Temporarily override getSystemPrompt for this request
       const originalGetSystemPrompt = analyze._config.getSystemPrompt
       analyze._config.getSystemPrompt = () => parts.join('\n\n')

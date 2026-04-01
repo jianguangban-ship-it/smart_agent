@@ -38,30 +38,33 @@
           </datalist>
         </div>
 
-        <!-- Coach Skill -->
+        <!-- ═══ Skills ═══ -->
+
+        <!-- Task Coach Skill -->
         <div class="field-group">
           <div class="skill-header">
             <div class="skill-label-row">
-              <label class="field-label">{{ t('settings.coachSkill') }}</label>
-              <span v-if="coachSkillModified" class="skill-modified-badge">● {{ t('settings.skillModified') }}</span>
+              <label class="field-label">{{ t('settings.taskCoachSkill') }}</label>
+              <span v-if="activeTaskSkillFile" class="skill-layer-badge">{{ activeTaskSkillFile }}</span>
+              <span v-if="coachSkillTaskModified" class="skill-modified-badge">● {{ t('settings.skillModified') }}</span>
             </div>
             <div class="skill-actions">
               <label class="btn-skill-md">
                 {{ ICONS.importArrow }}{{ t('settings.importSkillMd') }}
-                <input type="file" accept=".md,.txt" @change="handleImportCoachMd" style="display:none" />
+                <input type="file" accept=".md,.txt" @change="handleImportTaskCoachMd" style="display:none" />
               </label>
-              <button class="btn-skill-md" @click="handleExportCoachMd">{{ ICONS.exportArrow }}{{ t('settings.exportSkillMd') }}</button>
-              <button class="btn-reset" @click="handleResetCoach">{{ t('settings.skillReset') }}</button>
+              <button class="btn-skill-md" @click="handleExportTaskCoachMd">{{ ICONS.exportArrow }}{{ t('settings.exportSkillMd') }}</button>
+              <button class="btn-reset" @click="handleResetTaskCoach">{{ t('settings.skillReset') }}</button>
             </div>
           </div>
-          <textarea v-model="localCoachSkill" class="skill-textarea" />
+          <textarea v-model="localTaskCoachSkill" class="skill-textarea" />
           <div class="skill-footer">
             <p class="skill-hint">{{ t('settings.skillHint') }}</p>
-            <span class="skill-counter">{{ localCoachSkill.length }} chars · ~{{ Math.floor(localCoachSkill.length / 4) }} tokens</span>
+            <span class="skill-counter">{{ localTaskCoachSkill.length }} chars · ~{{ Math.floor(localTaskCoachSkill.length / 4) }} tokens</span>
           </div>
         </div>
 
-        <!-- Analyze Skill -->
+        <!-- Task Analyze Skill (analyze for Task mode) -->
         <div class="field-group">
           <div class="skill-header">
             <div class="skill-label-row">
@@ -173,10 +176,11 @@ import {
   GLM_BASE_URL, GLM_DEFAULT_MODEL, LLM_MODEL_PRESETS
 } from '@/config/llm'
 import {
-  getCoachSkillRaw, setCoachSkill, resetCoachSkill, coachSkillModified,
   getAnalyzeSkillRaw, setAnalyzeSkill, resetAnalyzeSkill, analyzeSkillModified,
-  getCoachSkillDefault, getAnalyzeSkillDefault,
-  getResponseFormat, getResponseFormatDefault, setResponseFormat, resetResponseFormat, responseFormatModified
+  getCoachSkillTaskRaw, setCoachSkillTask, resetCoachSkillTask, coachSkillTaskModified,
+  getAnalyzeSkillDefault, getCoachSkillTaskDefault,
+  getResponseFormat, getResponseFormatDefault, setResponseFormat, resetResponseFormat, responseFormatModified,
+  activeTaskLayer, activeTaskSkillFile
 } from '@/config/skills/index'
 import {
   TEMPLATES, setCustomTemplates, resetCustomTemplates, customTemplatesModified, effectiveTemplates
@@ -200,7 +204,7 @@ const localProviderUrl = ref(localStorage.getItem('provider-url') ?? '')
 
 function currentLang(): 'zh' | 'en' { return isZh.value ? 'zh' : 'en' }
 
-const localCoachSkill = ref(getCoachSkillRaw(currentLang()))
+const localTaskCoachSkill = ref(getCoachSkillTaskRaw(currentLang()))
 const localAnalyzeSkill = ref(getAnalyzeSkillRaw(currentLang()))
 const localResponseFormat = ref(getResponseFormat())
 
@@ -225,7 +229,7 @@ watch(() => props.modelValue, (open) => {
     localModel.value = getModel()
     localProviderUrl.value = localStorage.getItem('provider-url') ?? ''
     const lang = currentLang()
-    localCoachSkill.value = getCoachSkillRaw(lang)
+    localTaskCoachSkill.value = getCoachSkillTaskRaw(lang)
     localAnalyzeSkill.value = getAnalyzeSkillRaw(lang)
     localResponseFormat.value = getResponseFormat()
     localTemplates.value = cloneTemplates(effectiveTemplates.value)
@@ -235,6 +239,14 @@ watch(() => props.modelValue, (open) => {
     nextTick(() => activateSettingsTrap())
   } else {
     deactivateSettingsTrap()
+  }
+})
+
+// When the active task layer changes while the modal is open, reload the task skill
+// (only if not overridden via localStorage — custom edits take priority)
+watch(activeTaskLayer, () => {
+  if (props.modelValue && !coachSkillTaskModified.value) {
+    localTaskCoachSkill.value = getCoachSkillTaskRaw(currentLang())
   }
 })
 
@@ -264,9 +276,9 @@ async function handleTestKey() {
   }
 }
 
-function handleResetCoach() {
-  localCoachSkill.value = getCoachSkillDefault(currentLang())
-  resetCoachSkill()
+function handleResetTaskCoach() {
+  localTaskCoachSkill.value = getCoachSkillTaskDefault(currentLang())
+  resetCoachSkillTask()
 }
 
 function handleResetAnalyze() {
@@ -280,25 +292,6 @@ function handleResetResponseFormat() {
 }
 
 // ─── Skill MD Import / Export ──────────────────────────────────────────────
-
-function handleImportCoachMd(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = (ev) => {
-    localCoachSkill.value = (ev.target?.result as string) ?? ''
-    ;(e.target as HTMLInputElement).value = ''
-  }
-  reader.readAsText(file)
-}
-
-function handleExportCoachMd() {
-  const blob = new Blob([localCoachSkill.value], { type: 'text/markdown' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = 'coach-skill.md'; a.click()
-  URL.revokeObjectURL(url)
-}
 
 function handleImportAnalyzeMd(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -316,6 +309,25 @@ function handleExportAnalyzeMd() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url; a.download = 'analyze-skill.md'; a.click()
+  URL.revokeObjectURL(url)
+}
+
+function handleImportTaskCoachMd(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    localTaskCoachSkill.value = (ev.target?.result as string) ?? ''
+    ;(e.target as HTMLInputElement).value = ''
+  }
+  reader.readAsText(file)
+}
+
+function handleExportTaskCoachMd() {
+  const blob = new Blob([localTaskCoachSkill.value], { type: 'text/markdown' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = 'coach-skill-task.md'; a.click()
   URL.revokeObjectURL(url)
 }
 
@@ -411,7 +423,7 @@ function handleSave() {
   setProviderUrl(localProviderUrl.value)
   setApiKey(localApiKey.value.trim())
   setModel(localModel.value.trim() || GLM_DEFAULT_MODEL)
-  setCoachSkill(localCoachSkill.value)
+  setCoachSkillTask(localTaskCoachSkill.value)
   setAnalyzeSkill(localAnalyzeSkill.value)
   setResponseFormat(localResponseFormat.value)
   const builtinJson = JSON.stringify(TEMPLATES)
@@ -479,6 +491,12 @@ function handleSave() {
 .key-badge--valid { color: var(--accent-green); }
 .key-badge--invalid { color: var(--accent-red, #f87171); }
 
+.skill-section-divider {
+  font-size: var(--font-sm); font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 1.5px;
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-color);
+  margin-top: var(--space-2);
+}
 .skill-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
 .skill-label-row { display: flex; align-items: center; gap: 8px; }
 .skill-actions { display: flex; align-items: center; gap: 6px; }

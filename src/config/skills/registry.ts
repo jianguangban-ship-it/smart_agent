@@ -1,4 +1,4 @@
-import { getCoachSkillRaw, getAnalyzeSkillRaw, getResponseFormat } from './index'
+import { getCoachSkillTaskRaw, getAnalyzeSkillRaw, getResponseFormat } from './index'
 
 export interface SkillEntry {
   id: string
@@ -15,7 +15,7 @@ export interface SkillEntry {
 export const SKILL_REGISTRY: SkillEntry[] = [
   {
     id: 'coach',
-    name: 'Design Coach',
+    name: 'Task Coach',
     keywords: [
       'review', 'improve', 'suggest', 'help', 'coach', 'guidance', 'advice',
       'jira', 'ticket', 'description', 'requirement', 'task', 'story',
@@ -23,7 +23,7 @@ export const SKILL_REGISTRY: SkillEntry[] = [
       '任务', '描述', '需求', '工单'
     ],
     systemPrompt: '',
-    getRawPrompt: (lang) => getCoachSkillRaw(lang)
+    getRawPrompt: (lang) => getCoachSkillTaskRaw(lang)
   },
   {
     id: 'analyze',

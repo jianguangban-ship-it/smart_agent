@@ -89,6 +89,9 @@ body {
 .input-base::placeholder {
   color: var(--text-muted);
 }
+.input-base.select-placeholder {
+  color: var(--text-muted);
+}
 
 /* Highlight match (combobox search) */
 .highlight-match {

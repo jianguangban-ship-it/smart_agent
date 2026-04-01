@@ -1,5 +1,4 @@
 import { ref, computed } from 'vue'
-import type { RequirementLevel } from '@/config/domain/traceability.design'
 import type { TaskLevel } from '@/config/domain/traceability.task'
 import { getModeQualityCheck, getModeQualityPenalty } from '@/config/domain'
 import { appMode } from '@/composables/useAppMode'
@@ -8,9 +7,9 @@ export interface BatchRequirement {
   id: string
   summary: string
   description: string
-  level: RequirementLevel | TaskLevel
+  level: TaskLevel
   parentReqId: string
-  issueType: 'Story' | 'Task' | 'Bug'
+  issueType: 'Story' | 'Task' | 'Bug' | 'Feature'
   qualityScore: number
   selected: boolean
 }
@@ -99,8 +98,8 @@ export function useBatchOps() {
       addItem({
         summary,
         description: cols[descIdx]?.trim() || '',
-        issueType: (cols[typeIdx]?.trim() as 'Story' | 'Task' | 'Bug') || 'Task',
-        level: (cols[levelIdx]?.trim() as RequirementLevel) || 'none',
+        issueType: (cols[typeIdx]?.trim() as 'Story' | 'Task' | 'Bug' | 'Feature') || 'Task',
+        level: (cols[levelIdx]?.trim() as TaskLevel) || 'none',
         parentReqId: cols[parentIdx]?.trim() || ''
       })
       count++
@@ -113,7 +112,7 @@ export function useBatchOps() {
     parentSummary: string,
     parentDescription: string,
     parentId: string,
-    targetLevels: RequirementLevel[]
+    targetLevels: TaskLevel[]
   ) {
     for (const level of targetLevels) {
       addItem({

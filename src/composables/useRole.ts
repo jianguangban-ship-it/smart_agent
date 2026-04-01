@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-export type UserRole = 'system-architect' | 'sw-developer' | 'hw-designer' | 'me-designer' | 'vv-engineer'
+export type UserRole = '' | 'system-architect' | 'sw-developer' | 'hw-designer' | 'me-designer' | 'vv-engineer'
 
 export interface RoleDefinition {
   id: UserRole
@@ -78,7 +78,7 @@ const LS_KEY_ROLE = 'user-role'
 
 const stored = localStorage.getItem(LS_KEY_ROLE) as UserRole | null
 const validIds = ROLES.map(r => r.id)
-const initialRole: UserRole = stored && validIds.includes(stored) ? stored : 'sw-developer'
+const initialRole: UserRole = stored && validIds.includes(stored) ? stored : ''
 
 export const currentRole = ref<UserRole>(initialRole)
 
@@ -88,17 +88,19 @@ export function setRole(role: UserRole): void {
 }
 
 export const currentRoleDefinition = computed(() =>
-  ROLES.find(r => r.id === currentRole.value)!
+  ROLES.find(r => r.id === currentRole.value) ?? null
 )
 
 /** Get role context string to inject into LLM system prompts */
 export function getRoleContext(lang: 'zh' | 'en'): string {
-  const def = ROLES.find(r => r.id === currentRole.value)!
+  const def = ROLES.find(r => r.id === currentRole.value)
+  if (!def) return ''
   return lang === 'zh' ? def.contextZh : def.contextEn
 }
 
 /** Get role-specific description placeholder */
 export function getRolePlaceholder(lang: 'zh' | 'en'): string {
-  const def = ROLES.find(r => r.id === currentRole.value)!
+  const def = ROLES.find(r => r.id === currentRole.value)
+  if (!def) return ''
   return lang === 'zh' ? def.placeholderZh : def.placeholderEn
 }

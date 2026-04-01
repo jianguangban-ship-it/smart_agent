@@ -19,7 +19,7 @@
     </Transition>
 
     <div class="form-card">
-      <ReviewStatusBar v-show="appMode === 'design'"
+      <ReviewStatusBar v-show="appMode === 'task'"
         :review-status="reviewStatus"
         :current-step-index="currentStepIndex"
         :checklist="checklist"
@@ -42,12 +42,10 @@
         :quality-score="qualityScore"
         :quality-score-color="qualityScoreColor"
         :quality-score-label="qualityScoreLabel"
-        :aspice-badge="aspiceBadge"
       />
 
-      <TraceabilitySection v-show="appMode === 'design'" :form="form" :traceability-gaps="traceabilityGaps" @suggest-links="$emit('suggestLinks')" @impact-analysis="$emit('impactAnalysis')" />
 
-      <DescriptionEditor v-model="form.description" :domain-warnings="domainWarnings" :aspice-suggestions="aspiceSuggestions" :incose-violations="incoseViolations" :assumptions="assumptions" />
+      <DescriptionEditor v-model="form.description" :incose-violations="incoseViolations" :assumptions="assumptions" />
 
       <!-- Action Buttons -->
       <div class="form-actions">
@@ -93,7 +91,7 @@
         </div>
         </div>
         <div class="action-group">
-          <!-- Writing Guidance -->
+          <!-- Coach / Design Guidance -->
           <button
             class="action-btn action-coach"
             :disabled="!canCoachSubmit || isSubmitting || isCoachLoading"
@@ -108,12 +106,12 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
           </button>
-          <!-- Analyze Task (hidden in free-chat mode) -->
+          <!-- Analyze / Decompose (hidden in free-chat mode) -->
           <button
             v-show="appMode !== 'explore'"
             class="action-btn action-analyze"
             :class="{ dimmed: hasAiResponse }"
-            :disabled="!(appMode === 'task' ? canCoachSubmit : canSubmit) || isSubmitting || isCoachLoading || (appMode === 'task' && !hasCoachResponse)"
+            :disabled="!canCoachSubmit || isSubmitting || isCoachLoading || (appMode === 'task' && !hasCoachResponse)"
             :title="t('form.aiAnalyze')"
             @click="$emit('analyze')"
           >
@@ -125,24 +123,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
             </svg>
           </button>
-          <!-- Deep Review (multi-perspective, hidden in free-chat mode) -->
-          <button
-            v-show="appMode === 'design'"
-            class="action-btn action-deep-review"
-            :class="{ dimmed: hasAiResponse }"
-            :disabled="!canSubmit || isSubmitting || isCoachLoading"
-            :title="t('form.deepReview')"
-            @click="$emit('deepReview')"
-          >
-            <svg v-if="isSubmitting && currentAction === 'deepReview'" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
-              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
-              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
-            </svg>
-            <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-            </svg>
-          </button>
-          <!-- Create JIRA -->
+          <!-- Create JIRA — appears after analyze response -->
           <Transition name="fade">
             <button
               v-if="appMode === 'task' && hasAiResponse"
@@ -169,13 +150,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { FormState, SummaryState } from '@/types/form'
-import type { DomainWarning, AspiceSuggestion, IncoseViolation, Assumption, TraceabilityGap } from '@/config/domain'
+import type { QualityViolation, Assumption, TraceabilityGap } from '@/config/domain'
 import { useI18n } from '@/i18n'
 import { appMode } from '@/composables/useAppMode'
 import type { ReviewStatus, ChecklistItem } from '@/config/domain/types'
 import BasicInfoSection from './BasicInfoSection.vue'
 import SummaryBuilder from './SummaryBuilder.vue'
-import TraceabilitySection from './TraceabilitySection.vue'
 import DescriptionEditor from './DescriptionEditor.vue'
 import ReviewStatusBar from './ReviewStatusBar.vue'
 
@@ -195,10 +175,7 @@ defineProps<{
   hasAiResponse: boolean
   hasCoachResponse: boolean
   errorMessage: string
-  domainWarnings: DomainWarning[]
-  aspiceBadge?: string
-  aspiceSuggestions: AspiceSuggestion[]
-  incoseViolations: IncoseViolation[]
+  incoseViolations: QualityViolation[]
   assumptions: Assumption[]
   traceabilityGaps: TraceabilityGap[]
   reviewStatus: ReviewStatus
@@ -212,7 +189,6 @@ defineProps<{
 defineEmits<{
   coach: []
   analyze: []
-  deepReview: []
   create: []
   reset: []
   cancelCoach: []

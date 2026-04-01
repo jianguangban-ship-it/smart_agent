@@ -11,6 +11,9 @@ const currentLang = ref<Lang>(
   (localStorage.getItem('jira-terminal-lang') as Lang) || 'zh'
 )
 
+/** Reactive language ref — importable outside components (e.g. config modules) */
+export { currentLang }
+
 export function useI18n() {
   function t(key: string): string {
     const keys = key.split('.')

@@ -3939,3 +3939,521 @@ Coach history records were stored as a flat list with no conversation grouping. 
 | `src/i18n/en.ts` | New labels |
 | `src/i18n/zh.ts` | New labels |
 | `src/components/layout/AppHeader.vue` | Version bump v10.47 → v10.48 |
+
+## v10.49 — Design mode: separate Classification from Product in Requirement Summary
+
+### Design Rationale
+Design mode is dedicated to system, software, hardware, mechanics, safety, and V&V requirements. The "Classification" field was incorrectly using `PRODUCT_OPTIONS` (EPS, IBC, etc.) — which are product names, not requirement categories. Requirements need a proper classification taxonomy including Functional, Non-Functional, Safety ASIL levels (QM through ASIL-D per ISO 26262), Constraint, Interface, Performance, Legal/Regulatory, and Cybersecurity.
+
+### Changes
+- Added `CLASSIFICATION_OPTIONS` to `constants.ts` with complete requirement classification taxonomy
+- Design mode field 1 ("Product") now uses `PRODUCT_OPTIONS` — shows actual products (EPS, IBC, etc.)
+- Design mode field 2 ("Classification") now uses `CLASSIFICATION_OPTIONS` — categorizes requirement type
+- Task mode unchanged — field 1 still uses `VEHICLE_OPTIONS`, field 2 still uses `PRODUCT_OPTIONS`
+
+| File | Change |
+|------|--------|
+| `src/config/constants.ts` | Add `CLASSIFICATION_OPTIONS` array |
+| `src/components/form/SummaryBuilder.vue` | Mode-aware option lists for fields 1 & 2 |
+| `src/components/layout/AppHeader.vue` | Version bump v10.48 → v10.49 |
+
+## v10.50 — Rename "Project Name" / "Library Name" to "Agile Team"
+
+### Design Rationale
+Both Design and Task mode panels used labels "Library Name" and "Project Name" for the project selector, which didn't reflect the agile team–centric workflow. Renaming to "Agile Team" aligns with how teams actually organize their work. The dropdown now shows `TeamName (JiraProject)` instead of `JiraProject (TeamName)` to emphasize the team identity.
+
+### Changes
+- i18n: `projectName` → "Agile Team" / "敏捷团队", `projectNameDesign` → "Agile Team" / "敏捷团队"
+- `BasicInfoSection.vue`: Dropdown display order flipped to `teamName (name)`
+
+| File | Change |
+|------|--------|
+| `src/i18n/en.ts` | `projectName` / `projectNameDesign` → "Agile Team" |
+| `src/i18n/zh.ts` | `projectName` / `projectNameDesign` → "敏捷团队" |
+| `src/components/form/BasicInfoSection.vue` | Dropdown: `teamName (name)` order |
+| `src/components/layout/AppHeader.vue` | Version bump v10.49 → v10.50 |
+
+## v10.51 — Layer→Role auto-routing (skill router)
+
+### Design Rationale
+The Layer selection in the Requirement Summary directly signals the user's engineering discipline — SYS engineers pick "SYS", SW developers pick "SW"/"APP"/"SWF", etc. Previously, users had to manually select their role in the header. By auto-routing Layer→Role, the correct skill, LLM context, quality weights, requirement level, and ASPICE profile activate instantly without any extra clicks. This is a high-efficiency skill router that leverages an input the user already fills.
+
+### Layer → Role mapping
+| Layer | Auto-set Role |
+|-------|--------------|
+| `SYS` | System Architect |
+| `SW`, `APP`, `SWF` | SW Developer |
+| `HW` | HW Designer |
+| `ME` | Mechanics Designer |
+| `TEST` | V&V Engineer |
+
+### Changes
+- Added `LAYER_ROLE_MAP` and a `watch(summary.layer)` watcher in `useForm.ts`
+- When Layer changes, the role auto-updates (which cascades to requirement level, quality weights, domain context, and ASPICE profile)
+- Manual role selection in the header still works and takes precedence until the next Layer change
+
+| File | Change |
+|------|--------|
+| `src/composables/useForm.ts` | `LAYER_ROLE_MAP` + `watch(summary.layer)` auto-routing |
+| `src/components/layout/AppHeader.vue` | Version bump v10.50 → v10.51 |
+
+## v10.52 — Layer-specific task coach skills (skill router)
+
+### Design Rationale
+Task mode previously used a single coach skill for all layers. Since each engineering discipline (SYS, SW, APP, HW, ME, TEST, SWF) has fundamentally different review criteria — from AUTOSAR architecture checks for BSW to EMC compliance for HW to pass/fail criteria for V&V — a single generic skill cannot provide expert-level coaching. By mapping each Layer selection to a dedicated skill file, the LLM receives domain-specific review checklists, terminology, and output formats tailored to the user's engineering discipline.
+
+### Layer → Skill mapping
+| Layer | Skill Focus | Files |
+|-------|------------|-------|
+| SYS | System architecture, requirement decomposition, ASIL allocation | `coach-skill-task-sys-{en,zh}.md` |
+| SW | BSW/MCAL, AUTOSAR layers, resource impact (existing) | `coach-skill-task-sw-{en,zh}.md` |
+| APP | Application SW, control algorithms, calibration, state machines | `coach-skill-task-app-{en,zh}.md` |
+| HW | Schematic, pin assignment, EMC, power budget, HW/SW interface | `coach-skill-task-hw-{en,zh}.md` |
+| ME | Housing, thermal, connector, vibration, IP rating, DFM | `coach-skill-task-me-{en,zh}.md` |
+| TEST | Test case, verification method, pass/fail, HIL/SIL, coverage | `coach-skill-task-test-{en,zh}.md` |
+| SWF | Functional safety, FMEA, safety mechanisms, ASIL decomposition | `coach-skill-task-swf-{en,zh}.md` |
+
+### Changes
+- Created 12 new skill files (6 layers x 2 languages), each with domain-specific review checklists
+- Refactored `index.ts`: `TASK_SKILL_MAP` maps layers to bundled skills, `activeTaskLayer` ref drives selection
+- `getCoachSkillTaskDefault(lang, layer?)` now picks the layer-specific skill (falls back to SW)
+- `activeTaskSkillName` computed shows human-readable name (e.g. "Task Coach (HW)")
+- `useForm.ts` sets `activeTaskLayer` when Layer changes
+- DevTools shows active task skill name + modified badge
+- localStorage override still works as power-user escape hatch (overrides any layer)
+- Fixed broken imports (old `coach-skill-task-en/zh.md` files no longer exist)
+
+| File | Change |
+|------|--------|
+| `src/config/skills/coach-skill-task-sys-{en,zh}.md` | New: System architecture skill |
+| `src/config/skills/coach-skill-task-app-{en,zh}.md` | New: Application SW skill |
+| `src/config/skills/coach-skill-task-hw-{en,zh}.md` | New: Hardware design skill |
+| `src/config/skills/coach-skill-task-me-{en,zh}.md` | New: Mechanical design skill |
+| `src/config/skills/coach-skill-task-test-{en,zh}.md` | New: V&V/Test skill |
+| `src/config/skills/coach-skill-task-swf-{en,zh}.md` | New: SW Functional Safety skill |
+| `src/config/skills/index.ts` | Layer-specific imports, TASK_SKILL_MAP, activeTaskLayer, activeTaskSkillName |
+| `src/composables/useForm.ts` | Set activeTaskLayer in layer watcher |
+| `src/components/dev/DevTools.vue` | Show active task skill name + modified badge |
+| `src/components/layout/AppHeader.vue` | Version bump v10.51 → v10.52 |
+
+## v10.53 — LLM Settings: reactive task skill on layer change
+
+**Problem:** The LLM Settings modal loaded the task coach skill once when opened but didn't react to `activeTaskLayer` changes. If the layer changed while settings was open, the textarea still showed the previous layer's skill.
+
+**Fix:** Added a watcher on `activeTaskLayer` inside LLMSettings.vue. When the layer changes and the modal is open, it reloads the task skill content — but only if the user hasn't customized it via localStorage (custom edits take priority over layer defaults).
+
+| File | Change |
+|------|--------|
+| `src/components/settings/LLMSettings.vue` | Added `activeTaskLayer` watcher to reload task skill on layer change |
+| `src/components/layout/AppHeader.vue` | Version bump v10.52 → v10.53 |
+
+## v10.54 — DevTools: show full task skill file name, reactive to language toggle
+
+**Problem:** DevTools showed abbreviated task skill names like "Task Coach (SYS)" instead of the actual file name. When the user toggled language (EN→ZH), the displayed name didn't change to reflect the new language-specific file being loaded.
+
+**Fix:**
+- Added `activeTaskSkillFile` computed in `skills/index.ts` — derives the full file name (e.g. `coach-skill-task-sys-en.md`) from `activeTaskLayer` + `currentLang`, both reactive
+- Exported `currentLang` from `src/i18n/index.ts` so the skills config module can react to language changes
+- DevTools and LLM Settings now display the full file name instead of the abbreviation
+- Toggling language automatically updates the displayed file name (e.g. `coach-skill-task-sys-en.md` → `coach-skill-task-sys-zh.md`)
+
+| File | Change |
+|------|--------|
+| `src/i18n/index.ts` | Export `currentLang` ref directly for use outside components |
+| `src/config/skills/index.ts` | Import `currentLang`, add `activeTaskSkillFile` computed (layer + lang → file name) |
+| `src/components/dev/DevTools.vue` | Import `activeTaskSkillFile`, display full file name instead of abbreviation |
+| `src/components/settings/LLMSettings.vue` | Use `activeTaskSkillFile` in layer badge |
+| `src/components/layout/AppHeader.vue` | Version bump v10.53 → v10.54 |
+
+## v10.55 — Remove skill editing textareas from DevTools
+
+**Rationale:** The "Design System Prompt" and "Task System Prompt" inline editing sections in DevTools were redundant — skill editing already lives in LLM Settings. Removing them simplifies the DevTools panel.
+
+**Changes:**
+- Removed the two `<details>` sections with skill textareas (design coach + task coach)
+- Removed associated script logic (`localDesignCoachSkill`, `localTaskCoachSkill`, input handlers, reset handlers)
+- Cleaned up unused imports (`getCoachSkillRaw`, `setCoachSkill`, `resetCoachSkill`, `getCoachSkillDefault`, `getCoachSkillTaskRaw`, `setCoachSkillTask`, `resetCoachSkillTask`, `getCoachSkillTaskDefault`, `appMode`)
+- Removed unused CSS classes (`skill-header`, `skill-textarea`, `skill-footer`, `skill-counter`, `btn-reset`, etc.)
+- Removed i18n keys: `dev.designSystemPrompt`, `dev.taskSystemPrompt` (en + zh)
+
+| File | Change |
+|------|--------|
+| `src/components/dev/DevTools.vue` | Removed skill editing sections, cleaned up imports and CSS |
+| `src/i18n/en.ts` | Removed `designSystemPrompt`, `taskSystemPrompt` keys |
+| `src/i18n/zh.ts` | Removed `designSystemPrompt`, `taskSystemPrompt` keys |
+| `src/components/layout/AppHeader.vue` | Version bump v10.54 → v10.55 |
+
+## v10.56
+
+**Rationale:** The Elicitation and Conflict Check guided chips were only shown in Design mode's coach empty state, but they are more useful in Explore mode where the user has free-form chat without a structured coach skill. Moving them to Explore gives users quick access to these tools in the right context.
+
+**Changes:**
+- Moved the two guided chips (Elicitation + Conflict Check) from Design mode to Explore mode in the CoachPanel empty state
+
+| File | Change |
+|------|--------|
+| `src/components/panels/CoachPanel.vue` | Changed guided chips `v-if` from `appMode === 'design'` to `appMode === 'explore'` |
+| `src/components/layout/AppHeader.vue` | Version bump v10.55 → v10.56 |
+
+## v10.57
+
+**Rationale:** The "Requirement Elicitation" badge in Explore mode's AI-CHAT panel was sending an empty prompt because `getModeElicitationPrompt()` returned `''` for Explore mode (the resolver treated Explore as "no domain logic"). Design and Task modes each had dedicated elicitation files, but Explore had none. Added a general-purpose elicitation prompt that guides users step-by-step through 8 core questions (plus role-specific follow-ups) to produce a well-formed requirement from scratch.
+
+**Changes:**
+- Created `elicitation.explore.ts` with general-purpose requirement elicitation questions (EN + ZH) and role-specific additions
+- Wired Explore mode into `getModeElicitationPrompt()` and `getModeElicitationSet()` so the badge now sends a complete coaching prompt
+
+| File | Change |
+|------|--------|
+| `src/config/domain/elicitation.explore.ts` | **New** — Explore-mode elicitation questions + prompt builder |
+| `src/config/domain/mode-config.ts` | Added explore import and early-return for explore mode in elicitation resolvers |
+| `src/components/layout/AppHeader.vue` | Version bump v10.56 → v10.57 |
+
+## v10.58
+
+**Rationale:** Explore mode's AI-CHAT acts as a free-form chat, but users often have requirements, specs, or context in markdown files they want to discuss with the AI. Added a markdown file attachment button (`.md` / `.markdown` / `.txt`) to the description input area in Explore mode. The file content is prepended to the user's message, so the AI receives the full document as context alongside the user's question.
+
+**Changes:**
+- Created `useAttachment.ts` composable — shared reactive state for attached file (name + content) with `attach()` / `detach()` methods
+- Added paperclip button + file chip UI in `DescriptionEditor.vue` (explore mode only) with hidden file input, animated chip, and remove button
+- Updated `App.vue` to prepend attachment content to explore-mode payload and clear attachment after sending
+- Updated `canCoachSubmit` to allow submitting with just an attachment (no typed text required)
+- Added i18n keys for attach/remove labels (EN + ZH)
+
+| File | Change |
+|------|--------|
+| `src/composables/useAttachment.ts` | **New** — shared attachment state composable |
+| `src/components/form/DescriptionEditor.vue` | Added file upload button, attachment chip, and CSS (explore mode only) |
+| `src/App.vue` | Import `useAttachment`, prepend file content in explore payload, clear on send, update canCoachSubmit |
+| `src/i18n/en.ts` | Added `attachFile`, `removeAttachment` keys |
+| `src/i18n/zh.ts` | Added `attachFile`, `removeAttachment` keys |
+| `src/components/layout/AppHeader.vue` | Version bump v10.57 → v10.58 |
+
+## v10.59
+
+**Rationale:** The 5-step review workflow (Draft → AI Reviewed → Peer Reviewed → Approved → JIRA Created) was only visible in Design mode, but the full infrastructure already supported Task mode — `review-workflow.task.ts` defines task-specific steps and checklists, `mode-config.ts` resolves them for task mode, and `useReviewWorkflow` manages per-mode state. The only missing piece was the `v-show` condition in TaskForm.vue.
+
+**Changes:**
+- Extended the `ReviewStatusBar` visibility condition from `appMode === 'design'` to `appMode === 'design' || appMode === 'task'`
+
+### Task Mode Workflow Progression
+
+The 5-step review workflow is driven by the button chain **Task Guidance → Analyze Task → Create JIRA** with the following progression logic:
+
+```
+Draft ──[Task Guidance]──▶ (no step change)
+       ──[Analyze Task]──▶ AI Reviewed
+       ──[Peer Review Checklist]──▶ Peer Reviewed (manual, via checklist toggle)
+       ──[Approve button]──▶ Approved (manual, after all checklist items checked)
+       ──[Create JIRA]──▶ JIRA Created
+```
+
+**Button gating (sequential enforcement):**
+
+| Button | Enabled condition | Workflow trigger on success |
+|--------|-------------------|-----------------------------|
+| Task Guidance (coach) | `canCoachSubmit` — all task fields filled (project + assignee + type + points + summary + description) | None |
+| Analyze Task | `canCoachSubmit` AND `hasCoachResponse` — coach must complete first | `advanceTo('ai-reviewed')` if status is `draft` |
+| Create JIRA | `hasAiResponse` — analyze must complete first, AND `canCoachSubmit` | `advanceTo('jira-created')` |
+
+**Manual steps between Analyze and Create:**
+- After AI review, the ReviewStatusBar shows a role-specific peer review checklist (defined in `review-workflow.task.ts`)
+- Task-mode checklist items: acceptance criteria defined, effort estimated, no TBD/TBC items, plus role-specific items (e.g., modules/files identified for sw-developer, test scope for vv-engineer)
+- User toggles checklist items → progress bar fills → "Approve" button becomes available when all items checked
+- Approve advances status to `approved`, unblocking Create JIRA
+
+**Key files:**
+
+| File | Role |
+|------|------|
+| `src/components/form/TaskForm.vue:116` | Analyze button `:disabled` gating — requires `hasCoachResponse` in task/design modes |
+| `src/components/form/TaskForm.vue:131` | Create button `v-if` — requires `hasAiResponse` |
+| `src/App.vue:592` | `advanceTo('ai-reviewed')` after successful analyze |
+| `src/App.vue:707` | `advanceTo('jira-created')` after successful create |
+| `src/config/domain/review-workflow.task.ts` | Task-mode 5-step definitions and role-specific checklists |
+| `src/composables/useReviewWorkflow.ts` | Per-mode state management, step resolution, checklist toggle |
+
+| File | Change |
+|------|--------|
+| `src/components/form/TaskForm.vue` | Changed `v-show` on ReviewStatusBar to include task mode |
+| `src/components/layout/AppHeader.vue` | Version bump v10.58 → v10.59 |
+
+## v10.60
+
+**Rationale:** Task mode only had three issue types (Story, Task, Bug). Added a "Feature" button to better represent feature-level work items. The new type is wired through the entire data flow: type definitions, UI rendering, payload building, ASPICE profile lookup, batch operations, and CSV import.
+
+**Changes:**
+- Added `'Feature'` to the `FormState.issueType` and `TaskTypeConfig.value` union types
+- Added Feature button to `TASK_TYPES` constant (purple: `#d2a8ff`)
+- Updated all downstream type casts: `aspice.ts` IssueType, `useBatchOps.ts` BatchRequirement, `useForm.ts` ASPICE profile call, `App.vue` batch item cast
+
+| File | Change |
+|------|--------|
+| `src/types/form.ts` | Added `'Feature'` to `FormState.issueType` and `TaskTypeConfig.value` unions |
+| `src/config/constants.ts` | Added Feature entry to `TASK_TYPES` array |
+| `src/config/domain/aspice.ts` | Added `'Feature'` to `IssueType` alias |
+| `src/composables/useBatchOps.ts` | Updated `BatchRequirement.issueType` type and CSV import cast |
+| `src/composables/useForm.ts` | Updated ASPICE profile cast |
+| `src/App.vue` | Updated batch item cast |
+| `src/components/layout/AppHeader.vue` | Version bump v10.59 → v10.60 |
+
+## v10.61
+
+**Rationale:** Design mode was an ASPICE/INCOSE-focused requirement writing workflow with domain context injection, role-based coaching, traceability decomposition, and design-specific skills. The app now simplifies to two modes: **Explore** (free-form AI chat) and **Task** (structured task workflow). This reduces cognitive overhead, eliminates dead-code paths, and streamlines the settings UI. `CLASSIFICATION_OPTIONS` in `constants.ts` is preserved for potential future use.
+
+**Changes:**
+- Removed `'design'` from `AppMode` union type — app now only supports `'explore' | 'task'`
+- Removed Design mode button from header mode switcher and all role selector UI
+- Stripped all `appMode === 'design'` ternaries from form components (SummaryBuilder, BasicInfoSection, DescriptionEditor, TaskForm, CoachPanel, AIReviewPanel)
+- Removed Design Mode skills section from LLMSettings (coach + decompose skill editors)
+- Removed design coach skill, decompose skill imports/functions from `config/skills/index.ts`
+- Updated `config/skills/registry.ts` — "Design Coach" → "Task Coach", uses `getCoachSkillTaskRaw`
+- Removed `domainWarnings`, `aspiceProfile`, `aspiceSuggestions` from App.vue and child component props
+- Removed ASPICE suggestion bar and domain warning list from DescriptionEditor template
+- Removed design branches from `config/domain/mode-config.ts` and `config/domain/index.ts`
+- Removed `buildDomainContext` and `getRoleContext` unused imports from `useLLM.ts`
+- Removed design state slot from `useReviewWorkflow.ts` per-mode maps
+- Added `'none'` to `TaskLevel` union for form default compatibility
+- Added `PMVSS`, `PMVBS`, `PMVSU` to `ProjectKey` type (pre-existing type gap)
+- Widened `getLevelDef()` parameter to `string` for cross-type compatibility
+- Updated `useBatchOps.ts` to use `TaskLevel` instead of `RequirementLevel`
+- Cleaned design-specific i18n keys from both `en.ts` and `zh.ts` (~20 keys each)
+- Updated `useAppMode.test.ts` — removed design mode test cases
+- Deleted design-only files: `TraceabilitySection.vue`, `elicitation.design.ts`, `incose.design.ts`, `review-workflow.design.ts`, `coach-skill-design-en.md`, `coach-skill-design-zh.md`, `decompose-skill-en.md`, `decompose-skill-zh.md`
+- Kept `traceability.design.ts` (still imported by trace-suggest, trace-impact, useBatchOps)
+
+| File | Change |
+|------|--------|
+| `src/composables/useAppMode.ts` | `AppMode = 'explore' \| 'task'`, default `'task'` |
+| `src/components/layout/AppHeader.vue` | Removed design button, role selector, version → v10.61 |
+| `src/components/form/SummaryBuilder.vue` | Removed design ternaries |
+| `src/components/form/BasicInfoSection.vue` | Removed design label ternaries |
+| `src/components/form/DescriptionEditor.vue` | Removed design conditionals, ASPICE bar, domain warnings |
+| `src/components/form/TaskForm.vue` | Removed TraceabilitySection, design props |
+| `src/components/form/TraceabilitySection.vue` | **Deleted** |
+| `src/components/panels/CoachPanel.vue` | Removed design branches |
+| `src/components/panels/AIReviewPanel.vue` | Removed design title branch |
+| `src/components/settings/LLMSettings.vue` | Removed Design Mode skills section |
+| `src/components/dev/DevTools.vue` | Removed design skill status rows |
+| `src/App.vue` | Removed all design branches, props, computed |
+| `src/composables/useLLM.ts` | Removed unused design imports |
+| `src/composables/useForm.ts` | Removed domainWarnings, aspiceProfile |
+| `src/composables/useReviewWorkflow.ts` | Removed design state slot |
+| `src/composables/useBatchOps.ts` | Switched to TaskLevel |
+| `src/config/domain/mode-config.ts` | Removed design resolver |
+| `src/config/domain/index.ts` | Removed design re-exports, added RequirementLevel re-export |
+| `src/config/domain/traceability.task.ts` | Added `'none'` to TaskLevel |
+| `src/config/domain/traceability.design.ts` | Widened getLevelDef parameter |
+| `src/config/domain/trace-suggest.ts` | Accept TaskLevel parameter |
+| `src/config/domain/trace-impact.ts` | Accept TaskLevel parameter |
+| `src/config/skills/index.ts` | Removed design skills |
+| `src/config/skills/registry.ts` | Updated to Task Coach |
+| `src/types/form.ts` | `requirementLevel: TaskLevel` |
+| `src/types/team.ts` | Added PMVSS, PMVBS, PMVSU to ProjectKey |
+| `src/i18n/en.ts` | Removed ~20 design-specific keys |
+| `src/i18n/zh.ts` | Removed ~20 design-specific keys |
+| `src/composables/__tests__/useAppMode.test.ts` | Removed design test cases |
+| `src/config/domain/elicitation.design.ts` | **Deleted** |
+| `src/config/domain/incose.design.ts` | **Deleted** |
+| `src/config/domain/review-workflow.design.ts` | **Deleted** |
+| `src/config/skills/coach-skill-design-en.md` | **Deleted** |
+| `src/config/skills/coach-skill-design-zh.md` | **Deleted** |
+| `src/config/skills/decompose-skill-en.md` | **Deleted** |
+| `src/config/skills/decompose-skill-zh.md` | **Deleted** |
+
+---
+
+## v10.62 — Fix: Confirm JIRA modal shows correct `action: "create"` in payload
+
+**Problem:** When clicking "Create JIRA" in Task mode, the confirmation modal displayed the payload with `action: "preview"` instead of `action: "create"`. This was misleading because the actual POST to n8n correctly used `action: "create"`, but the user-facing preview did not match.
+
+**Root cause:** The `jsonPayload` ref was populated by a debounced watcher that always called `buildPayload('preview')`. When the confirmation modal opened, it displayed this stale preview payload rather than the actual create payload.
+
+**Fix:** In `handleCreateClick()`, explicitly set `jsonPayload` to `buildPayload('create')` before opening the modal. This ensures the user sees exactly what will be sent to n8n — with `action: "create"`.
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | `handleCreateClick()` now sets `jsonPayload` with `buildPayload('create')` |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.62 |
+
+---
+
+## v10.63 — Fix: Remove auto-duplicate-check from Create JIRA flow
+
+**Problem:** Clicking "Create JIRA" in Task mode sent an unwanted `action: "search"` request to n8n (auto-duplicate-check). The n8n workflow interpreted this as a create action and created a JIRA ticket prematurely — before the user even clicked "Create Ticket" in the confirmation modal.
+
+**Root cause:** `handleCreateClick()` called `checkDuplicates()` which POSTed a search payload to the same n8n webhook. The n8n workflow did not distinguish between `action: "search"` and `action: "create"`, so it processed the search request as a ticket creation.
+
+**Fix:** Removed `checkDuplicates()` from `handleCreateClick()`. Now clicking "Create JIRA" only opens the confirmation modal — no request is sent to n8n until the user clicks "Create Ticket".
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | Removed `checkDuplicates()` call from `handleCreateClick()` |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.63 |
+
+---
+
+## v10.64 — Style: Show full JIRA title in Ticket History
+
+**Change:** Ticket History entries now display the full summary text instead of truncating at 40 characters with ellipsis. The summary wraps naturally with `word-break: break-word`.
+
+| File | Change |
+|------|--------|
+| `src/components/panels/TicketHistoryPanel.vue` | Removed `truncate()` function, removed CSS ellipsis truncation, added word-break wrap |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.64 |
+
+---
+
+## v10.65 — UI: Merge ProcessingSummary into JiraResponsePanel, move Ticket History up
+
+**Changes:**
+1. **Merged ProcessingSummary into JiraResponsePanel** — AI corrected points, subtask count, and JIRA ticket link now display as a summary section inside the JIRA Response panel (above the JSON response). The panel shows the summary as soon as AI analysis completes, and appends the JSON response after JIRA creation. Removed standalone `ProcessingSummary` component from App.vue layout.
+2. **Moved TicketHistoryPanel** from the bottom of the right sidebar to directly below JiraResponsePanel.
+
+**Right sidebar order (Task mode):** AIReviewPanel → JiraResponsePanel (with summary) → TicketHistory → DevTools → JiraSearch → Batch → ReviewDashboard
+
+| File | Change |
+|------|--------|
+| `src/components/panels/JiraResponsePanel.vue` | Added `aiResponse`/`estimatedPoints` props; merged summary rows + JSON into unified layout |
+| `src/App.vue` | Removed `ProcessingSummary`, moved `TicketHistoryPanel` below `JiraResponsePanel`, passed new props |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.65 |
+
+---
+
+## v10.66 — UI: Move "Created" indicator from JIRA Response to Ticket History
+
+**Change:** The green "Created" success indicator was on the JIRA Response panel header — but it makes more sense on Ticket History, which is where the created ticket actually appears. Now:
+
+- **JIRA Response panel** only shows loading/pending status during creation, then returns to idle
+- **Ticket History panel** shows a green "Created" badge in the header when a ticket is just created, the panel auto-opens, and the new entry is highlighted with a green border
+
+| File | Change |
+|------|--------|
+| `src/components/panels/JiraResponsePanel.vue` | Removed `'created'` success status — only shows loading/pending/idle |
+| `src/components/panels/TicketHistoryPanel.vue` | Added `lastCreatedKey` prop, green "Created" badge, auto-open on create, green highlight on new entry |
+| `src/App.vue` | Added `lastCreatedKey` ref, set on successful creation, passed to TicketHistoryPanel |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.66 |
+
+---
+
+## v10.67 — UI: Collapsible JIRA Response panel
+
+**Change:** Replaced `PanelShell` wrapper with a `<details>` expand/collapse pattern matching Ticket History's style. The panel:
+- **Auto-opens** when content arrives (AI response, JIRA response, or creating state)
+- **Collapses** on click to save sidebar space
+- Shows an orange "Pending" badge in the collapsed header during creation
+- Removed `PanelShell` dependency — lighter, consistent with Ticket History
+
+| File | Change |
+|------|--------|
+| `src/components/panels/JiraResponsePanel.vue` | Replaced PanelShell with `<details>`-based collapsible layout |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.67 |
+
+---
+
+## v10.68 — UI: Collapsible Task Analysis panel
+
+**Change:** Replaced `PanelShell` wrapper in AIReviewPanel with the same `<details>` expand/collapse pattern used by Ticket History and JIRA Response. The panel:
+- **Auto-opens** when analyzing or when a response arrives
+- **Collapses** on click to save sidebar space
+- Header shows: title, model badge, status badge (Loading/Success/Error), diff toggle, copy button
+- Header action buttons (diff, copy) use `@click.stop` so they don't trigger collapse
+- All existing features preserved: streaming, cancel, retry, perspective tabs, diff view
+
+| File | Change |
+|------|--------|
+| `src/components/panels/AIReviewPanel.vue` | Replaced PanelShell with `<details>`-based collapsible layout; status badges in header |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.68 |
+
+---
+
+## v10.69 — Style: Task Analysis header — match Coach panel font size + add emoji
+
+**Change:** Task Analysis panel header title was `12px / text-secondary` — too small compared to the Coach panel on the left. Updated to `var(--font-lg) / text-primary` to match PanelShell's title styling. Added `🔍` emoji to the `reviewPanel` icon.
+
+| File | Change |
+|------|--------|
+| `src/components/panels/AIReviewPanel.vue` | Header font: `var(--font-lg)`, color: `var(--text-primary)` |
+| `src/config/icons.ts` | `reviewPanel: '🔍'` |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.69 |
+
+---
+
+## v10.70 — UI: Move AI result badges to Task Analysis header, clean up JIRA Response
+
+**Changes:**
+1. **Task Analysis header** now shows compact result badges (visible even when collapsed):
+   - **Points badge** (green): `3 → 5` — AI corrected story points vs original estimate
+   - **Subtasks badge** (orange): `2 items` — when subtasks were created
+2. **JIRA Response panel** cleaned up — removed the summary section (AI Corrected Points, Subtasks, JIRA ticket ID link). Now only shows raw JSON response. The JIRA ticket ID is already visible in Ticket History.
+3. **App.vue** — moved `estimatedPoints` prop from JiraResponsePanel to AIReviewPanel
+
+| File | Change |
+|------|--------|
+| `src/components/panels/AIReviewPanel.vue` | Added `estimatedPoints` prop, `aiPoints`/`subtaskCount` computed, result badges in header |
+| `src/components/panels/JiraResponsePanel.vue` | Removed summary section, `aiResponse`/`estimatedPoints` props |
+| `src/App.vue` | Moved `:estimated-points` to AIReviewPanel, removed `:ai-response` from JiraResponsePanel |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.70 |
+
+---
+
+## v10.71 — Fix: Parse AI result badges from LLM JSON response
+
+**Problem:** The result badges (points, subtasks) looked for `ai_points`/`subtasks_created` directly on the response object `{ markdown_msg, message }`. These fields don't exist there — the LLM returns raw JSON as a string inside `response.message`.
+
+**Fix:** Parse `response.message` as JSON to extract the actual analysis data:
+- `final_points` → points badge (green `3 → 5`)
+- `split_number` → subtasks badge (orange `4 Subtasks`)
+
+Also changed badge label from "items" to "Subtasks".
+
+| File | Change |
+|------|--------|
+| `src/components/panels/AIReviewPanel.vue` | Parse `response.message` as JSON; read `final_points`/`split_number`; badge label "Subtasks" |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.71 |
+
+---
+
+## v10.72 — UI: Move JIRA response JSON to Agent State, simplify JIRA Response panel
+
+**Changes:**
+1. **JIRA Response panel** — no longer shows raw JSON. After successful creation, shows a clean success state: green checkmark icon + clickable ticket key link + "JIRA ticket created successfully" hint. The header also shows the ticket key as a green badge. Fallback to JsonViewer for unexpected responses without a `key` field.
+2. **Agent State (DevTools)** — new JIRA section appears after creation, showing: ticket key (clickable link), AI points, and view URL. This is where developers can inspect the full n8n response data.
+
+| File | Change |
+|------|--------|
+| `src/components/panels/JiraResponsePanel.vue` | Replaced JSON display with success state (icon + key link + hint); green key badge in header |
+| `src/components/dev/DevTools.vue` | Added `jiraResponse` prop; JIRA section in Agent State showing key, AI points, view URL |
+| `src/App.vue` | Pass `:jira-response="jiraResponse"` to DevTools |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.72 |
+
+## v10.73 — Move "Creating" indicator to Ticket History, remove JIRA Response panel
+
+**Rationale:** The JIRA Response panel's only remaining purpose was showing a spinner during creation and a success state after. Ticket History already displays the "Created" badge and the created ticket entry. By adding a "Creating" indicator directly to Ticket History, the JIRA Response panel becomes fully redundant and can be removed, simplifying the right-column layout.
+
+### Changes
+
+1. **TicketHistoryPanel** — added `isCreating` prop; yellow "Creating" badge with mini spinner shown in header when creating is in progress; panel auto-opens when creation starts
+2. **App.vue** — removed `<JiraResponsePanel>` from template and its import; passed `:is-creating` prop to `<TicketHistoryPanel>`
+3. **Version bump** to v10.73
+
+| File | Change |
+|------|--------|
+| `src/components/panels/TicketHistoryPanel.vue` | Added `isCreating` prop, yellow "Creating" badge with spinner, auto-open on create |
+| `src/App.vue` | Removed JiraResponsePanel usage; pass `is-creating` to TicketHistoryPanel |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.73 |
+
+## v10.73 — Skill Router Design Doc
+
+Added bilingual (EN/ZH) design document `docs/SKILL-ROUTER-DESIGN.md` covering:
+- Full routing flow diagrams for Coach and Analyze paths
+- Layer-based skill selection with layer→role mapping
+- Keyword matching algorithm details (threshold=2, substring scan)
+- Context layer assembly (trace + skill + response format)
+- User customization guide (edit, reset, import/export, toggles)
+- Known limitations (single localStorage key, no semantic matching)
+- Future enhancement roadmap (per-layer keys, semantic matching, skill versioning, custom registry)
+
+| File | Change |
+|------|--------|
+| `docs/SKILL-ROUTER-DESIGN.md` | New — Skill Router design doc (bilingual EN/ZH) |
