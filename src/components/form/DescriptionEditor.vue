@@ -9,6 +9,8 @@
       v-model="model"
       class="input-base desc-textarea"
       :placeholder="appMode === 'explore' ? t('form.exploreDescriptionPlaceholder') : t('form.taskDescriptionPlaceholder')"
+      @focus="emit('focus')"
+      @blur="emit('blur')"
     ></textarea>
     <div class="desc-footer">
       <div class="desc-footer-left">
@@ -81,6 +83,7 @@ const props = defineProps<{
   assumptions: Assumption[]
 }>()
 
+const emit = defineEmits<{ focus: [], blur: [] }>()
 const model = defineModel<string>({ required: true })
 const { t, isZh } = useI18n()
 const { attachedFile, attach, detach, hasAttachment } = useAttachment()

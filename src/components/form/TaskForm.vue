@@ -45,7 +45,7 @@
       />
 
 
-      <DescriptionEditor v-model="form.description" :incose-violations="incoseViolations" :assumptions="assumptions" />
+      <DescriptionEditor v-model="form.description" :incose-violations="incoseViolations" :assumptions="assumptions" @focus="$emit('descFocus')" @blur="$emit('descBlur')" />
 
       <!-- Action Buttons -->
       <div class="form-actions">
@@ -201,6 +201,8 @@ defineEmits<{
   exportMarkdown: []
   exportReqIF: []
   exportExcel: []
+  descFocus: []
+  descBlur: []
 }>()
 
 const { t, isZh } = useI18n()

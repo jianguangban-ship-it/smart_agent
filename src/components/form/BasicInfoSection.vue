@@ -8,7 +8,7 @@
         <label class="field-label" for="basic-project">{{ t('form.projectName') }}</label>
         <select id="basic-project" v-model="form.projectKey" @change="$emit('projectChange')" class="input-base field-select" :class="{ 'select-placeholder': !form.projectKey }">
           <option value="" disabled>{{ t('form.selectProject') }}</option>
-          <option v-for="project in PROJECT_CONFIG" :key="project.key" :value="project.key">
+          <option v-for="project in runtimeProjects" :key="project.key" :value="project.key">
             {{ project.teamName }} ({{ project.name }})
           </option>
         </select>
@@ -68,8 +68,8 @@
 import { computed, ref } from 'vue'
 import type { FormState } from '@/types/form'
 import type { TeamMember } from '@/types/team'
-import { PROJECT_CONFIG, TEAM_MEMBERS } from '@/config/projects'
 import { TASK_TYPES } from '@/config/constants'
+import { runtimeProjects, runtimeTeamMembers } from '@/composables/useRuntimeConfig'
 import { useI18n } from '@/i18n'
 import AssigneeCombobox from './AssigneeCombobox.vue'
 import StoryPointsPicker from './StoryPointsPicker.vue'
@@ -88,9 +88,9 @@ const { t } = useI18n()
 const typeGroupRef = ref<HTMLElement>()
 const typeRoving = useRovingIndex(typeGroupRef)
 
-const teamMembers = computed<TeamMember[]>(() => (props.form.projectKey ? TEAM_MEMBERS[props.form.projectKey] : undefined) || [])
+const teamMembers = computed<TeamMember[]>(() => (props.form.projectKey ? runtimeTeamMembers.value[props.form.projectKey] : undefined) || [])
 const memberCount = computed(() => teamMembers.value.length)
-const teamName = computed(() => PROJECT_CONFIG.find(p => p.key === props.form.projectKey)?.teamName || '')
+const teamName = computed(() => runtimeProjects.value.find(p => p.key === props.form.projectKey)?.teamName || '')
 const selectedAssigneeName = computed(() => {
   if (!props.form.assignee) return ''
   return teamMembers.value.find(u => u.id === props.form.assignee)?.name || ''

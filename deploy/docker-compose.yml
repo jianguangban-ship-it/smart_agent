@@ -6,6 +6,4 @@ services:
     container_name: smart-agent
     ports:
       - "5181:5181"
-    volumes:
-      - /usr/local/smart_agent/data:/app/dist/config
     restart: unless-stopped

@@ -97,34 +97,47 @@ export const CLASSIFICATION_OPTIONS = [
 
 export const LAYER_OPTIONS = ['SYS', 'SW', 'APP', 'HW', 'ME', 'TEST', 'SWF']
 
-export const DEFAULT_COMPONENT_HISTORY = [
-  'CAN_Driver', 'LIN_Stack', 'Diag_Module', 'PWM_Controller',
-  'Flash_Manager', 'OS_Task', 'Calibration', 'CDD_MotCtrl', 'PID_Control',
-
-  // MCAL & Low Level Drivers
-  'MCAL', 'Wdg', 'Gpt', 'Dma', 'CRC', 'Crypto', 'Mem Driver', 'Eep', 'Mem',
-  'Com Drv', 'Eth', 'Spi', 'Lin', 'Fr', 'Uart', 'I2C', 'I/O Drv', 'Port', 
-  'Adc', 'Pwm', 'Icu', 'Hal',
-
-  // Interface & Hardware Abstraction Layers (HAbs)
-  'CryIf', 'Dma HAbs', 'Mem HAbs', 'Fee', 'Com HAbs', 'linIf', 'EthIf', 
-  'FrIf', 'I/O HAbs', 'Adc HAbs', 'Pwm HAbs', 'Icu HAbs', 'Spi HAbs',
-
-  // BSW Services & System Management
-  'System', 'EcuM', 'BswM', 'WdgM', 'Csm', 'Dem', 'Det', 'ComM', 
-  'Mem Service', 'Com Service', 'Dcm', 'Nm', 'Xcp', 'CanTp', 'CPD',
-
-  // Specific IC Drivers & Transceivers
-  'TLE9461', 'L9300', 'FS65', 'Gate Driver', 'L9369S', 'DRV3245', 'L9369', 
-  'Valve Driver', 'SC900719(BE13)', 'L9301', 'Switch Driver', 'CanTrsv', 
-  'TJA1145', 'FS6523',
-
-  // Complex Device Drivers & Logic
-  'Complex Sensor Ctrl', 'Complex Com Ctrl', 'Complex Logic Ctrl',
-
-  // Bootloader & Security
-  'Boot', 'HSM', 'BM', 'MBM', 'Flash Loader', 'PBL', 'FBL', 'FLD',
-
-  // Engineering & Architecture
-  'SwIntegration', 'ArchDev'
-];
+// Safety fallback only. Edit public/config/components.json or deploy/config/components.json for runtime changes.
+// Keyed by project key — each Agile Team gets its own component scope.
+export const DEFAULT_COMPONENTS_BY_PROJECT: Record<string, string[]> = {
+  // Hardware Team — IC drivers, transceivers, gate/valve drivers
+  HW: [
+    'TLE9461', 'L9300', 'L9301', 'L9369', 'L9369S', 'FS65', 'FS6523',
+    'DRV3245', 'SC900719(BE13)', 'TJA1145',
+    'Gate Driver', 'Valve Driver', 'Switch Driver', 'CanTrsv',
+    'PWM_Controller',
+  ],
+  // Software Dev Team — MCAL, BSW, HAbs, system services
+  DKKF: [
+    'MCAL', 'Wdg', 'Gpt', 'Dma', 'CRC', 'Crypto', 'Mem Driver', 'Eep', 'Mem',
+    'Com Drv', 'Eth', 'Spi', 'Lin', 'Fr', 'Uart', 'I2C', 'I/O Drv', 'Port',
+    'Adc', 'Pwm', 'Icu', 'Hal',
+    'CryIf', 'Dma HAbs', 'Mem HAbs', 'Fee', 'Com HAbs', 'linIf', 'EthIf',
+    'FrIf', 'I/O HAbs', 'Adc HAbs', 'Pwm HAbs', 'Icu HAbs', 'Spi HAbs',
+    'EcuM', 'BswM', 'WdgM', 'Csm', 'Dem', 'Det', 'Mem Service', 'Com Service',
+    'OS_Task', 'Flash_Manager',
+    'Boot', 'HSM', 'BM', 'MBM', 'Flash Loader', 'PBL', 'FBL', 'FLD',
+    'Complex Sensor Ctrl', 'Complex Com Ctrl', 'Complex Logic Ctrl',
+  ],
+  // System Team — architecture, integration
+  DKKG: ['System', 'SwIntegration', 'ArchDev', 'Calibration', 'CDD_MotCtrl', 'PID_Control'],
+  // V&V Team — test-focused; component list typically mirrors the system under test
+  DKKFT: ['System', 'MCAL', 'EcuM', 'BswM', 'Dcm', 'CanTp'],
+  // EPS Feature Team
+  SWSS: ['CDD_MotCtrl', 'PID_Control', 'Calibration'],
+  // IBC Feature Team
+  SWBS: ['CDD_MotCtrl', 'PID_Control', 'Calibration'],
+  // V&V Feature Team
+  SWVV: ['System', 'MCAL', 'EcuM', 'BswM', 'Dcm', 'CanTp'],
+  // Com&Diag Team — communication and diagnostics stack
+  SWCD: [
+    'ComM', 'Dcm', 'Nm', 'Xcp', 'CanTp', 'CPD',
+    'CAN_Driver', 'LIN_Stack', 'Diag_Module',
+  ],
+  // Suspension Feature Team
+  SWSU: ['CDD_MotCtrl', 'PID_Control', 'Calibration'],
+  // Testing & Validation teams
+  PMVSS: ['System', 'EcuM', 'BswM', 'Dcm', 'CanTp'],
+  PMVBS: ['System', 'EcuM', 'BswM', 'Dcm', 'CanTp'],
+  PMVSU: ['System', 'EcuM', 'BswM', 'Dcm', 'CanTp'],
+}

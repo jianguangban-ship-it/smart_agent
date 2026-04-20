@@ -10,6 +10,7 @@ export interface ProjectConfig {
   teamName: string
 }
 
-export type ProjectKey = 'HW' | 'DKKF' | 'DKKG' | 'DKKFT' | 'SWSS' | 'SWBS' | 'SWVV' | 'SWCD' | 'SWSU' | 'PMVSS' | 'PMVBS' | 'PMVSU'
+/** Built-in project keys (compile-time). Runtime JSON may add more. */
+export type ProjectKey = string
 
-export type TeamMembersMap = Record<ProjectKey, TeamMember[]>
+export type TeamMembersMap = Record<string, TeamMember[]>

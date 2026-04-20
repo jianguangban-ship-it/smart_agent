@@ -45,6 +45,7 @@
             :had-error="coachHadError"
             :stream-speed="coachStreamSpeed"
             :backoff-secs="coachBackoffSecs"
+            :description-focused="descFocused"
             @cancel="cancelCoach"
             @retry="handleCoachRetry"
             @apply-chip="applyCoachChip"
@@ -105,6 +106,8 @@
             @export-req-i-f="handleExportReqIF"
             @export-excel="handleExportExcel"
             @clear-error="errorMessage = ''"
+            @desc-focus="descFocused = true"
+            @desc-blur="descFocused = false"
           />
         </div>
 
@@ -204,6 +207,7 @@ import { useForm } from '@/composables/useForm'
 import { useWebhook } from '@/composables/useWebhook'
 import { useLLM, coachSkillEnabled, setCoachSkillEnabled, taskCoachEnabled } from '@/composables/useLLM'
 import { appMode, applyModeFlags } from '@/composables/useAppMode'
+import { loadRuntimeConfig } from '@/composables/useRuntimeConfig'
 import { useToast } from '@/composables/useToast'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { addTicket } from '@/composables/useTicketHistory'
@@ -336,6 +340,8 @@ const {
   requestAnalyze, cancelAnalyze, retryAnalyze, clearAnalyzeResponse,
   isDeepReview, requestDeepReview
 } = useLLM()
+
+const descFocused = ref(false)
 
 const {
   reviewStatus, currentStepIndex, checklist, checkedItems,
@@ -664,6 +670,7 @@ function handleCreateClick() {
 async function confirmCreate() {
   showConfirmModal.value = false
   errorMessage.value = ''
+  lastCreatedKey.value = ''
   const err = await createJiraTicket(buildPayload('create'))
   if (err) {
     errorMessage.value = err
@@ -709,6 +716,11 @@ async function handleCoachRequest(force = false) {
     return
   }
   errorMessage.value = ''
+  // Re-clicking Task Guidance starts a new workflow iteration — reset to Draft
+  if (appMode.value === 'task' && reviewStatus.value !== 'draft') {
+    resetWorkflow()
+    lastCreatedKey.value = ''
+  }
   const payload = buildPayload('coach')
   pendingPromptOverride.value = null  // consumed — clear so it doesn't affect anything else
   // In Explore mode, clear description and attachment immediately (acts as chat input box)
@@ -852,6 +864,7 @@ function handleReset() {
     clearAnalyzeResponse()
     clearResponsesFromStorage()
     resetWorkflow()
+    lastCreatedKey.value = ''
     clearSearch()
     startNewSession()
   }
@@ -917,7 +930,8 @@ function handleKeyboard(e: KeyboardEvent) {
 }
 
 // Lifecycle
-onMounted(() => {
+onMounted(async () => {
+  await loadRuntimeConfig()
   document.addEventListener('keydown', handleKeyboard)
   const hadDraft = restoreDraft()
   if (hadDraft) {

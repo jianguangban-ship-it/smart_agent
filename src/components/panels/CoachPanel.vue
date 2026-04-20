@@ -53,6 +53,8 @@
 
     <!-- Empty state (no messages yet, not loading) -->
     <div v-if="messages.length === 0 && !isLoading" class="empty-state">
+      <!-- ASCII globe backdrop (Explore mode only) -->
+      <AsciiGlobe v-if="appMode === 'explore'" :dimmed="descriptionFocused" />
       <!-- 429 backoff countdown -->
       <template v-if="backoffSecs > 0">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--accent-orange)">
@@ -182,6 +184,7 @@ import { useToast } from '@/composables/useToast'
 import { activeSkill, ignoredSkillId } from '@/composables/useLLM'
 import { appMode } from '@/composables/useAppMode'
 import { currentModel } from '@/config/llm'
+import AsciiGlobe from '@/components/effects/AsciiGlobe.vue'
 import PanelShell from '@/components/layout/PanelShell.vue'
 import QuickChip from '@/components/shared/QuickChip.vue'
 import ChatBubble from '@/components/chat/ChatBubble.vue'
@@ -196,6 +199,7 @@ const props = defineProps<{
   hadError: boolean
   streamSpeed: number
   backoffSecs: number
+  descriptionFocused: boolean
 }>()
 
 const emit = defineEmits<{
@@ -405,7 +409,8 @@ const chips = computed(() =>
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 32px 16px;
+  padding: 8px 16px 20px;
+  overflow: hidden;
 }
 .empty-icon {
   width: 40px;

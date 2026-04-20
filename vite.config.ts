@@ -33,7 +33,7 @@ export default defineConfig({
             return 'katex'
           }
           if (id.includes('/src/config/')) {
-            return 'config'
+            return 'config'  // fallback defaults only — runtime data loaded from /config/*.json
           }
         }
       }

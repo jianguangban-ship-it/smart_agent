@@ -14,11 +14,15 @@ vi.mock('@/i18n', () => ({
 vi.mock('@/config/projects', () => ({
   PROJECT_CONFIG: [
     { key: 'HW', name: 'Hardware', teamName: 'HW Team' }
-  ]
+  ],
+  TEAM_MEMBERS: { HW: [{ id: 'user1', name: 'User One' }] }
 }))
 
 vi.mock('@/config/constants', () => ({
-  DEFAULT_COMPONENT_HISTORY: ['CompA', 'CompB']
+  DEFAULT_COMPONENTS_BY_PROJECT: { HW: ['CompA', 'CompB'] },
+  VEHICLE_OPTIONS: [] as string[],
+  PRODUCT_OPTIONS: [] as string[],
+  LAYER_OPTIONS: [] as string[]
 }))
 
 vi.mock('@/composables/useRole', () => ({

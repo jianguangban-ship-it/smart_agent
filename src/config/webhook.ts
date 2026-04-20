@@ -2,8 +2,8 @@ import { ref, computed } from 'vue'
 import type { WebhookConfig } from '@/types/api'
 
 export const WEBHOOK_CONFIG: WebhookConfig = {
-  testUrl: 'http://10.246.107.247:5678/webhook-test/ca967bdd-a769-4073-9ad1-5044963571c4',
-  prodUrl: 'http://10.246.107.247:5678/webhook/ca967bdd-a769-4073-9ad1-5044963571c4',
+  testUrl: 'https://idcpdvvdevopsn8n.gwm.cn/webhook-test/ca967bdd-a769-4073-9ad1-5044963571c4',
+  prodUrl: 'https://idcpdvvdevopsn8n.gwm.cn/webhook/ca967bdd-a769-4073-9ad1-5044963571c4',
   timeout: 60000
 }
 

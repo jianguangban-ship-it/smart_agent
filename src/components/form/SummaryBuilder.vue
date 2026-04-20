@@ -9,21 +9,21 @@
         <label class="field-label" for="summary-vehicle">{{ t('form.vehicle') }}</label>
         <select id="summary-vehicle" v-model="summary.vehicle" class="input-base field-select" :class="{ 'select-placeholder': !summary.vehicle }">
           <option value="">{{ t('form.select') }}</option>
-          <option v-for="v in VEHICLE_OPTIONS" :key="v" :value="v">{{ v }}</option>
+          <option v-for="v in runtimeSummaryOptions.vehicles" :key="v" :value="v">{{ v }}</option>
         </select>
       </div>
       <div class="field">
         <label class="field-label" for="summary-product">{{ t('form.product') }}</label>
         <select id="summary-product" v-model="summary.product" class="input-base field-select" :class="{ 'select-placeholder': !summary.product }">
           <option value="">{{ t('form.select') }}</option>
-          <option v-for="p in PRODUCT_OPTIONS" :key="p" :value="p">{{ p }}</option>
+          <option v-for="p in runtimeSummaryOptions.products" :key="p" :value="p">{{ p }}</option>
         </select>
       </div>
       <div class="field">
         <label class="field-label" for="summary-layer">{{ t('form.layer') }}</label>
         <select id="summary-layer" v-model="summary.layer" class="input-base field-select" :class="{ 'select-placeholder': !summary.layer }">
           <option value="">{{ t('form.select') }}</option>
-          <option v-for="l in LAYER_OPTIONS" :key="l" :value="l">{{ l }}</option>
+          <option v-for="l in runtimeSummaryOptions.layers" :key="l" :value="l">{{ l }}</option>
         </select>
       </div>
       <div class="field">
@@ -92,7 +92,7 @@
 
 <script setup lang="ts">
 import type { SummaryState } from '@/types/form'
-import { VEHICLE_OPTIONS, PRODUCT_OPTIONS, LAYER_OPTIONS } from '@/config/constants'
+import { runtimeSummaryOptions } from '@/composables/useRuntimeConfig'
 import { useI18n } from '@/i18n'
 import { useToast } from '@/composables/useToast'
 import QualityMeter from './QualityMeter.vue'

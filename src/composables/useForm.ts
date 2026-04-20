@@ -1,8 +1,6 @@
 import { reactive, ref, computed, watch } from 'vue'
 import type { FormState, SummaryState } from '@/types/form'
-import type { ProjectKey } from '@/types/team'
-import { PROJECT_CONFIG } from '@/config/projects'
-import { DEFAULT_COMPONENT_HISTORY } from '@/config/constants'
+import { runtimeProjects, runtimeComponentsByProject } from '@/composables/useRuntimeConfig'
 import { useI18n } from '@/i18n'
 import { currentRole, setRole } from '@/composables/useRole'
 import type { UserRole } from '@/composables/useRole'
@@ -36,7 +34,17 @@ export function useForm() {
     detail: ''
   })
 
-  const componentHistory = ref<string[]>([...DEFAULT_COMPONENT_HISTORY])
+  // Session-level additions (components the user typed during this session).
+  // Scoped per project so different teams don't cross-pollinate each other's history.
+  const sessionAddedComponents = reactive<Record<string, string[]>>({})
+
+  const componentHistory = computed<string[]>(() => {
+    const key = form.projectKey
+    if (!key) return []
+    const base = runtimeComponentsByProject.value[key] ?? []
+    const session = sessionAddedComponents[key] ?? []
+    return [...session, ...base.filter(c => !session.includes(c))]
+  })
 
   // Computed summary string
   const computedSummary = computed(() => {
@@ -200,7 +208,7 @@ export function useForm() {
 
   // Get current project name
   function getProjectName(): string {
-    return PROJECT_CONFIG.find(p => p.key === form.projectKey)?.name || ''
+    return runtimeProjects.value.find(p => p.key === form.projectKey)?.name || ''
   }
 
   // Reset form
@@ -222,10 +230,14 @@ export function useForm() {
     localStorage.removeItem(DRAFT_KEY)
   }
 
-  // Add component to history
+  // Add component to this session's history for the currently selected project.
+  // Persistent changes should go to public/config/components.json or deploy/config/components.json.
   function addComponentToHistory(comp: string) {
-    if (comp && !componentHistory.value.includes(comp)) {
-      componentHistory.value.unshift(comp)
+    const key = form.projectKey
+    if (!key || !comp) return
+    if (!sessionAddedComponents[key]) sessionAddedComponents[key] = []
+    if (!sessionAddedComponents[key].includes(comp)) {
+      sessionAddedComponents[key].unshift(comp)
     }
   }
 

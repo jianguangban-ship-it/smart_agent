@@ -596,6 +596,19 @@ AI 审核后，表单显示**角色特定检查清单**，每个角色有 **3 �
 
 Check off each item as you review. When all items are checked, click **Approve** to advance the status.
 
+### Restarting the Workflow / 重启工作流
+
+The workflow resets to **Draft** in two situations:
+
+| Trigger | What resets |
+|---------|-------------|
+| **Re-click "Task Guidance"** | Workflow returns to Draft; Ticket History "Created" badge clears. The form fields are preserved so you can iterate on the same content. 工作流回到草稿；工单历史"已创建"标记清除。表单字段保留，便于迭代。 |
+| **Click "Reset"** | Workflow returns to Draft; form fields, all AI responses, and Ticket History badge are all cleared. 工作流回到草稿；表单、所有 AI 响应及工单历史标记全部清除。 |
+
+> **Tip:** After creating a JIRA ticket, clicking **Task Guidance** again lets you refine and re-create without manually resetting — the workflow automatically restarts.
+>
+> **提示：** 创建 JIRA 工单后，再次点击**任务指导**可直接优化并重新创建，无需手动重置——工作流会自动重启。
+
 ---
 
 ## 13. JIRA Search / JIRA 搜索

@@ -4457,3 +4457,164 @@ Added bilingual (EN/ZH) design document `docs/SKILL-ROUTER-DESIGN.md` covering:
 | File | Change |
 |------|--------|
 | `docs/SKILL-ROUTER-DESIGN.md` | New — Skill Router design doc (bilingual EN/ZH) |
+
+## v10.74 — Fix "Creating" badge not showing on second JIRA creation
+
+**Rationale:** After the first successful JIRA creation, `lastCreatedKey` was set to the ticket key but never reset before the next creation. The TicketHistoryPanel's creating badge condition (`isCreating && !lastCreatedKey`) evaluated to `false` on subsequent creates because `lastCreatedKey` still held the previous ticket's key.
+
+### Changes
+
+1. **App.vue** — reset `lastCreatedKey` to `''` at the start of `confirmCreate()`, before the webhook call, so the creating badge condition works on every creation attempt
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | Reset `lastCreatedKey` before `createJiraTicket()` call |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.74 |
+
+## v10.75 — Reset workflow when re-clicking "Task Guidance"; clear lastCreatedKey on Reset
+
+**Rationale:** The five-step workflow (Draft → AI Reviewed → Peer Reviewed → Approved → JIRA Created) should restart when the user clicks "Task Guidance" again, since that signals a new coaching iteration. Previously the workflow step stayed at its old value (e.g. "Approved" or "JIRA Created") even after re-coaching. Additionally, the Reset button did not clear `lastCreatedKey`, leaving a stale green "Created" badge in the Ticket History panel after reset.
+
+### Changes
+
+1. **App.vue / `handleCoachRequest()`** — when in Task mode and workflow has advanced past "Draft", reset the workflow back to "Draft" and clear `lastCreatedKey` before requesting new coaching
+2. **App.vue / `handleReset()`** — clear `lastCreatedKey` alongside `resetWorkflow()` so the Ticket History badge fully resets
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | Reset workflow + `lastCreatedKey` on re-coach in task mode; clear `lastCreatedKey` on reset |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.75 |
+
+## v10.76 — Docker deployment fixes
+
+**Rationale:** The existing Dockerfile and docker-compose.yml were functional but had minor issues: no health check for container monitoring, no container name for easier management, and `.dockerignore` was missing entries that bloated the build context.
+
+### Changes
+
+1. **Dockerfile** — add `--ignore-scripts` to `npm ci` for safer installs; add `HEALTHCHECK` instruction for container health monitoring
+2. **docker-compose.yml** — add `container_name: smart-agent` for easier container management
+3. **.dockerignore** — exclude `.claude/`, `docs/`, `*.md`, `*.stackdump`, `*.xmind` to reduce build context size
+
+| File | Change |
+|------|--------|
+| `Dockerfile` | Add `--ignore-scripts`, add `HEALTHCHECK` |
+| `docker-compose.yml` | Add `container_name` |
+| `.dockerignore` | Exclude docs, markdown, and dev artifacts |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.76 |
+
+## v10.77
+
+**Rationale:** The AI Chat panel's empty state in Explore Mode felt static and lifeless. Adding a rotating ASCII globe animation (inspired by aemkei's "World in 1024 bytes" demo) as a rising backdrop gives Explore Mode a distinct, techy visual identity. The globe rises from the bottom with a gradient mask creating a "horizon" effect, and gracefully fades + slides down when the user focuses the description editor.
+
+### Changes
+
+1. **AsciiGlobe.vue** — new self-contained component rendering a rotating ASCII Earth using requestAnimationFrame, with continent bitmap, sphere projection, Y-axis rotation, and diffuse lighting
+2. **CoachPanel.vue** — integrated globe as a positioned backdrop in Explore Mode empty state; added `descriptionFocused` prop for fade-on-focus behavior
+3. **DescriptionEditor.vue** — added focus/blur event emitters on the textarea
+4. **TaskForm.vue** — bubbles descFocus/descBlur events from DescriptionEditor to parent
+5. **App.vue** — wires descFocused reactive ref between TaskForm and CoachPanel
+
+| File | Change |
+|------|--------|
+| `src/components/effects/AsciiGlobe.vue` | **NEW** — ASCII globe animation component |
+| `src/components/panels/CoachPanel.vue` | Add globe backdrop, `descriptionFocused` prop, z-index layering |
+| `src/components/form/DescriptionEditor.vue` | Add focus/blur emits on textarea |
+| `src/components/form/TaskForm.vue` | Bubble descFocus/descBlur events |
+| `src/App.vue` | Wire descFocused ref, pass as prop |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.77 |
+
+---
+
+## v10.78 — Runtime-configurable Task Mode (no rebuild required)
+
+**Design rationale:** The team (~250 members across 12 projects) frequently onboards new staff. Previously, updating the team member list, vehicle options, or other Task Mode dropdowns required recompiling the entire app. This change externalizes Basic Information and Task Summary config into JSON files served as static assets. Ops can now update `deploy/config/*.json` and refresh — no Docker rebuild needed.
+
+**Approach:** Vite copies `public/config/` verbatim into `dist/config/`. A new `useRuntimeConfig` composable fetches the 3 JSON files at app startup via `fetch()`, falling back to hardcoded defaults if the fetch fails (offline/missing files).
+
+### Changes
+
+1. **3 external JSON config files** in `public/config/`:
+   - `projects.json` — project list (name, key, teamName)
+   - `team-members.json` — team members grouped by project key
+   - `summary-options.json` — vehicles, products, layers, components
+2. **`useRuntimeConfig.ts`** — composable that loads JSON at startup with fallback to hardcoded defaults
+3. **`BasicInfoSection.vue`** — swapped `PROJECT_CONFIG`/`TEAM_MEMBERS` imports to `runtimeProjects`/`runtimeTeamMembers`
+4. **`SummaryBuilder.vue`** — swapped `VEHICLE_OPTIONS`/`PRODUCT_OPTIONS`/`LAYER_OPTIONS` to `runtimeSummaryOptions`
+5. **`useForm.ts`** — swapped `PROJECT_CONFIG` and `DEFAULT_COMPONENT_HISTORY` to runtime refs
+6. **`App.vue`** — calls `loadRuntimeConfig()` in `onMounted`
+7. **`docker-compose.yml`** — added `volumes: ./deploy/config:/app/dist/config` for hot-swap
+8. **`types/team.ts`** — relaxed `ProjectKey` to `string` for dynamic JSON keys
+9. **`deploy/config/`** — seed JSON files for Docker volume mount
+
+### How to update config in Docker (no rebuild)
+
+```bash
+# Edit the JSON file on the host
+vi deploy/config/team-members.json
+
+# The volume mount makes it immediately available in the container
+# Users just refresh their browser — done
+```
+
+| File | Change |
+|------|--------|
+| `public/config/projects.json` | **NEW** — externalized project list |
+| `public/config/team-members.json` | **NEW** — externalized team members |
+| `public/config/summary-options.json` | **NEW** — externalized vehicle/product/layer/component options |
+| `src/composables/useRuntimeConfig.ts` | **NEW** — runtime JSON loader with fallback |
+| `src/types/team.ts` | Relaxed `ProjectKey` to `string` |
+| `src/components/form/BasicInfoSection.vue` | Use runtime config refs |
+| `src/components/form/SummaryBuilder.vue` | Use runtime config refs |
+| `src/composables/useForm.ts` | Use runtime config refs |
+| `src/App.vue` | Load runtime config at startup |
+| `docker-compose.yml` | Added config volume mount |
+| `deploy/config/*.json` | **NEW** — seed files for Docker volume |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.78 |
+
+---
+
+## v10.79 — Per-team components + hardened runtime config
+
+**Design rationale:** v10.78 made projects/team/summary/components externally configurable, but (a) the `components` list was a single flat array shared across all Agile Teams, so HW engineers saw MCAL/BSW entries and SW engineers saw gate-driver chips; (b) the runtime loader silently fell back on malformed or missing JSON, giving operators no signal; (c) browsers aggressively cached `/config/*.json`, so edits + container restart didn't reliably reach users until a hard refresh. This revision fixes all three and commits the deployment infrastructure that had been sitting as untracked scaffolding.
+
+**Approach — per-team component scoping.** Components are now keyed by project key in their own file (`components.json`), mirroring the shape of `team-members.json`. When a user selects a project in Basic Info, `useForm.componentHistory` becomes a `computed` that reads `runtimeComponentsByProject.value[projectKey]`. Session-added components (user-typed entries confirmed by coach/analyze/create) now accumulate in a per-project session map rather than a single flat list, so teams don't pollute each other's suggestions. Legacy drafts still display whatever value is saved — only the suggestion datalist is filtered.
+
+**Approach — hardening.** `useRuntimeConfig.ts` now: appends `?v=${Date.now()}` cache-buster to each fetch URL so container restart + next load always reaches the new JSON; runs a lightweight shape validator per file before replacing fallbacks; exposes `runtimeConfigStatus` with per-file `runtime|fallback|invalid|pending` state so operators can see exactly which files loaded; and emits structured `[runtime-config]` warnings naming the file, HTTP status, and validation reason. No new dependencies.
+
+### Changes
+
+1. **`src/config/constants.ts`** — replaced flat `DEFAULT_COMPONENT_HISTORY: string[]` with `DEFAULT_COMPONENTS_BY_PROJECT: Record<string, string[]>` bucketed by obvious team ownership (HW → IC drivers, DKKF → MCAL/BSW/HAbs/boot, SWCD → Dcm/Nm/Xcp, etc.). Added safety-fallback header comment.
+2. **`src/composables/useRuntimeConfig.ts`** — added 4th fetch for `components.json`; removed `components` from `SummaryOptions` interface; added `runtimeComponentsByProject` export; added `?v=timestamp` cache-busting; added per-file shape validators; added `runtimeConfigStatus` ref with `'pending'|'runtime'|'fallback'|'invalid'`; added structured console logging naming file + reason.
+3. **`src/composables/useForm.ts`** — `componentHistory` is now a `computed` keyed by `form.projectKey`; `addComponentToHistory` accumulates into a per-project session map so different teams don't share each other's suggestions.
+4. **`public/config/components.json` + `deploy/config/components.json`** — NEW per-team component maps (mirror of fallback in constants.ts).
+5. **`public/config/summary-options.json` + `deploy/config/summary-options.json`** — removed the `components` key (moved to `components.json`).
+6. **`deploy/config/README.md`** — NEW operator doc: per-file purpose + schemas, edit workflow, key-match invariant, validation failure console messages.
+7. **`docs/MANUAL_TEST_GUIDE.md`** — NEW section 36 "Runtime Config Hot-Swap (Docker)" covering per-team filter, hot-swap round trip, and validation failure paths.
+
+### How to update config in Docker (unchanged from v10.78, more reliable now)
+
+```bash
+# 1. Edit the JSON on the host
+vi deploy/config/components.json
+
+# 2. Restart the container so it serves the new file
+docker compose restart smart-agent
+
+# 3. Users reload — cache-bust query ensures they get the fresh JSON
+#    (hard refresh no longer required)
+```
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/config/constants.ts` | `DEFAULT_COMPONENT_HISTORY` → `DEFAULT_COMPONENTS_BY_PROJECT` |
+| `src/composables/useRuntimeConfig.ts` | Add components fetch, cache-bust, validation, per-file status, structured logging |
+| `src/composables/useForm.ts` | `componentHistory` computed per project; session additions scoped per project |
+| `public/config/components.json` | **NEW** — per-team component map |
+| `public/config/summary-options.json` | Remove `components` key |
+| `deploy/config/components.json` | **NEW** — per-team component map (runtime mount) |
+| `deploy/config/summary-options.json` | Remove `components` key |
+| `deploy/config/README.md` | **NEW** — operator edit workflow + schemas |
+| `docs/MANUAL_TEST_GUIDE.md` | **NEW** section 36 hot-swap tests |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.79 |

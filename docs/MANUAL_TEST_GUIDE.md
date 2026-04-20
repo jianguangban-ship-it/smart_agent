@@ -2,7 +2,7 @@
 
 > **Format**: Each test case follows **Input → Action → Expected Output**.
 > **Prerequisites**: Run `npm run dev` and open the app in a browser.
-> Mark each case ✅ PASS or ❌ FAIL as you go.
+> Mark each case PASS PASS or FAIL FAIL as you go.
 
 ---
 
@@ -282,11 +282,11 @@
 
 | Violation | Severity | Penalty | Trigger | Bilingual? |
 |-----------|----------|---------|---------|------------|
-| **Unambiguous** | Warning | −3 pts | Vague words: `approximately`, `sufficient`, `flexible`, `etc.`; ZH: `适当`, `大约`, `等等` | ✅ |
-| **Complete** | Error | −5 pts | Placeholder: `TBD`, `TBC`, `TODO`, `FIXME`; ZH: `待定`, `待确认`, `未定义` | ✅ |
-| **Atomic** | Warning | −3 pts | `and shall` / `or shall`, or `shall/must/should` ≥ 3× | ❌ EN only |
-| **Verifiable** | Warning | −3 pts | Description ≥ 80 chars with no number+unit or threshold operator | ❌ EN only |
-| **Traceable** | Warning | −3 pts | Description ≥ 100 chars with no requirement ID or source reference | ❌ EN only |
+| **Unambiguous** | Warning | −3 pts | Vague words: `approximately`, `sufficient`, `flexible`, `etc.`; ZH: `适当`, `大约`, `等等` | PASS |
+| **Complete** | Error | −5 pts | Placeholder: `TBD`, `TBC`, `TODO`, `FIXME`; ZH: `待定`, `待确认`, `未定义` | PASS |
+| **Atomic** | Warning | −3 pts | `and shall` / `or shall`, or `shall/must/should` ≥ 3× | FAIL EN only |
+| **Verifiable** | Warning | −3 pts | Description ≥ 80 chars with no number+unit or threshold operator | FAIL EN only |
+| **Traceable** | Warning | −3 pts | Description ≥ 100 chars with no requirement ID or source reference | FAIL EN only |
 
 Penalty capped at −15 pts. Thresholds: ≥ 80% "Excellent" (green), ≥ 50% "Good" (orange), > 0% "Incomplete" (red), 0% "Empty" (gray).
 
@@ -851,6 +851,24 @@ For a fast end-to-end pass, complete these steps in order:
 | 20 | Refresh page → draft restored | ☐ |
 | 21 | Reset form → all fields cleared | ☐ |
 | 22 | Check DevTools → Agent State is accurate | ☐ |
+
+---
+
+## 36. Runtime Config Hot-Swap (Docker)
+
+Validates that **Basic Info** and **Task Summary** options can be updated by editing `deploy/config/*.json` and restarting the container — no image rebuild.
+
+| # | Input | Action | Expected Output |
+|---|-------|--------|-----------------|
+| 36.1 | Fresh container up (`docker compose up -d --build`) | Open app, open DevTools console | One line: `[runtime-config] loaded: projects=runtime, team=runtime, summary=runtime, components=runtime`. |
+| 36.2 | App open, no project selected | Inspect Task Summary Component field | Datalist suggestions empty. |
+| 36.3 | Basic Info → pick project **HW (Hardware Team)** | Focus Component input | Suggestions include HW chips (TLE9461, L9369, Gate Driver); **no MCAL/BSW entries**. |
+| 36.4 | Still on HW | Switch project to **DKKF (Software Dev Team)** | Component suggestions switch to MCAL/BSW stack; HW driver chips gone. |
+| 36.5 | Shell on host | `echo a new component into deploy/config/components.json under "HW" key`, save | File valid JSON. |
+| 36.6 | After edit | `docker compose restart smart-agent` | Container healthy again. |
+| 36.7 | Browser | Reload page (no hard refresh needed — fetch URL carries `?v=<timestamp>`) | New component appears in HW dropdown. Console shows `components=runtime`. |
+| 36.8 | Put deliberately malformed JSON into `deploy/config/components.json` | `docker compose restart smart-agent`, reload | Console: `[runtime-config] /config/components.json: ... — using fallback`. Component dropdown still populates from baked-in fallback. |
+| 36.9 | Rename `deploy/config/components.json` to `components.bak.json` | Restart + reload | Console: `[runtime-config] /config/components.json: HTTP 404 — using fallback`. Fallback still works. |
 
 ---
 
