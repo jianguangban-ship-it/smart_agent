@@ -1,6 +1,6 @@
 <template>
   <div class="app">
-    <AppHeader @open-settings="showSettingsModal = true" />
+    <AppHeader :is-ai-busy="isAiBusy" @open-settings="showSettingsModal = true" />
 
     <!-- Settings Modal -->
     <LLMSettings v-model="showSettingsModal" @saved="onSettingsSaved" />
@@ -394,6 +394,9 @@ watch(showConfirmModal, (open) => {
 // Shims so TaskForm buttons reflect both JIRA-submitting and LLM-analyzing states
 const formIsSubmitting = computed(() => isSubmitting.value || isAnalyzeLoading.value)
 const formCurrentAction = computed(() => isAnalyzeLoading.value ? 'analyze' : currentAction.value)
+
+// Drives the breathing glow on AppHeader's bottom border while AI is streaming
+const isAiBusy = computed(() => isCoachLoading.value || isAnalyzeLoading.value)
 
 // Per-mode coach submit guard
 const canCoachSubmit = computed(() => {
@@ -952,9 +955,9 @@ onUnmounted(() => {
   flex-direction: column;
 }
 .app-main {
-  max-width: clamp(1200px, 95vw, 3600px);
+  max-width: clamp(1200px, 98vw, 3600px);
   margin: 0 auto;
-  padding: var(--space-6);
+  padding: var(--space-6) var(--space-1);
   flex: 1;
   width: 100%;
 }

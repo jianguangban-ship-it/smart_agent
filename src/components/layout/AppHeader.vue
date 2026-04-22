@@ -1,5 +1,5 @@
 <template>
-  <header class="app-header">
+  <header class="app-header" :class="{ 'is-ai-busy': isAiBusy }">
     <div class="header-left">
       <div class="traffic-lights">
         <span class="dot red"></span>
@@ -8,7 +8,7 @@
       </div>
       <h1 v-if="currentLang === 'en'" class="header-title"><span class="logo-a">A</span><span class="logo-g">G</span><span class="logo-ec">ec</span></h1>
       <h1 v-else class="header-title">{{ t('header.title') }}</h1>
-      <span class="header-version">v10.79</span>
+      <span class="header-version">v10.82</span>
     </div>
     <div class="header-right">
       <!-- Mode Switcher -->
@@ -107,6 +107,7 @@ const { t, setLang, currentLang, isZh } = useI18n()
 const isProd = useProductionMode
 const { isDark, toggleTheme } = useTheme()
 
+defineProps<{ isAiBusy?: boolean }>()
 defineEmits<{ openSettings: [] }>()
 
 function openHelp() {
@@ -117,12 +118,49 @@ function openHelp() {
 
 <style scoped>
 .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
   padding: var(--space-3) var(--space-6);
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.app-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  pointer-events: none;
+  background: var(--accent-blue);
+  box-shadow: 0 0 0 0 rgba(88, 166, 255, 0);
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.app-header.is-ai-busy::after {
+  opacity: 1;
+  animation: headerBreathe 2.4s ease-in-out infinite;
+}
+@keyframes headerBreathe {
+  0%, 100% {
+    box-shadow: 0 0 6px 1px rgba(88, 166, 255, 0.35);
+    opacity: 0.55;
+  }
+  50% {
+    box-shadow: 0 0 18px 3px var(--accent-blue);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-header.is-ai-busy::after {
+    animation: none;
+    opacity: 0.8;
+    box-shadow: 0 0 12px 2px var(--accent-blue);
+  }
 }
 .header-left {
   display: flex;

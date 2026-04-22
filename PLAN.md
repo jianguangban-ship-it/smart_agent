@@ -4618,3 +4618,64 @@ docker compose restart smart-agent
 | `deploy/config/README.md` | **NEW** — operator edit workflow + schemas |
 | `docs/MANUAL_TEST_GUIDE.md` | **NEW** section 36 hot-swap tests |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.79 |
+
+---
+
+## v10.80 — Breathing glow on header border while AI is responding
+
+**Design rationale:** The 1px line between `header.app-header` and `main.app-main` is a deliberate hierarchy cue we want to keep, but while the user is waiting for an LLM stream, the app currently gives no passive, full-window indication that "something is happening." Spinners live inside their own panels and are easy to miss at a glance. Animating the existing header border with a soft breathing glow gives the entire app a calm, peripheral "AI is thinking" signal that doesn't block interaction and doesn't add new chrome. The glow fades in the instant either "Task Guidance" or "Analyze Task" kicks off a stream, and fades out the moment the stream ends (including on error, because the loading flags are cleared in `useLLM.ts`'s `finally` block).
+
+**Approach.** A single boolean `isAiBusy = isCoachLoading || isAnalyzeLoading` is computed in `App.vue` and passed as a prop to `AppHeader.vue`. The header renders a pseudo-element (`::after`) aligned to the existing border (`bottom: -1px`, `height: 1px`) whose `box-shadow` animates via a new `@keyframes headerBreathe` (2.4s ease-in-out, infinite) using `--accent-blue`. The 1px border itself is unchanged; only the pseudo-element's glow animates. `prefers-reduced-motion: reduce` replaces the animation with a static faint shadow so the cue still reads without motion.
+
+### Changes
+
+1. **`src/App.vue`** — added `const isAiBusy = computed(() => isCoachLoading.value || isAnalyzeLoading.value)` and passed `:is-ai-busy="isAiBusy"` to `<AppHeader>`. No new imports needed (`isCoachLoading` / `isAnalyzeLoading` are already destructured from `useLLM()`).
+2. **`src/components/layout/AppHeader.vue`** — added `defineProps<{ isAiBusy?: boolean }>()`; bound `:class="{ 'is-ai-busy': isAiBusy }"` on the `<header>`; added `position: relative` to `.app-header`, `::after` pseudo-element scoped to the bottom edge, `@keyframes headerBreathe`, and a `prefers-reduced-motion` fallback. Existing `border-bottom: 1px solid var(--border-color)` left untouched.
+3. **Version bump** — `v10.79` → `v10.80`.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | Added `isAiBusy` computed and passed to `<AppHeader>` |
+| `src/components/layout/AppHeader.vue` | `isAiBusy` prop, class binding, `::after` pseudo-element, `headerBreathe` keyframe, reduced-motion fallback, version bump to v10.80 |
+
+---
+
+## v10.81 — Sticky header stays visible when scrolling
+
+**Design rationale:** The header contains the mode switcher, language toggle, TEST/PROD indicator, theme toggle, help, and settings — all controls users reach for in the middle of a session. When long AI-chat transcripts, long analysis output, or a long task description overflow the viewport, the whole page scrolls and the header disappears, forcing users to scroll back up to change mode or reach settings. Pinning the header to the top keeps those controls (and the new breathing-glow AI-busy indicator) continuously visible. The app already scrolls at the document level (`.app` is `min-height: 100vh` with no internal scroll container), so `position: sticky; top: 0` was enough — no layout rework required.
+
+**Approach.** Changed `.app-header`'s `position: relative` to `position: sticky; top: 0; z-index: 100`. The existing `position: relative` was only there to anchor the breathing-glow `::after` pseudo-element, and `position: sticky` is also a containing block for absolutely-positioned descendants, so the glow continues to sit on the border exactly as before. `z-index: 100` is comfortably above the drag-handle (`z-index: 10`) and well below the confirmation modal (`z-index: 5000`).
+
+### Changes
+
+1. **`src/components/layout/AppHeader.vue`** — `.app-header` now `position: sticky; top: 0; z-index: 100` (replacing `position: relative`). All other styles unchanged. Version bump to v10.81.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/layout/AppHeader.vue` | `position: relative` → `position: sticky; top: 0; z-index: 100`; version bump to v10.81 |
+
+---
+
+## v10.82 — Maximize column width, minimize outer gutter
+
+**Design rationale:** The three-column grid (AI Coach / Task Form / Tools) was sitting inside an `.app-main` with `padding: var(--space-6)` (≈18–32px) on all sides and `max-width: 95vw`, leaving a visible empty gutter of 40–60px on each side even on widescreen monitors. That wasted horizontal real estate — the left column (AI Coach) and the right column (Tools) were the most squeezed, especially in bilingual contexts where Chinese labels need more room. This change reclaims that horizontal space so the columns can breathe while keeping top/bottom rhythm intact for the sticky header and form sections.
+
+**Approach.** Split `.app-main` padding into vertical and horizontal halves: vertical stays at `var(--space-6)` (preserves the comfortable gap under the sticky header and above the fold), horizontal drops to `var(--space-1)` (≈3–6px — essentially a hairline gutter so the columns don't touch the viewport edge). Bumped `max-width` from `clamp(1200px, 95vw, 3600px)` to `clamp(1200px, 100vw, 3600px)` so mid-range screens (1280–3600px) get the full viewport width rather than the 95vw cap, gaining ~2.5vw per side. The 3600px upper clamp is preserved so ultra-wide monitors (4K/5K) still get a sensible max.
+
+The change is symmetric — both the left column (`.col-left`) and the right column (`.col-right`) gain width by the same amount, addressing the user's ask that the right column also benefit.
+
+### Changes
+
+1. **`src/App.vue`** — `.app-main` padding `var(--space-6)` → `var(--space-6) var(--space-1)`; `max-width` `clamp(1200px, 95vw, 3600px)` → `clamp(1200px, 100vw, 3600px)`.
+2. **Version bump** — `v10.81` → `v10.82`.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | `.app-main` horizontal padding cut from `--space-6` to `--space-1`; `max-width` middle clamp 95vw → 100vw |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.82 |
