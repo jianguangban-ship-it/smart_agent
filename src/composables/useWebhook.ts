@@ -3,6 +3,26 @@ import type { WebhookPayload, ActionType } from '@/types/api'
 import { WEBHOOK_CONFIG, webhookUrl } from '@/config/webhook'
 import { useI18n } from '@/i18n'
 
+const MAX_DETAIL_LEN = 400
+
+function extractErrorDetail(body: string): string {
+  if (!body) return ''
+  try {
+    const parsed = JSON.parse(body)
+    const msg =
+      parsed?.message ??
+      parsed?.error?.message ??
+      parsed?.error ??
+      parsed?.hint ??
+      ''
+    const text = typeof msg === 'string' ? msg : JSON.stringify(msg)
+    if (text) return text.slice(0, MAX_DETAIL_LEN)
+  } catch {
+    // not JSON; fall through
+  }
+  return body.trim().slice(0, MAX_DETAIL_LEN)
+}
+
 export function useWebhook() {
   const { t } = useI18n()
 
@@ -24,11 +44,14 @@ export function useWebhook() {
 
       clearTimeout(timeoutId)
 
+      const responseText = await response.text()
+
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        const detail = extractErrorDetail(responseText)
+        const base = `HTTP ${response.status}: ${response.statusText}`
+        throw new Error(detail ? `${base} — ${detail}` : base)
       }
 
-      const responseText = await response.text()
       if (!responseText || responseText.trim() === '') {
         throw new Error(t('error.emptyResponse'))
       }

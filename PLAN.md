@@ -4679,3 +4679,68 @@ The change is symmetric — both the left column (`.col-left`) and the right col
 |------|--------|
 | `src/App.vue` | `.app-main` horizontal padding cut from `--space-6` to `--space-1`; `max-width` middle clamp 95vw → 100vw |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.82 |
+
+---
+
+## v10.83 — Surface n8n error body on webhook failure
+
+**Design rationale:** When the n8n webhook returned a non-OK status (most often 500 from a node throwing inside the workflow, or 404 when the test webhook isn't in listen mode), the UI showed only `HTTP 500: Internal Server Error` with no further detail. n8n itself almost always includes a useful message in the response body — the failing node, the JIRA field that was rejected, or the auth issue — but `useWebhook.ts` was discarding the body before reading it. Users had to open the n8n editor's Executions tab to figure out what actually broke. This change reads the body unconditionally, extracts a human-readable message, and appends it to the thrown error so the existing toast / error UI surfaces the real cause without any other code change.
+
+**Approach.** Moved `await response.text()` above the `response.ok` check so the body is captured for both success and failure paths. Added a small `extractErrorDetail` helper that tries `JSON.parse` first and pulls the most likely message field (`message`, `error.message`, `error`, `hint`), falls back to raw text if the body isn't JSON, and caps output at 400 chars so a stray HTML error page can't flood the toast. Empty bodies leave the message identical to before, so this is purely additive — no existing error path changes shape.
+
+The success path is unchanged: `responseText` was already being read after the OK check, so moving the read upward only shifts the order of two awaits. `response.text()` consumes the body stream once, which is fine because the OK branch already only reads it once.
+
+### Changes
+
+1. **`src/composables/useWebhook.ts`** — added module-scoped `extractErrorDetail(body)` helper (JSON-first with field priority `message → error.message → error → hint`, raw-text fallback, 400-char cap). In `sendRequest`, moved `const responseText = await response.text()` above the `!response.ok` check; the error branch now throws `` `HTTP ${status}: ${statusText} — ${detail}` `` when a detail can be extracted, and the original `HTTP …` form when the body is empty.
+2. **`src/components/layout/AppHeader.vue`** — version bump to v10.83.
+
+### Why this is safe
+
+- No new i18n keys: n8n's own message is typically already English (or whatever the operator wrote in the workflow); wrapping it in a translated template would obscure the real text. The surrounding labels (`HTTP 500: Internal Server Error`) come from the browser's `statusText`, which is already locale-neutral.
+- No change to the OK path or the existing `emptyResponse` / `timeout` / `connectionFailed` / `Failed to fetch` branches.
+- 400-char cap defends against pathological HTML error pages (corporate proxy intercepts, gateway 502 pages) without truncating realistic n8n / JIRA error JSON.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/composables/useWebhook.ts` | Read response body before status check; new `extractErrorDetail` helper; error message appends extracted detail |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.83 |
+
+---
+
+## v10.84 — Enrich `data.assignee` with displayName
+
+**Design rationale:** `data.assignee` was sent as a flat ID string (`"GW00322181"`). That works for the JIRA REST call inside the n8n workflow but is opaque everywhere else — workflow logs show only the ID, branching nodes can't render or route on the human-readable name, and the Slack/email formatting nodes had to do a second lookup. The team-members config (`public/config/team-members.json`) and `BasicInfoSection.vue:94-97` already pair every ID with its displayName for the UI label, so the data is right there. This change widens the wire shape to a nested `{ name, displayName }` object aligned with the JIRA Server / Data Center user-object convention so the n8n workflow can either pass it through to JIRA Server unchanged or pick whichever field it needs.
+
+**Approach.** Form state stays as-is — `form.assignee` remains the bare ID — and the resolution lives at payload-construction time. A small `buildAssignee()` helper in `App.vue` looks up the selected member in `runtimeTeamMembers.value[form.projectKey]` (same lookup pattern already used by `BasicInfoSection.vue` for the dropdown label) and returns `{ name, displayName }`, or `undefined` when no assignee is selected so the key drops out of the JSON entirely (matching the existing `parent_req_id || undefined` style on adjacent lines). Both `buildPayload` call sites (analyze/create branch and coach/preview task-mode branch) call the helper.
+
+The `name` ↔ ID + `displayName` ↔ human-name pairing was chosen over `id` / `accountId` alternatives to match JIRA Server/DC's user-object schema so the n8n workflow can forward `data.assignee` straight to a Server REST call without renaming.
+
+### Breaking change — n8n must be updated in lockstep
+
+This rewrites the wire shape. Any n8n node that previously read `{{ $json.data.assignee }}` as a string must now read `{{ $json.data.assignee.name }}` (or `.displayName`). Both the **test** webhook (`/webhook-test/...`) and the **production** webhook (`/webhook/...`) workflows in `idcpdvvdevopsn8n.gwm.cn` need to be updated before users hit Create JIRA on this version, otherwise the call will fail (likely surfacing as the v10.83-style `HTTP 500: Internal Server Error — <node error>` — useful, since the v10.83 work means n8n's actual error message now reaches the toast).
+
+### Changes
+
+1. **`src/types/api.ts`** — `WebhookPayload['data'].assignee` widened from `string` to `{ name: string; displayName: string }` (still optional).
+2. **`src/composables/useRuntimeConfig.ts`** — no change; existing `runtimeTeamMembers` export reused.
+3. **`src/App.vue`** — added `runtimeTeamMembers` to the existing `useRuntimeConfig` import. New `buildAssignee()` helper just above `buildPayload`. Replaced `assignee: form.assignee` at both `buildPayload` call sites (analyze/create branch and coach/preview task-mode branch) with `assignee: buildAssignee()`. The existing `watch` block already lists `() => form.assignee` as a dependency, so the DevTools live preview re-renders correctly.
+4. **`src/components/layout/AppHeader.vue`** — version bump to v10.84.
+
+### Why form state stays a string
+
+Keeping `form.assignee` as a bare ID avoids two pitfalls: (a) when `runtimeTeamMembers` reloads after a Docker hot-swap, the cached displayName in form state would become stale; resolving at payload-build time always reads the current map. (b) The combobox emits only `user.id` today (`AssigneeCombobox.vue:86-89`), and the `useForm.test.ts` suite asserts on `form.assignee = 'user1'` as a string. Widening form state would ripple through both places for no benefit.
+
+### Empty assignee
+
+When the user hasn't selected anyone, `buildAssignee()` returns `undefined`, so JSON.stringify drops the `assignee` key entirely. This is a minor improvement over the previous behavior (`assignee: ""` was sent on every preview/coach call when the field was blank). Matches how `parent_req_id`, `verification_method`, and `requirement_level` already handle their empty cases on lines 430-432.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/types/api.ts` | `assignee?: string` → `assignee?: { name: string; displayName: string }` |
+| `src/App.vue` | Import `runtimeTeamMembers`; new `buildAssignee()` helper; both `buildPayload` call sites updated |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.84 |

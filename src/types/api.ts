@@ -10,7 +10,7 @@ export interface WebhookPayload {
     issue_type?: string
     summary?: string
     description: string
-    assignee?: string
+    assignee?: { name: string; displayName: string }
     estimated_points?: number
     requirement_level?: string
     parent_req_id?: string

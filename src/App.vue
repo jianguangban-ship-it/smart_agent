@@ -207,7 +207,7 @@ import { useForm } from '@/composables/useForm'
 import { useWebhook } from '@/composables/useWebhook'
 import { useLLM, coachSkillEnabled, setCoachSkillEnabled, taskCoachEnabled } from '@/composables/useLLM'
 import { appMode, applyModeFlags } from '@/composables/useAppMode'
-import { loadRuntimeConfig } from '@/composables/useRuntimeConfig'
+import { loadRuntimeConfig, runtimeTeamMembers } from '@/composables/useRuntimeConfig'
 import { useToast } from '@/composables/useToast'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { addTicket } from '@/composables/useTicketHistory'
@@ -411,6 +411,16 @@ const canCoachSubmit = computed(() => {
   }
 })
 
+function buildAssignee(): { name: string; displayName: string } | undefined {
+  if (!form.assignee) return undefined
+  const member = (runtimeTeamMembers.value[form.projectKey] || [])
+    .find(u => u.id === form.assignee)
+  return {
+    name: form.assignee,
+    displayName: member?.name ?? ''
+  }
+}
+
 // Build payload — for coach/preview, content adapts to Skill and Task-Coach toggles
 function buildPayload(action: 'analyze' | 'create' | 'coach' | 'preview' | 'deepReview'): WebhookPayload {
   const meta = { source: 'jira_agent_ui_v8.0', timestamp: Date.now(), action }
@@ -425,7 +435,7 @@ function buildPayload(action: 'analyze' | 'create' | 'coach' | 'preview' | 'deep
         issue_type: form.issueType,
         summary: computedSummary.value,
         description: form.description,
-        assignee: form.assignee,
+        assignee: buildAssignee(),
         estimated_points: form.estimatedPoints,
         requirement_level: form.requirementLevel !== 'none' ? form.requirementLevel : undefined,
         parent_req_id: form.parentReqId || undefined,
@@ -459,7 +469,7 @@ function buildPayload(action: 'analyze' | 'create' | 'coach' | 'preview' | 'deep
           issue_type: form.issueType,
           summary: computedSummary.value,
           description: desc,
-          assignee: form.assignee,
+          assignee: buildAssignee(),
           estimated_points: form.estimatedPoints
         }
       }
