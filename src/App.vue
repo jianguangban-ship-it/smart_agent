@@ -205,7 +205,7 @@ import type { WebhookPayload } from '@/types/api'
 import { useI18n } from '@/i18n'
 import { useForm } from '@/composables/useForm'
 import { useWebhook } from '@/composables/useWebhook'
-import { useLLM, coachSkillEnabled, setCoachSkillEnabled, taskCoachEnabled } from '@/composables/useLLM'
+import { useLLM, coachSkillEnabled, setCoachSkillEnabled } from '@/composables/useLLM'
 import { appMode, applyModeFlags } from '@/composables/useAppMode'
 import { loadRuntimeConfig, runtimeTeamMembers } from '@/composables/useRuntimeConfig'
 import { useToast } from '@/composables/useToast'
@@ -482,7 +482,7 @@ let _payloadTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   [() => form.description, () => form.projectKey, () => form.issueType,
    computedSummary, () => form.assignee, () => form.estimatedPoints,
-   coachSkillEnabled, taskCoachEnabled, appMode],
+   coachSkillEnabled, appMode],
   () => {
     if (_payloadTimer) clearTimeout(_payloadTimer)
     _payloadTimer = setTimeout(() => {

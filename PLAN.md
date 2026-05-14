@@ -1,5 +1,7 @@
 # Redesign Plan: JIRA AI-Powered Task Workstation v8.0
 
+> **Reader note (current state as of v10.85):** the three-mode system introduced in v10.12 (Explore · Design · Task) was collapsed to **two modes** before v10.85 — only `explore` and `task` exist in the codebase. References to "Design mode" in v10.12–v10.45 entries below describe historical state and no longer correspond to runtime behavior. See `useAppMode.ts` for the current `AppMode = 'explore' | 'task'` type.
+
 ## Analysis of Current Application
 
 The existing app is a **single HTML file (~1200 lines)** that bundles:
@@ -4744,3 +4746,107 @@ When the user hasn't selected anyone, `buildAssignee()` returns `undefined`, so 
 | `src/types/api.ts` | `assignee?: string` → `assignee?: { name: string; displayName: string }` |
 | `src/App.vue` | Import `runtimeTeamMembers`; new `buildAssignee()` helper; both `buildPayload` call sites updated |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.84 |
+
+
+---
+
+## v10.85 — Collapse `coachSkillEnabled` + `taskCoachEnabled` into one flag
+
+**Design rationale.** Since v10.12 the app has had two skill flags — `coachSkillEnabled` and `taskCoachEnabled` — that were always set in lockstep by `applyModeFlags(mode)` (both `false` in Explore, both `true` in Task). The split made sense in the original three-mode design (Explore / Design / Task) where the Design path used `coachSkillEnabled=true` but configured the user-message builder differently, but after Design mode was removed the two flags became degenerate. They were always equal yet two separate ref cells, two localStorage keys (`coach-skill-enabled`, `task-coach-enabled`), and two `set*` setters — tempting future bugs where one is updated and the other is not (e.g. the five tool-handler bypass call sites in `App.vue` flip only `coachSkillEnabled` and rely on `applyModeFlags` to restore both, which works today but only because they happen to always re-assert in lockstep).
+
+This change drops `taskCoachEnabled` entirely. `coachSkillEnabled` is the sole skill flag: ON in Task mode, OFF in Explore. The single usage site that previously checked both — `getUserMessage` in `useLLM.ts:447` — now checks only `coachSkillEnabled`, which is equivalent because the two were never out of sync. The five `setCoachSkillEnabled(false)` bypass calls in `App.vue` (elicitation, suggest-links, impact-analysis, conflict-check, replay) keep working: they flip one flag, `applyModeFlags` re-asserts it on return from `handleCoachRequest`.
+
+**Also.** Exported `validModes` from `useAppMode.ts` and consumed it from `AppHeader.vue`'s mode-button `v-for` so the list of modes has one source of truth instead of two.
+
+**Migration.** `task-coach-enabled` localStorage values left over in users' browsers are harmless dead bytes — no migration code added.
+
+### Changes
+
+1. **`src/composables/useLLM.ts`** — removed `LS_KEY_TASK_COACH_ENABLED`, `taskCoachEnabled`, `setTaskCoachEnabled`. The `getUserMessage` guard at line 447 reduced from `!coachSkillEnabled || !taskCoachEnabled` to just `!coachSkillEnabled`. Old multi-line JSDoc replaced with a single concise block explaining what the surviving flag means and how `applyModeFlags` drives it.
+2. **`src/composables/useAppMode.ts`** — `applyModeFlags` now calls only `setCoachSkillEnabled(mode !== 'explore')`. Exported `validModes` for reuse.
+3. **`src/App.vue`** — dropped `taskCoachEnabled` from the `useLLM` import (line 208) and from the `jsonPayload` watcher's dependency array (line 485). The five tool-handler `setCoachSkillEnabled(false)` call sites are unchanged.
+4. **`src/composables/__tests__/useAppMode.test.ts`** — removed the `setTaskCoachEnabled` mock + import + assertions. Now imports and uses `validModes` for the defaults assertion. 6 tests still pass.
+5. **`src/components/layout/AppHeader.vue`** — `v-for="m in (['explore', 'task'] as AppMode[])"` replaced with `v-for="m in validModes"`; dropped the now-unused `AppMode` type import. Version bumped to v10.85.
+6. **`PLAN.md`** — this entry. Also added a "current state" banner near the top noting Design mode no longer exists in code (the v10.12–v10.45 history below remains for context but does not describe runtime behavior).
+
+### Verification
+
+- `npx vue-tsc -b --noEmit` → exit 0
+- `npx vitest run src/composables/__tests__/useAppMode.test.ts` → 6/6 passed
+- Full `npm test` → same 11 pre-existing failures in `useForm.test.ts` (qualityScore weights) and `formatCoach.test.ts` (hljs highlight + COACH_TURN divider); confirmed unrelated by re-running on stashed (original) source — identical 11 failures.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/composables/useLLM.ts` | Drop `taskCoachEnabled` ref + setter + LS key; collapse `getUserMessage` guard |
+| `src/composables/useAppMode.ts` | `applyModeFlags` calls a single setter; export `validModes` |
+| `src/App.vue` | Drop `taskCoachEnabled` from import + watch deps |
+| `src/composables/__tests__/useAppMode.test.ts` | Drop second-setter assertions; use exported `validModes` |
+| `src/components/layout/AppHeader.vue` | Reuse `validModes` for the `v-for`; bump version to v10.85 |
+| `PLAN.md` | Add v10.85 entry; add Design-removed banner near the top |
+
+
+---
+
+## v10.86 — Fix: Task Guidance click was streaming the analyze prompt into the Coach panel
+
+### Symptom
+
+In Task mode, clicking **Task Guidance** with a normally-filled JIRA description streamed an **analyze-style** response (story-points + subtasks JSON) into the **left Task Coach panel**, and the chip beneath the panel header read **"Task Analysis"** (with the analyze chip color, not coach green). Deterministic across page refresh and history clears. The right-side Analyze Task flow was unaffected.
+
+### Root cause
+
+The coach flow runs **skill auto-detection** on every Task Guidance click (`src/composables/useLLM.ts:408-424`):
+
+```ts
+const matched = matchSkill(rawInput, SKILL_REGISTRY, langKey)
+if (matched && matched.id !== ignoredSkillId.value) {
+  activeSkill.value = matched
+  basePrompt = resolveSystemPrompt(matched, langKey)   // ← uses matched skill's prompt
+} else {
+  activeSkill.value = null
+  basePrompt = getCoachSkill(appMode.value, lang)      // ← fallback
+}
+```
+
+`SKILL_REGISTRY` contained **two built-in entries** — `coach` (keywords `'review', 'task', 'description', '审阅', '任务'…`) and `analyze` (keywords `'analyze', 'quality', 'check', 'validate', 'verify', 'audit', '分析', '评估', '检查', '验证'…`). The matcher (`src/utils/skillMatcher.ts`) returns whichever entry scores ≥ 2 keyword hits with the highest score. Any normal Task description that mentioned "check quality", "verify behavior" — or in Chinese "分析…检查…" — easily hit 2+ analyze keywords, the analyze entry won, and the coach flow used `resolveSystemPrompt(analyze)` → the **analyze** system prompt for the LLM call. `activeSkill.value = matched` then drove the wrong chip text and the wrong chip color (`skill-chip--analyze`).
+
+The pre-existing test `src/utils/__tests__/skillMatcher.test.ts:52-57` actually codified this misrouting: title says "first in registry wins on tie", body asserts `analyze` wins for `"help check quality"`. The matcher *function* is correct; the *data* in the production registry was wrong.
+
+### Why the registry was wrong
+
+`coach` and `analyze` are **defaults for two separate action buttons** (Task Guidance → coach flow → left panel; Analyze Task → analyze flow → right panel). They are not specialty skills the coach flow should ever route to. The auto-detection mechanism was designed for genuine third-party / specialty skills (e.g. the `UI/UX Pro Max` example used as a test fixture). Putting the two button defaults into the same auto-detection registry meant the matcher could flip Task Guidance into Analyze on innocuous keywords. Auto-detection is invoked only by the coach flow (`useLLM.ts:410`); the analyze flow never runs `matchSkill`, so the misrouting is one-way: coach → analyze, never the reverse.
+
+### Fix
+
+Emptied `SKILL_REGISTRY` to `[]`. The coach flow's existing fallback branch (`getCoachSkill(appMode.value, lang)`) becomes the only path and produces the canonical Task Coach system prompt. The auto-detection infrastructure — `SkillEntry` interface, `matchSkill`, `activeSkill` ref, chip rendering, `ignoredSkillId`, `dismissSkill()` — stays in place and starts working again automatically the moment a real third-party skill is registered. Added a comment in `registry.ts` explaining why the built-ins were removed so a future contributor doesn't naively re-add them.
+
+Considered alternatives and why they were rejected:
+
+- **Adding a `builtIn: true` skip filter in `matchSkill`**: introduces magic constants, leaves misleading entries in the registry, smells of a workaround.
+- **Removing the `matchSkill` call from the coach flow entirely**: deletes the auto-detection feature. Premature — the infrastructure is harmless when the registry is empty and ready for genuine third-party skills.
+- **Re-weighting / biasing the score so `coach` always wins**: doesn't fix the semantic confusion; `analyze` could still win on non-tied scores.
+
+### Side effect: chip no longer appears during normal coach calls
+
+Today the left-panel chip rendered from `activeSkill.name`. With the registry empty, `activeSkill` stays `null` and the chip element never renders. This is acceptable because the left panel **title** uses `t('coach.titleTask')` = "Task Coach" and is always visible — the chip was redundant with the title.
+
+The right panel's "Task Analysis" label was always the panel **title** (`t('panel.aiAgentResponse')`, `AIReviewPanel.vue:5`), not a skill chip, and does not read `activeSkill` at all. So the right-panel UX is unchanged.
+
+If a future iteration wants a green "Task Coach" flow indicator chip back, it should be driven from `coach.isLoading` / `coach.hasResponse` in `CoachPanel.vue`, not from `activeSkill` — that's a separate UX choice.
+
+### Verification
+
+- `npx vue-tsc -b --noEmit` → exit 0
+- `npx vitest run src/utils/__tests__/skillMatcher.test.ts src/config/skills/__tests__/registry.test.ts` → 15/15 passed (11 existing matcher tests + 4 new registry regression tests)
+- Full `npm test` → only the **pre-existing** 11 failures (`useForm.test.ts` qualityScore weights, `formatCoach.test.ts` hljs / COACH_TURN divider) — same as v10.85 baseline.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/config/skills/registry.ts` | `SKILL_REGISTRY` array emptied; dropped now-unused `getCoachSkillTaskRaw` / `getAnalyzeSkillRaw` imports; kept `SkillEntry` interface + `resolveSystemPrompt` helper; added "do not re-add coach/analyze entries" comment. |
+| `src/config/skills/__tests__/registry.test.ts` | **New** — 4 regression tests pinning the empty registry: no `coach`/`analyze` entry, `matchSkill` returns `null` for analyze-flavored EN and ZH descriptions. |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.86. |
+| `PLAN.md` | This entry. |

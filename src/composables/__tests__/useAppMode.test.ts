@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock only the named module-level exports that useAppMode actually imports
 vi.mock('@/composables/useLLM', () => ({
-  setCoachSkillEnabled: vi.fn(),
-  setTaskCoachEnabled: vi.fn()
+  setCoachSkillEnabled: vi.fn()
 }))
 
 const storage: Record<string, string> = {}
@@ -13,8 +11,8 @@ vi.stubGlobal('localStorage', {
   removeItem: (k: string) => { delete storage[k] }
 })
 
-import { appMode, setMode, applyModeFlags } from '../useAppMode'
-import { setCoachSkillEnabled, setTaskCoachEnabled } from '@/composables/useLLM'
+import { appMode, setMode, applyModeFlags, validModes } from '../useAppMode'
+import { setCoachSkillEnabled } from '@/composables/useLLM'
 
 describe('useAppMode', () => {
   beforeEach(() => {
@@ -23,7 +21,7 @@ describe('useAppMode', () => {
   })
 
   it('defaults to "task" when no localStorage value', () => {
-    expect(['explore', 'task']).toContain(appMode.value)
+    expect(validModes).toContain(appMode.value)
   })
 
   it('setMode("explore") sets appMode and persists to localStorage', () => {
@@ -38,19 +36,17 @@ describe('useAppMode', () => {
     expect(storage['app-mode']).toBe('task')
   })
 
-  it('applyModeFlags explore → coachSkillEnabled=false, taskCoachEnabled=false', () => {
+  it('applyModeFlags explore → coachSkillEnabled=false', () => {
     applyModeFlags('explore')
     expect(setCoachSkillEnabled).toHaveBeenCalledWith(false)
-    expect(setTaskCoachEnabled).toHaveBeenCalledWith(false)
   })
 
-  it('applyModeFlags task → coachSkillEnabled=true, taskCoachEnabled=true', () => {
+  it('applyModeFlags task → coachSkillEnabled=true', () => {
     applyModeFlags('task')
     expect(setCoachSkillEnabled).toHaveBeenCalledWith(true)
-    expect(setTaskCoachEnabled).toHaveBeenCalledWith(true)
   })
 
-  it('setMode calls applyModeFlags (flags are set)', () => {
+  it('setMode drives applyModeFlags', () => {
     setMode('explore')
     expect(setCoachSkillEnabled).toHaveBeenCalledWith(false)
     setMode('task')

@@ -1,4 +1,4 @@
-import { getCoachSkillTaskRaw, getAnalyzeSkillRaw, getResponseFormat } from './index'
+import { getResponseFormat } from './index'
 
 export interface SkillEntry {
   id: string
@@ -12,31 +12,15 @@ export interface SkillEntry {
   lang?: 'zh' | 'en' | 'both'
 }
 
-export const SKILL_REGISTRY: SkillEntry[] = [
-  {
-    id: 'coach',
-    name: 'Task Coach',
-    keywords: [
-      'review', 'improve', 'suggest', 'help', 'coach', 'guidance', 'advice',
-      'jira', 'ticket', 'description', 'requirement', 'task', 'story',
-      '审阅', '改进', '建议', '帮助', '教练', '指导',
-      '任务', '描述', '需求', '工单'
-    ],
-    systemPrompt: '',
-    getRawPrompt: (lang) => getCoachSkillTaskRaw(lang)
-  },
-  {
-    id: 'analyze',
-    name: 'Task Analysis',
-    keywords: [
-      'analyze', 'analysis', 'evaluate', 'assess', 'score', 'quality', 'check',
-      'validate', 'verify', 'audit', 'inspect',
-      '分析', '评估', '评分', '质量', '检查', '验证', '审核'
-    ],
-    systemPrompt: '',
-    getRawPrompt: (lang) => getAnalyzeSkillRaw(lang)
-  }
-]
+// Intentionally empty. The earlier entries 'coach' and 'analyze' were the *defaults
+// for two separate action buttons* (Task Guidance → coach flow, Analyze Task → analyze
+// flow), not specialty skills the coach flow should ever route to. Putting them here
+// meant matchSkill could flip a Task Guidance click into the analyze prompt whenever
+// a description contained common words like "verify", "check", "quality" or in Chinese
+// "分析"/"检查" — see v10.86 changelog. Do not re-add coach/analyze entries here. Use
+// this registry only for genuine third-party / specialty skills (e.g. UI/UX Pro Max)
+// that legitimately override the default coach prompt.
+export const SKILL_REGISTRY: SkillEntry[] = []
 
 /** Resolve the effective system prompt for a skill entry */
 export function resolveSystemPrompt(skill: SkillEntry, lang: 'zh' | 'en'): string {

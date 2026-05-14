@@ -16,28 +16,20 @@ import { addRecord, currentSessionId } from '@/composables/useCoachHistory'
 import type { CoachHistoryRecord } from '@/types/api'
 
 const LS_KEY_COACH_SKILL_ENABLED = 'coach-skill-enabled'
-const LS_KEY_TASK_COACH_ENABLED = 'task-coach-enabled'
 
-/** Whether the coach system-prompt skill is active. Toggle from the UI for free-form chat. Persisted to localStorage. */
+// Sole skill flag: ON in Task mode (full coach skill + structured task payload),
+// OFF in Explore mode (free chat with Response Format only). Driven by useAppMode's
+// applyModeFlags(); tool handlers (elicitation, conflict-check, etc.) temporarily flip
+// it OFF to bypass the canSubmit guard, then applyModeFlags re-asserts on return.
 export const coachSkillEnabled = ref(localStorage.getItem(LS_KEY_COACH_SKILL_ENABLED) !== 'false')
 
-/** Currently auto-detected skill (module-level, persists across re-renders) */
 export const activeSkill = ref<SkillEntry | null>(null)
 
-/** Skill ID dismissed by user via chip ✕ — sticky until a different skill matches or chat is cleared */
 export const ignoredSkillId = ref<string | null>(null)
 
 export function setCoachSkillEnabled(val: boolean): void {
   coachSkillEnabled.value = val
   localStorage.setItem(LS_KEY_COACH_SKILL_ENABLED, String(val))
-}
-
-/** Whether full task fields (project, type, summary, assignee, points) are included in the coach user message. Only effective when coachSkillEnabled is true. Persisted to localStorage. */
-export const taskCoachEnabled = ref(localStorage.getItem(LS_KEY_TASK_COACH_ENABLED) !== 'false')
-
-export function setTaskCoachEnabled(val: boolean): void {
-  taskCoachEnabled.value = val
-  localStorage.setItem(LS_KEY_TASK_COACH_ENABLED, String(val))
 }
 
 /** Tagged error class for HTTP 429 so callers can start backoff instead of showing an error */
@@ -443,11 +435,11 @@ export function useLLM() {
       return parts.join('\n\n')
     },
     getUserMessage: (payload, zh) => {
-      // Skill-OFF or Task-Coach-OFF → payload only has description, send it directly
-      if (!coachSkillEnabled.value || !taskCoachEnabled.value) {
+      // Explore mode (skill OFF) → payload only has description, send it directly.
+      // Task mode (skill ON) → build structured user message from full payload.
+      if (!coachSkillEnabled.value) {
         return payload.data.description || ''
       }
-      // Skill-ON + Task-Coach-ON → build structured user message from full payload
       return buildUserMessage(payload, zh)
     }
   }, _callGLMStream, t, isZh)

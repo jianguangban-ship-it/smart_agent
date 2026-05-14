@@ -8,13 +8,13 @@
       </div>
       <h1 v-if="currentLang === 'en'" class="header-title"><span class="logo-a">A</span><span class="logo-g">G</span><span class="logo-ec">ec</span></h1>
       <h1 v-else class="header-title">{{ t('header.title') }}</h1>
-      <span class="header-version">v10.84</span>
+      <span class="header-version">v10.86</span>
     </div>
     <div class="header-right">
       <!-- Mode Switcher -->
       <div class="toggle-group mode-group">
         <button
-          v-for="m in (['explore', 'task'] as AppMode[])"
+          v-for="m in validModes"
           :key="m"
           class="toggle-btn mode-btn"
           :class="{ active: appMode === m, ['mode-' + m]: appMode === m }"
@@ -100,8 +100,7 @@ import { useI18n } from '@/i18n'
 import { useProductionMode, setUrlMode } from '@/config/webhook'
 import { useTheme } from '@/composables/useTheme'
 import { ICONS } from '@/config/icons'
-import { appMode, setMode } from '@/composables/useAppMode'
-import type { AppMode } from '@/composables/useAppMode'
+import { appMode, setMode, validModes } from '@/composables/useAppMode'
 
 const { t, setLang, currentLang, isZh } = useI18n()
 const isProd = useProductionMode
