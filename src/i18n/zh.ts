@@ -290,5 +290,18 @@ export default {
     save: '保存',
     cancel: '取消',
     saved: '设置已保存'
+  },
+  sprint: {
+    endsLabel: '截止',
+    daysLeft: '天剩余',
+    drpBadge: '部署 / 发布周',
+    popoverHint: '点击查看详情',
+    popoverWindow: '周期',
+    popoverDay: '当前天数',
+    popoverCadence: '节奏代号',
+    popoverCopy: '复制节奏代号',
+    popoverNext: '下一冲刺',
+    beforeFirst: '26 PI1 尚未开始',
+    afterLast: '26 PI4 已结束'
   }
 } as const

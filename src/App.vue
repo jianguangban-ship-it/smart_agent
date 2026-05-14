@@ -205,7 +205,8 @@ import { useForm } from '@/composables/useForm'
 import { useWebhook } from '@/composables/useWebhook'
 import { useLLM, coachSkillEnabled, setCoachSkillEnabled } from '@/composables/useLLM'
 import { appMode, applyModeFlags } from '@/composables/useAppMode'
-import { loadRuntimeConfig, runtimeTeamMembers } from '@/composables/useRuntimeConfig'
+import { loadRuntimeConfig, runtimeTeamMembers, runtimeProjects } from '@/composables/useRuntimeConfig'
+import { setSelectedProjectName } from '@/composables/useSprint'
 import { useToast } from '@/composables/useToast'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { addTicket } from '@/composables/useTicketHistory'
@@ -320,6 +321,19 @@ const {
   traceabilityGaps,
   getProjectName, resetForm, addComponentToHistory, restoreDraft
 } = useForm()
+
+// Sync selected Agile Team's project name (e.g. "IDC_PDSW") into the
+// module-level state read by useSprint's cadenceString. The dropdown
+// stores form.projectKey (e.g. "DKKF"); the cadence rule operates on the
+// project name string, so we look it up via runtimeProjects.
+watch(
+  [() => form.projectKey, runtimeProjects],
+  ([key]) => {
+    const proj = runtimeProjects.value.find(p => p.key === key)
+    setSelectedProjectName(proj?.name ?? '')
+  },
+  { immediate: true }
+)
 
 const { attachedFile, detach: detachFile } = useAttachment()
 

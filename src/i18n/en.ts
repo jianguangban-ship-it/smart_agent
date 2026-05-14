@@ -290,5 +290,18 @@ export default {
     save: 'Save',
     cancel: 'Cancel',
     saved: 'Settings saved'
+  },
+  sprint: {
+    endsLabel: 'Ends',
+    daysLeft: 'days left',
+    drpBadge: 'Deployment / Release Planning',
+    popoverHint: 'click for details',
+    popoverWindow: 'Window',
+    popoverDay: 'Day',
+    popoverCadence: 'Cadence',
+    popoverCopy: 'Copy cadence',
+    popoverNext: 'Next',
+    beforeFirst: 'Before 26 PI1',
+    afterLast: 'After 26 PI4'
   }
 } as const

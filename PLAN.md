@@ -4888,3 +4888,109 @@ If a future iteration wants a green "Task Coach" flow indicator chip back, it sh
 | `src/composables/__tests__/useForm.test.ts` | Rewrote `qualityScore` / `qualityScoreColor` / `qualityScoreLabel` tests with current-formula expected values; added a sentinel test asserting no INCOSE penalty term remains. 18/18 pass. |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.87. |
 | `PLAN.md` | This entry. |
+
+
+---
+
+## v10.88 — Agile Sprint indicator in the header
+
+**Motivation.** Developers had no in-app signal about *where they are in the 2026 PI / Sprint cycle* — they had to look up the external cadence table to know whether they're mid-sprint, near the end, or in DRP. v10.88 adds a compact, role-aware pill inside the existing AppHeader (between the TEST/PROD pulse and the theme button) that always shows the current sprint at a glance and reveals the role-scoped cadence string on click.
+
+**Source of truth.** The 2026 schedule is hardcoded into a single file from the published HTML doc `2026-sprint-cadence-defintion-v2.1.0.html`. 26 sprints, organized into 4 PIs, each sprint a 14-day window (Wed 09:00 → Tue 21:00 two weeks later). Each PI ends with a **DRP** (Deployment / Release Planning) sprint. Cadence naming `PD_26PI<N>_<Sprint>_<TeamCode>` with team codes `SW / HW / VV / SY`. The schedule is not runtime-configurable — once a year refresh by editing one file. If 2027 cadence drops with a different shape (e.g. different sprint length), `useSprint` already computes `sprintLengthDays` from the entry, so the math adapts automatically.
+
+**Visible behavior.**
+- **Green pill** during a normal sprint, e.g. `→ 26 PI2 S4 · D9/14 · Ends Tue 5/19` (icon, label, thin progress bar showing day fraction).
+- **Orange pill** during the last 2 days of a non-DRP sprint.
+- **Blue pill** during a DRP sprint.
+- **Muted gray pill** when the current date is outside the published 2026 window (before 2025-12-17 or after 2026-12-15) — label reads `"Before 26 PI1"` / `"After 26 PI4"`.
+- **Click** opens a small popover (z-index 110, just above the sticky header at 100) showing the full sprint window, day counter, role-scoped cadence string with a copy button, and the next sprint's name + start date. Click outside closes it.
+- **i18n** complete in EN + ZH (new `sprint` namespace).
+- **Reduced-motion** respected — progress-bar transition disabled.
+
+**Role-aware cadence string.** Reads `currentRole` from `useRole.ts` and maps to the team code: SW dev → `SW`, HW designer → `HW`, ME → `HW` (no dedicated ME code in the org's doc; tunable via the `ROLE_TO_TEAM_CODE` constant), VV → `VV`, System Architect → `SY`, no-role → omit. The copy-button uses the same `navigator.clipboard.writeText(...)` + `addToast('success', t('toast.copied'))` pattern already standard in the codebase (DevTools, SummaryBuilder, CoachPanel, etc.).
+
+**Clock.** Single module-level `setInterval(..., 60_000)` started on first import of `useSprint` (guarded by `typeof window !== 'undefined'` so test environments don't tick). All reactive computeds (`currentSprint`, `dayOfSprint`, `daysRemaining`, `progressPercent`, `isDRP`, `isLastTwoDays`, `cadenceString`, `nextSprint`, `scheduleStatus`) derive from a single `now: ref<Date>`. Test seam: `_setNowForTesting(d)` + `stopSprintClock()`.
+
+**Overnight gap handling.** Each sprint ends at 21:00 on its 14th day; the next starts at 09:00 the following morning. `findSprintAt` uses a half-open `[start, nextStart)` window so the 12-hour gap is attributed to the sprint that just ended (`daysRemaining` shows 1, color stays in last-2-days orange). Verified with a dedicated boundary test.
+
+### Verification
+
+- `npx vue-tsc -b --noEmit` → exit 0
+- `npx vitest run src/config/__tests__/sprintSchedule.test.ts src/composables/__tests__/useSprint.test.ts` → 22/22 passed (17 schedule + 5 reactive-state tests, including boundary dates, DRP/orange classification, overnight gap, before-first / after-last)
+- Full `npm test` → 183/186 passed. The 3 failures are the same pre-existing `formatCoach.test.ts` hljs / COACH_TURN divider tests, unchanged from v10.85–v10.87 baseline and unrelated to this work.
+- Manual smoke (Task mode, today 2026-05-14): pill displays `→ 26 PI2 S4 · D9/14 · Ends Tue 5/19` in green; click reveals popover with `PD_26PI2_S4_SW` (assuming `sw-developer` role); copy button puts the cadence string on the clipboard with the standard success toast; switching role flips the suffix; switching language flips weekday + key labels EN ⇄ 中文. Breathing glow on the header bottom-border is unaffected.
+
+### File matrix
+
+| File | Status |
+|------|--------|
+| `src/config/sprintSchedule.ts` | **New** — 26-sprint dataset, `findSprintAt`, `getNextSprint`, `getCadenceString`, `ROLE_TO_TEAM_CODE` |
+| `src/composables/useSprint.ts` | **New** — reactive `now` clock (60s tick) + 8 derived computeds + test seam |
+| `src/components/header/SprintIndicator.vue` | **New** — pill + popover, EN/ZH-aware, reduced-motion-aware |
+| `src/config/__tests__/sprintSchedule.test.ts` | **New** — 17 tests: dataset shape, boundary dates, DRP-last-in-PI invariant, cadence string variants, role→team-code mapping |
+| `src/composables/__tests__/useSprint.test.ts` | **New** — 5 tests: mid-sprint, last-2-days orange, DRP blue, before-first / after-last |
+| `src/components/layout/AppHeader.vue` | Mounted `<SprintIndicator />` between TEST/PROD pulse and theme button; version → v10.88 |
+| `src/i18n/en.ts` | Added `sprint.*` namespace (11 keys) |
+| `src/i18n/zh.ts` | Added `sprint.*` namespace (11 keys) |
+| `PLAN.md` | This entry |
+
+
+---
+
+## v10.89 — Sprint cadence string now derives from the selected Agile Team (not the user's role)
+
+**Motivation.** In v10.88 the cadence string suffix (e.g. `_SW`) was driven by the user's *role* via a hand-maintained `ROLE_TO_TEAM_CODE` map. That had two problems: (a) it required a separate ME→HW judgement call that wasn't grounded in the org's actual team registry, and (b) a developer who switched between teams would have to switch their role to get the right cadence — but role drives many other UX behaviors (placeholders, system prompts, weights), so they couldn't realistically toggle it just for the cadence. The cadence should come from the **JIRA project / Agile Team** the developer selected in BASIC INFORMATION, which is the same field they already use to scope their JIRA ticket.
+
+**New rule.** Given the Agile Team's project name (the corporate string the BasicInfo dropdown shows in parentheses, e.g. `IDC_PDSW`):
+
+1. Strip the corporate `IDC_` prefix → `PDSW`.
+2. Split into department (first 2 chars) + team (remainder) → `PD` + `SW`.
+3. Cadence = `<Dept>_26PI<N>_<Sprint>_<Team>` → `PD_26PI2_S4_SW`.
+
+The rule generalizes to any IDC-prefixed project in `public/config/projects.json`: `IDC_PDVV` → `PD_..._VV`, `IDC_ADSIM` → `AD_..._SIM`, `IDC_PMVSS` → `PM_..._VSS`, `IDC_SDBS` → `SD_..._BS`. If the project name doesn't fit the `IDC_<dept><team>` pattern (or no project is selected), the cadence gracefully falls back to `PD_26PI<N>_<Sprint>` — the indicator stays useful and the popover stays informative.
+
+**Plumbing.** `useSprint.ts` exposes a new module-level `selectedProjectName: ref<string>('')` + `setSelectedProjectName(name)` setter. `App.vue` watches `form.projectKey` (the value the dropdown writes) and resolves it to the project's `.name` via `runtimeProjects.value.find(p => p.key === key)`. The cadence string computed reactively re-derives whenever the user changes the Agile Team dropdown — no role coupling.
+
+**Why store `.name` not `.key`.** The dropdown stores `form.projectKey = 'DKKF'` (the actual JIRA key — see `public/config/projects.json:3`), but the cadence rule operates on the *display* name string (`IDC_PDSW`). The lookup happens once in App.vue's watch so SprintIndicator stays simple.
+
+### Changes
+
+1. **`src/config/sprintSchedule.ts`** — removed the `ROLE_TO_TEAM_CODE` map (and the `import type { UserRole }`). Added `parseProjectCadence(projectName)` returning `{ dept, team } | null` with the IDC-prefix + first-2-chars-vs-rest rule. Rewrote `getCadenceString(entry, projectName)` to consume the parser; falls back to `PD_26PI<N>_<Sprint>` when the parse fails. Doc-comment lists all five test-fixture project shapes so a future contributor sees what's intended.
+2. **`src/composables/useSprint.ts`** — removed the `currentRole` + `ROLE_TO_TEAM_CODE` imports and the `teamCode` computed. Added `selectedProjectName` ref + `setSelectedProjectName` setter. `cadenceString` now consumes `selectedProjectName.value`.
+3. **`src/App.vue`** — added `runtimeProjects` to the existing `useRuntimeConfig` import line and imported `setSelectedProjectName`. New `watch([() => form.projectKey, runtimeProjects], …)` resolves the key to a project name and pushes it into the module-level state. `{ immediate: true }` so the cadence string is correct on initial render (covers the case where the draft restore populated `form.projectKey` before the user touched the dropdown). The double watch source ensures the cadence updates if `runtimeProjects` reloads (Docker hot-swap of `public/config/projects.json`).
+4. **`src/config/__tests__/sprintSchedule.test.ts`** — replaced the role-mapping tests with a `parseProjectCadence` block (6 tests: PD-prefixed examples, longer 3-char teams, missing IDC prefix, too-short remainder, empty string) and rewrote the `getCadenceString` block (6 tests: PD_26PI2_S4_SW from IDC_PDSW, DRP variant, dept-prefix-derived-not-hardcoded, both fallback paths, null entry).
+5. **`src/composables/__tests__/useSprint.test.ts`** — added a single integration test asserting `cadenceString` reactively derives from `setSelectedProjectName('IDC_PDSW')` → `PD_26PI2_S4_SW`, and falls back to `PD_26PI2_S4` when cleared.
+6. **`src/components/layout/AppHeader.vue`** — version bump v10.88 → v10.89.
+
+### What is NOT changed
+
+- `SprintIndicator.vue` — unchanged. It still reads `cadenceString` from `useSprint`; the source plumbing is opaque to it.
+- Roles (`useRole.ts`, role-driven placeholders, system prompts) — completely untouched. Role no longer participates in the cadence at all.
+- `findSprintAt` / `dayOfSprint` / `isDRP` / `isLastTwoDays` / color states — unchanged.
+- i18n — unchanged.
+- The 4-color palette (green / orange / blue / muted) — unchanged (reverted earlier this session).
+
+### Verification
+
+- `npx vue-tsc -b --noEmit` → exit 0.
+- `npx vitest run src/config/__tests__/sprintSchedule.test.ts src/composables/__tests__/useSprint.test.ts` → 30/30 passed (24 schedule + 6 reactive).
+- Full `npm test` → 191/194 passed; only the same 3 pre-existing `formatCoach.test.ts` failures remain (unchanged from v10.85–v10.88 baseline).
+- Manual smoke (today 2026-05-14, Task mode, `26 PI2 S4`):
+  - Select **Software Dev Team (IDC_PDSW)** → popover shows `PD_26PI2_S4_SW`.
+  - Switch to **Hardware Team (IDC_PDHW)** → popover updates to `PD_26PI2_S4_HW`.
+  - Switch to **V&V Team (IDC_PDVV)** → `PD_26PI2_S4_VV`.
+  - Switch to a non-PD team like **Assembly Development, System Simulation Team (IDC_ADSIM)** → `AD_26PI2_S4_SIM`.
+  - Clear the project (no selection) → `PD_26PI2_S4` (fallback). Indicator stays green and informative.
+  - Change role (sw-developer → vv-engineer) without changing project → cadence does **not** change. Confirms role no longer drives cadence.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/config/sprintSchedule.ts` | Drop `ROLE_TO_TEAM_CODE`; add `parseProjectCadence`; rewrite `getCadenceString(entry, projectName)` |
+| `src/composables/useSprint.ts` | Drop role import + `teamCode`; add `selectedProjectName` ref + setter; `cadenceString` now reads it |
+| `src/App.vue` | Import `runtimeProjects` + `setSelectedProjectName`; new `watch(form.projectKey, runtimeProjects)` syncs the name |
+| `src/config/__tests__/sprintSchedule.test.ts` | Replace role-map tests with `parseProjectCadence`; update `getCadenceString` tests |
+| `src/composables/__tests__/useSprint.test.ts` | Add reactive integration test for `cadenceString` driven by `setSelectedProjectName` |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.89 |
+| `PLAN.md` | This entry |

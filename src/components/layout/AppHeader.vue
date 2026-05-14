@@ -8,7 +8,7 @@
       </div>
       <h1 v-if="currentLang === 'en'" class="header-title"><span class="logo-a">A</span><span class="logo-g">G</span><span class="logo-ec">ec</span></h1>
       <h1 v-else class="header-title">{{ t('header.title') }}</h1>
-      <span class="header-version">v10.87</span>
+      <span class="header-version">v10.89</span>
     </div>
     <div class="header-right">
       <!-- Mode Switcher -->
@@ -64,6 +64,9 @@
         <span class="status-pulse" :class="isProd ? 'green' : 'orange'"></span>
       </span>
 
+      <!-- Sprint Indicator (2026 PI cadence) -->
+      <SprintIndicator />
+
       <!-- Theme Toggle -->
       <button class="theme-btn" @click="toggleTheme" :title="isDark ? t('header.themeLight') : t('header.themeDark')" :aria-label="isDark ? t('header.themeLight') : t('header.themeDark')">
         <svg v-if="isDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -101,6 +104,7 @@ import { useProductionMode, setUrlMode } from '@/config/webhook'
 import { useTheme } from '@/composables/useTheme'
 import { ICONS } from '@/config/icons'
 import { appMode, setMode, validModes } from '@/composables/useAppMode'
+import SprintIndicator from '@/components/header/SprintIndicator.vue'
 
 const { t, setLang, currentLang, isZh } = useI18n()
 const isProd = useProductionMode
