@@ -45,7 +45,7 @@
       />
 
 
-      <DescriptionEditor v-model="form.description" :incose-violations="incoseViolations" :assumptions="assumptions" @focus="$emit('descFocus')" @blur="$emit('descBlur')" />
+      <DescriptionEditor v-model="form.description" @focus="$emit('descFocus')" @blur="$emit('descBlur')" />
 
       <!-- Action Buttons -->
       <div class="form-actions">
@@ -150,7 +150,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { FormState, SummaryState } from '@/types/form'
-import type { QualityViolation, Assumption, TraceabilityGap } from '@/config/domain'
+import type { TraceabilityGap } from '@/config/domain'
 import { useI18n } from '@/i18n'
 import { appMode } from '@/composables/useAppMode'
 import type { ReviewStatus, ChecklistItem } from '@/config/domain/types'
@@ -175,8 +175,6 @@ defineProps<{
   hasAiResponse: boolean
   hasCoachResponse: boolean
   errorMessage: string
-  incoseViolations: QualityViolation[]
-  assumptions: Assumption[]
   traceabilityGaps: TraceabilityGap[]
   reviewStatus: ReviewStatus
   currentStepIndex: number

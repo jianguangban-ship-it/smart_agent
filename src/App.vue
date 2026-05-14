@@ -82,8 +82,6 @@
             :current-action="formCurrentAction"
             :has-ai-response="!!analyzeResponse"
             :has-coach-response="coachMessages.length > 0 && !isCoachLoading"
-            :incose-violations="incoseViolations"
-            :assumptions="assumptions"
             :traceability-gaps="traceabilityGaps"
             :error-message="errorMessage"
             :review-status="reviewStatus"
@@ -319,7 +317,7 @@ function stopDrag() {
 const {
   form, summary, componentHistory, computedSummary,
   canSubmit, qualityScore, qualityScoreColor, qualityScoreLabel,
-  incoseViolations, assumptions, traceabilityGaps,
+  traceabilityGaps,
   getProjectName, resetForm, addComponentToHistory, restoreDraft
 } = useForm()
 

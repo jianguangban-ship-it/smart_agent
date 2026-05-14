@@ -44,30 +44,6 @@
         @change="handleFileSelect"
       />
     </div>
-    <TransitionGroup name="warn-list" tag="div" class="incose-violations" v-if="incoseViolations.length">
-      <div
-        v-for="v in incoseViolations"
-        :key="v.ruleId"
-        class="incose-item"
-        :class="'incose-' + v.severity"
-      >
-        <span class="incose-tag">{{ isZh ? v.titleZh : v.titleEn }}</span>
-        <span class="incose-msg">{{ isZh ? v.messageZh : v.messageEn }}</span>
-      </div>
-    </TransitionGroup>
-    <TransitionGroup name="warn-list" tag="div" class="assumption-list" v-if="assumptions.length">
-      <div
-        v-for="a in assumptions"
-        :key="a.id"
-        class="assumption-item"
-      >
-        <span class="assumption-cat">{{ isZh ? a.categoryZh : a.categoryEn }}</span>
-        <div class="assumption-body">
-          <span class="assumption-msg">{{ isZh ? a.messageZh : a.messageEn }}</span>
-          <span class="assumption-fix">{{ isZh ? a.suggestionZh : a.suggestionEn }}</span>
-        </div>
-      </div>
-    </TransitionGroup>
   </div>
 </template>
 
@@ -76,16 +52,10 @@ import { computed, ref, watch, nextTick } from 'vue'
 import { useI18n } from '@/i18n'
 import { appMode } from '@/composables/useAppMode'
 import { useAttachment } from '@/composables/useAttachment'
-import type { QualityViolation, Assumption } from '@/config/domain'
-
-const props = defineProps<{
-  incoseViolations: QualityViolation[]
-  assumptions: Assumption[]
-}>()
 
 const emit = defineEmits<{ focus: [], blur: [] }>()
 const model = defineModel<string>({ required: true })
-const { t, isZh } = useI18n()
+const { t } = useI18n()
 const { attachedFile, attach, detach, hasAttachment } = useAttachment()
 
 const textareaRef = ref<HTMLTextAreaElement>()
@@ -285,91 +255,6 @@ const sentenceCount = computed(() =>
   color: var(--accent-orange);
 }
 
-/* INCOSE violations */
-.incose-violations {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-top: 6px;
-}
-.incose-item {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  line-height: 1.4;
-}
-.incose-error {
-  background-color: var(--red-subtle, rgba(239, 68, 68, 0.08));
-}
-.incose-warning {
-  background-color: var(--orange-subtle, rgba(251, 191, 36, 0.06));
-}
-.incose-tag {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  padding: 0 4px;
-  border-radius: 2px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.incose-error .incose-tag {
-  background-color: var(--accent-red);
-  color: white;
-}
-.incose-warning .incose-tag {
-  background-color: var(--accent-orange);
-  color: white;
-}
-.incose-msg {
-  color: var(--text-secondary);
-}
-
-/* Assumption detector */
-.assumption-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-top: 6px;
-}
-.assumption-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  line-height: 1.4;
-  background-color: var(--purple-subtle, rgba(167, 139, 250, 0.06));
-}
-.assumption-cat {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  padding: 0 4px;
-  border-radius: 2px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  background-color: var(--accent-purple, #a78bfa);
-  color: white;
-}
-.assumption-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.assumption-msg {
-  color: var(--text-secondary);
-}
-.assumption-fix {
-  color: var(--accent-purple, #a78bfa);
-  font-style: italic;
-  font-size: 10px;
-}
-
 /* Domain warnings */
 .domain-warnings {
   display: flex;
@@ -402,16 +287,5 @@ const sentenceCount = computed(() =>
 }
 .dw-text {
   flex: 1;
-}
-
-/* Transition */
-.warn-list-enter-active,
-.warn-list-leave-active {
-  transition: all 0.25s ease;
-}
-.warn-list-enter-from,
-.warn-list-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
 }
 </style>

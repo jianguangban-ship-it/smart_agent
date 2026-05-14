@@ -1,7 +1,5 @@
 import { ref, computed } from 'vue'
 import type { TaskLevel } from '@/config/domain/traceability.task'
-import { getModeQualityCheck, getModeQualityPenalty } from '@/config/domain'
-import { appMode } from '@/composables/useAppMode'
 
 export interface BatchRequirement {
   id: string
@@ -37,11 +35,7 @@ export function useBatchOps() {
   const selectedCount = computed(() => batchItems.value.filter(b => b.selected).length)
 
   function addItem(item: Omit<BatchRequirement, 'id' | 'qualityScore' | 'selected'>) {
-    // Compute quality score
-    const violations = getModeQualityCheck(appMode.value, item.description)
-    const penalty = getModeQualityPenalty(appMode.value, violations)
-    const baseScore = Math.min(100, (item.summary ? 20 : 0) + (item.description.length > 20 ? 40 : 0) + (item.level !== 'none' ? 20 : 0) + (item.parentReqId ? 20 : 0))
-    const qualityScore = Math.max(0, baseScore - penalty)
+    const qualityScore = Math.min(100, (item.summary ? 20 : 0) + (item.description.length > 20 ? 40 : 0) + (item.level !== 'none' ? 20 : 0) + (item.parentReqId ? 20 : 0))
 
     batchItems.value.push({
       ...item,

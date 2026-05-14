@@ -4850,3 +4850,41 @@ If a future iteration wants a green "Task Coach" flow indicator chip back, it sh
 | `src/config/skills/__tests__/registry.test.ts` | **New** — 4 regression tests pinning the empty registry: no `coach`/`analyze` entry, `matchSkill` returns `null` for analyze-flavored EN and ZH descriptions. |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.86. |
 | `PLAN.md` | This entry. |
+
+
+---
+
+## v10.87 — Remove INCOSE violations + Assumption Detector from Task mode
+
+**Symptom / motivation.** In Task mode, as the user typed into the Task Description textarea, two reactive "check-result" blocks rendered below it: red/yellow INCOSE quality tags ("Actionable / Scoped / Complete / Estimated / Acceptance Criteria") and purple assumption tags ("Resource / Timing / Concurrency / Communication / Power / Temperature / Dependency / Config"). These were holdovers from the earlier three-mode (Explore / Design / Task) era when automotive RE checks were appropriate for Design. After Design mode was dropped (see v10.85 banner), the only remaining mode that ever showed them was Task, where they're noise — Task is an agile/JIRA ticket-writing workflow, not requirement engineering. The user reported them as "old design we no longer need" and asked for full removal of both the UI and the underlying logic. This continues the v10.38 / v10.41 trend of stripping automotive-domain leakage out of Task mode.
+
+**What was deleted, end to end.** UI in `DescriptionEditor.vue` — both `<TransitionGroup>` blocks plus the matching `.incose-*`, `.assumption-*`, and now-orphan `.warn-list-*` CSS rules. Props chain — `incoseViolations` / `assumptions` removed from `DescriptionEditor.vue` defineProps, the `<DescriptionEditor>` binding in `TaskForm.vue`, the `TaskForm` prop declarations + type imports, and finally from the `<TaskForm>` binding plus `useForm` destructure in `App.vue`. Composable — `incoseViolations` and `assumptions` computed refs deleted from `useForm.ts`, and the INCOSE penalty subtraction in `qualityScore` (`score -= getModeQualityPenalty(...)`) was removed so the score is now strictly additive. Domain aggregator — `getModeQualityCheck` and `getModeQualityPenalty` removed from `mode-config.ts`; the `detectAssumptions` value re-export, `Assumption` type re-export, and `QualityViolation` type re-export removed from `config/domain/index.ts`. Type — `QualityViolation` interface deleted from `config/domain/types.ts`. Config files — `src/config/domain/quality.task.ts` and `src/config/domain/assumptions.ts` deleted entirely. Other consumer — `useBatchOps.ts` `addItem` simplified: the four-line `violations` → `penalty` → `baseScore` → `qualityScore` chain reduced to a single additive `qualityScore` (no INCOSE penalty applied to batch items either).
+
+**What is unchanged.** `qualityScore`, `qualityScoreColor`, `qualityScoreLabel` still exist and are still useful as form-completion indicators — only the penalty term is gone. `traceabilityGaps` and `getModeTraceGaps` survive (already return `[]` for non-design modes). All coach / analyze pipelines and the v10.86 registry fix are untouched.
+
+**Test churn.** `src/composables/__tests__/useForm.test.ts` was rewritten: 8 of the 16 pre-existing tests had stale expected values (from before the v10.26 role-weights refactor) and were failing in main long before this PR. The rewrite recomputes expected scores from the current `ROLE_WEIGHTS['sw-developer']` map (8/8/8/6 for projectKey/issueType/assignee/points; 6/6/6/8/12 for the five summary fields; 12 + 20 for description present + length), adds explicit color and label boundary tests, and adds a sentinel test asserting that descriptions which previously would have triggered INCOSE penalty (`TBD`, no action verb, etc.) no longer drag the score down. Now 18/18 pass.
+
+### Verification
+
+- `npx vue-tsc -b --noEmit` → exit 0
+- `npx vitest run` → 161/164 pass; 3 failing are the pre-existing `formatCoach.test.ts` hljs / COACH_TURN divider tests (unchanged from v10.85/v10.86 baseline). Failure count dropped from 11 → 3 (the 8 useForm tests now pass).
+- Manual smoke (Task mode): type `"verify the API behavior and check quality"` or `"TBD — implement and also test, no acceptance criteria"` into the Task Description box — **no INCOSE tags, no assumption tags render below**. The word/sentence counter row is unchanged.
+- Coach + Analyze flows in Task mode: unchanged from v10.86 behavior. Explore mode: unchanged (was already clean).
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/DescriptionEditor.vue` | Removed both `<TransitionGroup>` blocks, the `incoseViolations`/`assumptions` props, the type import, and the `.incose-*` / `.assumption-*` / `.warn-list-*` CSS. |
+| `src/composables/useForm.ts` | Deleted `incoseViolations` + `assumptions` computeds; removed the INCOSE penalty subtraction from `qualityScore`; trimmed imports; dropped from return object. |
+| `src/components/form/TaskForm.vue` | Dropped `:incose-violations` / `:assumptions` bindings on `<DescriptionEditor>`; removed prop declarations and type imports (`QualityViolation`, `Assumption`). |
+| `src/App.vue` | Dropped `:incose-violations` / `:assumptions` bindings on `<TaskForm>` and from the `useForm()` destructure. |
+| `src/composables/useBatchOps.ts` | Removed `getModeQualityCheck`/`getModeQualityPenalty` import; simplified `addItem` to compute `qualityScore` additively (no penalty). |
+| `src/config/domain/mode-config.ts` | Removed `getModeQualityCheck` and `getModeQualityPenalty` exports; dropped `checkTaskQuality`/`taskQualityPenalty` and `QualityViolation` imports. |
+| `src/config/domain/index.ts` | Dropped `detectAssumptions` value re-export, `Assumption` type re-export, and `QualityViolation` from the types re-export. |
+| `src/config/domain/types.ts` | Deleted `QualityViolation` interface. |
+| `src/config/domain/quality.task.ts` | **Deleted.** |
+| `src/config/domain/assumptions.ts` | **Deleted.** |
+| `src/composables/__tests__/useForm.test.ts` | Rewrote `qualityScore` / `qualityScoreColor` / `qualityScoreLabel` tests with current-formula expected values; added a sentinel test asserting no INCOSE penalty term remains. 18/18 pass. |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.87. |
+| `PLAN.md` | This entry. |

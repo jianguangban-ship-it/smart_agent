@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { nextTick } from 'vue'
 
-// Mock dependencies
 vi.mock('@/i18n', () => ({
   useI18n: () => ({
     t: (key: string) => key,
@@ -29,7 +28,6 @@ vi.mock('@/composables/useRole', () => ({
   currentRole: { value: 'sw-developer' }
 }))
 
-// Stub localStorage
 const storage: Record<string, string> = {}
 vi.stubGlobal('localStorage', {
   getItem: (k: string) => storage[k] ?? null,
@@ -38,6 +36,11 @@ vi.stubGlobal('localStorage', {
 })
 
 import { useForm } from '../useForm'
+
+// sw-developer weights (mirrors ROLE_WEIGHTS['sw-developer'] in useForm.ts):
+//   projectKey 8, issueType 8, assignee 8, estimatedPoints 6,
+//   vehicle 6, product 6, layer 6, component 8, detail 12,
+//   descriptionPresent 12, descriptionLength 20
 
 describe('useForm', () => {
   let formApi: ReturnType<typeof useForm>
@@ -48,7 +51,7 @@ describe('useForm', () => {
   })
 
   describe('canSubmit', () => {
-    it('returns false with default state (assignee empty)', () => {
+    it('returns false with default state (all fields empty)', () => {
       expect(formApi.canSubmit.value).toBe(false)
     })
 
@@ -92,7 +95,7 @@ describe('useForm', () => {
       form.estimatedPoints = 3
       form.description = 'desc'
       summary.vehicle = 'V'
-      summary.product = ''  // missing
+      summary.product = ''
       summary.layer = 'L'
       summary.component = 'C'
       summary.detail = 'D'
@@ -102,14 +105,16 @@ describe('useForm', () => {
   })
 
   describe('qualityScore', () => {
-    it('starts with base score from defaults (projectKey + issueType + points)', () => {
-      // projectKey=8, issueType=8, estimatedPoints=6 = 22
-      expect(formApi.qualityScore.value).toBe(22)
+    it('is 0 with empty defaults', () => {
+      expect(formApi.qualityScore.value).toBe(0)
     })
 
-    it('reaches 100 when all fields filled with long description', async () => {
+    it('reaches 100 when every field is filled with description >= 200 chars', async () => {
       const { form, summary } = formApi
+      form.projectKey = 'HW'
+      form.issueType = 'Story'
       form.assignee = 'user1'
+      form.estimatedPoints = 3
       form.description = 'x'.repeat(200)
       summary.vehicle = 'V'
       summary.product = 'P'
@@ -117,12 +122,16 @@ describe('useForm', () => {
       summary.component = 'C'
       summary.detail = 'D'
       await nextTick()
+      // 8 + 8 + 8 + 6 + 6 + 6 + 6 + 8 + 12 + 12 + 20 = 100
       expect(formApi.qualityScore.value).toBe(100)
     })
 
     it('caps at 100 even with very long description', async () => {
       const { form, summary } = formApi
+      form.projectKey = 'HW'
+      form.issueType = 'Story'
       form.assignee = 'user1'
+      form.estimatedPoints = 3
       form.description = 'x'.repeat(1000)
       summary.vehicle = 'V'
       summary.product = 'P'
@@ -133,19 +142,34 @@ describe('useForm', () => {
       expect(formApi.qualityScore.value).toBe(100)
     })
 
-    it('adds description presence and length bonus', async () => {
+    it('adds description presence and length bonus only', async () => {
       const { form } = formApi
       form.description = 'x'.repeat(100)
       await nextTick()
-      // sw-developer: base 22 + descPresent 12 + floor(100/200*20)=10 = 44
-      expect(formApi.qualityScore.value).toBe(44)
+      // descPresent 12 + floor(100/200 * 20) = 12 + 10 = 22
+      expect(formApi.qualityScore.value).toBe(22)
+    })
+
+    it('no INCOSE penalty subtraction (v10.87 — penalty term removed)', async () => {
+      const { form } = formApi
+      // A description that pre-v10.87 would have triggered INCOSE warnings
+      // (no action verb, no acceptance criteria, no effort estimate, contains TBD)
+      form.description = 'TBD some content here that is long enough to exceed eighty characters in length yes definitely.'
+      await nextTick()
+      // descPresent 12 + floor(desc.length/200 * 20) = 12 + 9 = 21
+      // Pre-v10.87 this would have been 21 - capped penalty; now strictly additive.
+      expect(formApi.qualityScore.value).toBeGreaterThan(0)
+      expect(formApi.qualityScore.value).toBeLessThanOrEqual(22)
     })
   })
 
   describe('qualityScoreColor', () => {
     it('returns green for score >= 80', async () => {
       const { form, summary } = formApi
+      form.projectKey = 'HW'
+      form.issueType = 'Story'
       form.assignee = 'user1'
+      form.estimatedPoints = 3
       form.description = 'x'.repeat(200)
       summary.vehicle = 'V'
       summary.product = 'P'
@@ -156,36 +180,41 @@ describe('useForm', () => {
       expect(formApi.qualityScoreColor.value).toBe('var(--accent-green)')
     })
 
-    it('returns orange for score >= 50', async () => {
-      const { form, summary } = formApi
+    it('returns orange for 50 <= score < 80', async () => {
+      const { form } = formApi
+      // 8 + 8 + 8 + 6 + 12 + 20 = 62
+      form.projectKey = 'HW'
+      form.issueType = 'Story'
       form.assignee = 'user1'
-      form.description = 'x'.repeat(100)
-      summary.vehicle = 'V'
-      summary.product = 'P'
-      summary.layer = 'L'
+      form.estimatedPoints = 3
+      form.description = 'x'.repeat(200)
       await nextTick()
-      // 22 + 8 + 8 + 8 + 8 + 10 + 9 = 73... let me just check the boundary
-      expect(['var(--accent-orange)', 'var(--accent-green)']).toContain(formApi.qualityScoreColor.value)
+      expect(formApi.qualityScoreColor.value).toBe('var(--accent-orange)')
     })
 
-    it('returns red for score > 0 and < 50', async () => {
-      // default score is 22
+    it('returns red for 0 < score < 50', async () => {
+      const { form } = formApi
+      form.projectKey = 'HW'
+      await nextTick()
+      // 8 = 8
+      expect(formApi.qualityScore.value).toBe(8)
       expect(formApi.qualityScoreColor.value).toBe('var(--accent-red)')
+    })
+
+    it('returns muted for score 0', () => {
+      expect(formApi.qualityScoreColor.value).toBe('var(--text-muted)')
     })
   })
 
   describe('qualityScoreLabel', () => {
-    it('returns quality.empty for score 0', async () => {
-      const { form } = formApi
-      form.projectKey = '' as any
-      form.issueType = '' as any
-      form.estimatedPoints = 0
-      await nextTick()
+    it('returns quality.empty for score 0', () => {
       expect(formApi.qualityScoreLabel.value).toBe('quality.empty')
     })
 
-    it('returns quality.incomplete for low score', () => {
-      // defaults give 22
+    it('returns quality.incomplete for 0 < score < 50', async () => {
+      const { form } = formApi
+      form.projectKey = 'HW'
+      await nextTick()
       expect(formApi.qualityScoreLabel.value).toBe('quality.incomplete')
     })
   })

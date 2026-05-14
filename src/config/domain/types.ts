@@ -4,17 +4,6 @@
  * so the resolver returns consistent types.
  */
 
-/** Unified quality violation — both INCOSE (design) and task quality checks use this */
-export interface QualityViolation {
-  ruleId: string
-  titleEn: string
-  titleZh: string
-  messageEn: string
-  messageZh: string
-  severity: 'error' | 'warning'
-  matches?: string[]
-}
-
 /** Re-export ElicitationSet shape — both design and task elicitation conform to this */
 export interface ElicitationQuestion {
   questionEn: string

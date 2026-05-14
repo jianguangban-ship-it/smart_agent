@@ -6,9 +6,9 @@ import { currentRole, setRole } from '@/composables/useRole'
 import type { UserRole } from '@/composables/useRole'
 import { appMode } from '@/composables/useAppMode'
 import { activeTaskLayer } from '@/config/skills/index'
-import { getModeQualityCheck, getModeQualityPenalty, detectAssumptions, getModeTraceGaps } from '@/config/domain'
+import { getModeTraceGaps } from '@/config/domain'
 import { getDefaultTaskLevel } from '@/config/domain/traceability.task'
-import type { QualityViolation, Assumption, TraceabilityGap } from '@/config/domain'
+import type { TraceabilityGap } from '@/config/domain'
 
 const DRAFT_KEY = 'jira-workstation-draft'
 
@@ -139,10 +139,6 @@ export function useForm() {
         weights.descriptionLength
       )
     }
-    // Apply INCOSE quality penalty (only when description is present)
-    if (desc) {
-      score -= getModeQualityPenalty(appMode.value, incoseViolations.value)
-    }
     return Math.max(0, Math.min(score, 100))
   })
 
@@ -161,16 +157,6 @@ export function useForm() {
     if (s > 0) return t('quality.incomplete')
     return t('quality.empty')
   })
-
-  // Quality checks (mode-aware — task mode checks task quality, explore returns [])
-  const incoseViolations = computed<QualityViolation[]>(() =>
-    getModeQualityCheck(appMode.value, form.description)
-  )
-
-  // Assumption detection (skip in explore mode — no constraints)
-  const assumptions = computed<Assumption[]>(() =>
-    currentRole.value && appMode.value !== 'explore' ? detectAssumptions(currentRole.value, form.description) : []
-  )
 
   // Traceability gaps
   const traceabilityGaps = computed<TraceabilityGap[]>(() =>
@@ -281,8 +267,6 @@ export function useForm() {
     qualityScore,
     qualityScoreColor,
     qualityScoreLabel,
-    incoseViolations,
-    assumptions,
     traceabilityGaps,
     getProjectName,
     resetForm,
