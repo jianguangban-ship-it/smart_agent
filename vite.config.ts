@@ -12,7 +12,16 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    open: true
+    open: true,
+    proxy: {
+      // Forward View-mode API calls to the local Fastify server (npm run server).
+      // In production, both SPA and API are served from the same Node process,
+      // so this proxy only applies during `npm run dev` / `dev:all`.
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: false
+      }
+    }
   },
   test: {
     environment: 'jsdom',

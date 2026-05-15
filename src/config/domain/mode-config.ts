@@ -13,24 +13,27 @@ import type { TaskLevel } from './traceability.task'
 
 // ── Resolvers ───────────────────────────────────────────────────────────────
 
+// Each resolver returns the Task-flavoured payload only when mode === 'task'.
+// 'explore' and 'view' (read-only) both fall through to the no-op default —
+// neither runs the structured review/traceability/elicitation flow.
 export function getModeElicitationSet(mode: AppMode, role: UserRole, lang: 'zh' | 'en'): ElicitationSet | null {
+  if (mode === 'task') return getTaskScopingSet(role, lang)
   if (mode === 'explore') return getExploreElicitationSet(role, lang)
-  return getTaskScopingSet(role, lang)
+  return null
 }
 
 export function getModeElicitationPrompt(mode: AppMode, role: UserRole, lang: 'zh' | 'en'): string {
+  if (mode === 'task') return buildTaskScopingPrompt(role, lang)
   if (mode === 'explore') return buildExploreElicitationPrompt(role, lang)
-  return buildTaskScopingPrompt(role, lang)
+  return ''
 }
 
 export function getModeReviewSteps(mode: AppMode): ReviewStep[] {
-  if (mode === 'explore') return []
-  return TASK_REVIEW_STEPS
+  return mode === 'task' ? TASK_REVIEW_STEPS : []
 }
 
 export function getModeReviewChecklist(mode: AppMode, role: UserRole): ChecklistItem[] {
-  if (mode === 'explore') return []
-  return getTaskChecklist(role)
+  return mode === 'task' ? getTaskChecklist(role) : []
 }
 
 export function getModeTraceGaps(
@@ -38,8 +41,7 @@ export function getModeTraceGaps(
   level: TaskLevel,
   parentId: string
 ): TraceabilityGap[] {
-  if (mode === 'explore') return []
-  return checkTaskDependencyGaps(level, parentId)
+  return mode === 'task' ? checkTaskDependencyGaps(level, parentId) : []
 }
 
 export function getModeTraceContext(
@@ -48,6 +50,5 @@ export function getModeTraceContext(
   parentId: string,
   lang: 'zh' | 'en'
 ): string {
-  if (mode === 'explore') return ''
-  return buildTaskDependencyContext(level, parentId, lang)
+  return mode === 'task' ? buildTaskDependencyContext(level, parentId, lang) : ''
 }

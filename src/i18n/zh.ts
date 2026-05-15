@@ -10,7 +10,8 @@ export default {
   },
   mode: {
     explore: '探索',
-    task: '任务'
+    task: '任务',
+    view: '看板'
   },
   form: {
     basicInfo: '基本信息',
@@ -290,6 +291,41 @@ export default {
     save: '保存',
     cancel: '取消',
     saved: '设置已保存'
+  },
+  view: {
+    title: 'JIRA 质检看板',
+    subtitle: '所有研发团队的 AI 质检评级汇总',
+    refresh: '刷新',
+    refreshing: '刷新中…',
+    autoRefresh: '聚焦时自动刷新',
+    filterTeam: '团队',
+    filterStatus: '评级',
+    search: '搜索摘要或经办人…',
+    allTeams: '全部团队',
+    allStatuses: '全部评级',
+    colStatus: '评级',
+    colTeam: '团队',
+    colKey: '工单号',
+    colType: '类型',
+    colSummary: '摘要',
+    colAssignee: '经办人',
+    colPoints: '点数',
+    colTime: '事件时间',
+    empty: '暂无工单',
+    emptyHint: 'n8n 推送首条质检结果后将显示在这里。',
+    fetchError: '工单加载失败',
+    rowDetail: '质检报告',
+    openInJira: '在 JIRA 中打开',
+    closeDetail: '关闭',
+    countLabel: '共 {n} 条',
+    countFiltered: '已筛选 {filtered} / {total}',
+    statusA: '优秀',
+    statusB: '良好',
+    statusC: '中等',
+    statusD: '较差',
+    statusFormatError: '格式异常',
+    statusUnknown: '未知',
+    statusDrift: '偏离规范'
   },
   sprint: {
     endsLabel: '截止',

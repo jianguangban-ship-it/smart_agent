@@ -42,7 +42,8 @@
     { "id": "GW00357627", "name": "王嘉伟 (Wang Jiawei)", "role": "SW Engineer" },
     { "id": "GW00345363", "name": "林文衡 (Lin Wenheng)", "role": "SW Engineer" },
     { "id": "GW00330163", "name": "苏明 (Su Ming)", "role": "Sr. SW Engineer" },
-    { "id": "GW00395714", "name": "邓云瀚 (Deng Yunhan)", "role": "Jr. SW Engineer" }
+    { "id": "GW00395714", "name": "邓云瀚 (Deng Yunhan)", "role": "Jr. SW Engineer" },
+    { "id": "GW00403735", "name": "莫轩宗 (Mo Xuanzong)", "role": "Jr. SW Engineer" }
   ],
   "DKKG": [
     { "id": "GW00365684", "name": "袁东阳 (Yuan Dongyang)", "role": "SYS Manager" },
@@ -59,7 +60,7 @@
     { "id": "GW00376504", "name": "万飞 (Wan Fei)", "role": "Engineer" },
     { "id": "GW00086162", "name": "李云龙 (Li Yunlong)", "role": "Engineer" },
     { "id": "GW00285392", "name": "李子越 (Li Ziyue)", "role": "Jr. Engineer" },
-    { "id": "GW00333343", "name": "耿国涛 (Geng Guotao)", "role": "Engineer" },
+    { "id": "GW00333434", "name": "耿国涛 (Geng Guotao)", "role": "Engineer" },
     { "id": "GW00395792", "name": "焦心雨 (Jiao Xinyu)", "role": "Jr. Engineer" },
     { "id": "GW00397297", "name": "张孟孟 (Zhang Mengmeng)", "role": "Engineer" },
     { "id": "GW00324035", "name": "刘建设 (Liu Jianshe)", "role": "VV Manager" }

@@ -1,9 +1,20 @@
 services:
   smart-agent:
     build:
-      context: .
-      dockerfile: Dockerfile
+      # Build from the repo root so the Dockerfile in deploy/ can COPY src/, public/, server/, etc.
+      context: ..
+      dockerfile: deploy/Dockerfile
     container_name: smart-agent
     ports:
       - "5181:5181"
+    environment:
+      # n8n authenticates writes with this key (spec §2.2). Set it in a sibling .env file.
+      QUALITY_API_KEY: ${QUALITY_API_KEY:?QUALITY_API_KEY must be set in deploy/.env}
+      PORT: "5181"
+      QUALITY_DB_PATH: /app/data/quality.db
+    volumes:
+      # Editable runtime configs (projects, team-members, etc.) override the baked-in defaults.
+      - /usr/local/smart_agent/data:/app/dist/config
+      # SQLite database for the View-mode quality grid. Survives container restarts.
+      - /usr/local/smart_agent/quality-db:/app/data
     restart: unless-stopped

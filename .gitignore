@@ -4,3 +4,16 @@ dist
 *.tsbuildinfo
 .DS_Store
 .vite
+# SQLite DB for the View-mode quality grid (created at runtime)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+# Secrets — never commit. Examples (.env.example) ARE committed.
+.env
+.env.*
+!.env.example
+deploy/.env
+deploy/.env.*
+!deploy/.env.example

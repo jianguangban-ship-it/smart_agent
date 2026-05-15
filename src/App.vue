@@ -29,8 +29,12 @@
       </div>
     </Transition>
 
-    <main class="app-main">
+    <main class="app-main" :class="{ 'app-main--view': appMode === 'view' }">
+      <!-- View mode: full-width JIRA Quality Grid (n8n-fed) -->
+      <QualityGridPanel v-if="appMode === 'view'" />
+
       <div
+        v-show="appMode !== 'view'"
         class="grid-layout"
         :class="{ 'layout-focus': appMode === 'explore' }"
         ref="gridRef"
@@ -239,6 +243,7 @@ import BatchPanel from '@/components/panels/BatchPanel.vue'
 import DevTools from '@/components/dev/DevTools.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
+import QualityGridPanel from '@/components/quality/QualityGridPanel.vue'
 
 const { t, isZh } = useI18n()
 const { addToast } = useToast()
@@ -392,7 +397,8 @@ const pendingPromptOverride = ref<string | null>(null)
 // On mode switch, the outgoing description is saved and the incoming one is restored.
 const modeDescriptions = reactive<Record<string, string>>({
   explore: '',
-  task: ''
+  task: '',
+  view: ''  // View is read-only — kept for shape consistency, never written
 })
 const showHotkeyModal = ref(false)
 const confirmModalRef = ref<HTMLElement>()

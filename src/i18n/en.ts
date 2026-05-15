@@ -10,7 +10,8 @@ export default {
   },
   mode: {
     explore: 'Explore',
-    task: 'Task'
+    task: 'Task',
+    view: 'View'
   },
   form: {
     basicInfo: 'Basic Information',
@@ -290,6 +291,41 @@ export default {
     save: 'Save',
     cancel: 'Cancel',
     saved: 'Settings saved'
+  },
+  view: {
+    title: 'JIRA Quality Grid',
+    subtitle: 'AI quality-check verdicts across all R&D teams',
+    refresh: 'Refresh',
+    refreshing: 'Refreshing…',
+    autoRefresh: 'Auto-refresh on tab focus',
+    filterTeam: 'Team',
+    filterStatus: 'Status',
+    search: 'Search summary or assignee…',
+    allTeams: 'All teams',
+    allStatuses: 'All statuses',
+    colStatus: 'Rating',
+    colTeam: 'Team',
+    colKey: 'Issue',
+    colType: 'Type',
+    colSummary: 'Summary',
+    colAssignee: 'Assignee',
+    colPoints: 'Pts',
+    colTime: 'Event time',
+    empty: 'No tickets yet',
+    emptyHint: 'Tickets will appear here once n8n posts the first quality-check report.',
+    fetchError: 'Failed to load tickets',
+    rowDetail: 'Quality report',
+    openInJira: 'Open in JIRA',
+    closeDetail: 'Close',
+    countLabel: '{n} tickets',
+    countFiltered: 'showing {filtered} of {total}',
+    statusA: 'Excellent',
+    statusB: 'Good',
+    statusC: 'Medium',
+    statusD: 'Poor',
+    statusFormatError: 'Format anomaly',
+    statusUnknown: 'Unknown',
+    statusDrift: 'Off-taxonomy'
   },
   sprint: {
     endsLabel: 'Ends',

@@ -4994,3 +4994,280 @@ The rule generalizes to any IDC-prefixed project in `public/config/projects.json
 | `src/composables/__tests__/useSprint.test.ts` | Add reactive integration test for `cadenceString` driven by `setSelectedProjectName` |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.89 |
 | `PLAN.md` | This entry |
+
+---
+
+## v10.90 — New "View" mode: JIRA Quality Grid fed by n8n
+
+**Motivation.** R&D teams (DKKF / DKKG / SWBS / ADBS …) currently see AI quality-check verdicts on their JIRA tickets as **ephemeral** messages — one DingTalk card per ticket, one JIRA comment per ticket. They cannot answer aggregate questions like *"Which of my team's tickets got a D this week?"* or re-find the AI report for a specific ticket once the DingTalk message has scrolled away. The upstream n8n workflow (`Final-Message-Merge` → AI quality agent → DingTalk + JIRA) is in place; this version closes the loop by giving R&D teams a **filterable spreadsheet** they can bookmark, fed by an HTTP endpoint n8n POSTs to.
+
+Spec: `E:\n8n-code-JavaScripts\http-port-design.MD`.
+
+**Architecture.** Single Docker container, single origin (no CORS per spec §7):
+- **Fastify** server (`server/`) exposes `POST /api/tickets` (n8n writes here, `X-API-Key` auth) and `GET /api/tickets` (the grid reads).
+- **better-sqlite3** stores rows, upserted by `issueKey` per spec §2.3 — single `INSERT … ON CONFLICT(issue_key) DO UPDATE SET …` is atomic and race-safe.
+- **Vue 3 SPA** gains a third mode — **View** (`mode.view` → EN: *View*, ZH: *看板*) — alongside Task and Explore. The mode shows a full-width grid replacing the 3-column layout used by Task/Explore.
+
+**Why SQLite, not Postgres.** Spec §7 says "a handful of POSTs per minute in steady state". SQLite in WAL mode comfortably handles that with zero ops. Migration to Postgres is a one-day swap if write volume ever climbs — the upsert SQL is portable. Adding Postgres now would mean either a second container (more ops) or external infra (more org-wide coordination) for no benefit.
+
+**Why a third mode, not a separate route.** The two existing modes (Task / Explore) live as views inside the same SPA; a third sibling matches the user's existing mental model — flip a top-right toggle, the workspace switches purpose. A separate route would have meant routing, route guards, header reconciliation. The mode pattern in `useAppMode.ts` was designed to add a third value cheaply, and it did: extending the `AppMode` type + adding `mode.view` to i18n + a `v-if` in `App.vue` is the whole UI plumbing change.
+
+**Status badge taxonomy & the drift signal.** Spec §3.3 defines six canonical statuses (A/B/C/D + 格式异常 + 未知) and one rule that's easy to miss: *unknown values must render gray, not be coerced to a known color*. The gray is **the operator's tell** that the upstream AI prompt has drifted from the agreed taxonomy. `colorForStatus()` in `src/types/quality.ts` falls back to `DRIFT_COLOR` (`#808080`) rather than to A's green; `StatusBadge.vue` exposes the off-taxonomy value in its tooltip (`view.statusDrift`).
+
+**DOMPurify allow-list change.** The AI quality report embeds the rating as `<font color="#32CD32">**A**</font>`. The existing sanitiser config (`src/utils/markdown.ts:31–45`) strips `<font>` and `color`. Without unblocking these, the modal's markdown would show a colorless **A** — same as **D**, defeating the purpose. Added `'font'` to `ADD_TAGS` and `'color'` to `ADD_ATTR`. Math and code rendering are unaffected; existing tests still pass.
+
+**Single-origin deploy.** The same Node process serves the SPA from `dist/` and the API at `/api/*`. n8n hits the API, R&D teams hit the SPA, both on `:5181`. The `vite.config.ts` `server.proxy` rule is dev-only — `npm run dev:all` runs Vite (5173) + Fastify (8080) concurrently.
+
+### Changes
+
+1. **`server/index.ts`** — Fastify entry. Registers `ticketRoutes` at `/api`, serves `dist/` static files when present, sets a 1 MB body limit (spec §2.5), and translates Ajv validation failures into the documented `{ error: 'validation', details: [...] }` shape.
+2. **`server/routes/tickets.ts`** — `POST /tickets` (auth + JSON-schema validate + upsert → 201/200), `GET /tickets` (filter by `team_key`/`status`, sort `event_time DESC`).
+3. **`server/db.ts`** — opens SQLite (WAL mode), auto-creates `data/` if missing, runs `migrations.sql` once. Exposes `upsertTicket` (single atomic `INSERT … ON CONFLICT`) and `listTickets`. `rowToTicket` converts snake_case rows to spec §3.1 camelCase.
+4. **`server/auth.ts`** — `requireApiKey` checks the `X-API-Key` header against `process.env.QUALITY_API_KEY`; 401 on mismatch.
+5. **`server/schemas.ts`** — Fastify-style JSON schemas implementing spec §3.2 validation: `issueKey` regex `^[A-Z]+-\d+$`, `status` enum, `points >= 0`, `timestamp` ISO 8601, `action` enum, `additionalProperties: true` (forward compat).
+6. **`server/migrations.sql`** — DDL adapted from spec §5 (Postgres `VARCHAR(n)` → SQLite `TEXT`, `TIMESTAMPTZ` → `TEXT` ISO 8601). All four indexes preserved (`team_key`, `status`, `assignee`, `event_time DESC`).
+7. **`server/tsconfig.json`** — Node-typed tsconfig isolated from the Vue/DOM one. Lets the editor type-check the server without leaking DOM types into Node land.
+8. **`src/composables/useAppMode.ts`** — `AppMode = 'explore' | 'task' | 'view'`; `validModes` updated; `applyModeFlags` now disables coach skill in both Explore and View (View is read-only — no LLM).
+9. **`src/i18n/en.ts` / `src/i18n/zh.ts`** — added `mode.view` ('View' / '看板') and a 20-key `view.*` block covering filter labels, column headers, status name tooltips, and empty/error states.
+10. **`src/App.vue`** — imports `QualityGridPanel`. New `<QualityGridPanel v-if="appMode === 'view'" />` rendered as a sibling of the existing grid-layout; the grid-layout itself gets `v-show="appMode !== 'view'"`. `modeDescriptions` reactive extended with `view: ''` for shape consistency. `app-main--view` class added for future CSS hooks.
+11. **`src/utils/markdown.ts`** — DOMPurify allow-list: added `'font'` to `ADD_TAGS` and `'color'` to `ADD_ATTR`. Comments explain why (spec §3.4 embeds the rating in `<font color="…">`).
+12. **`src/types/quality.ts`** *(NEW)* — `QualityTicket` interface matching spec §3.1, `STATUS_COLORS` map per spec §3.3, `colorForStatus()` with the gray drift-signal fallback, `isCanonicalStatus()`.
+13. **`src/composables/useQualityGrid.ts`** *(NEW)* — module-scoped state for `tickets`, `filterTeam`, `filterStatus`, `searchText`. `fetchTickets()` calls `GET /api/tickets`. `filteredTickets` computed (team_key + status + free-text on summary/displayName/issueKey). `teamOptions` derives the unique team list from observed rows. `visibilitychange` listener auto-refreshes when the tab regains focus (>30s since last fetch — avoids hammering during rapid alt-tabbing).
+14. **`src/utils/formatTime.ts`** *(NEW)* — small ISO 8601 → locale-aware display formatter. Returns the input verbatim if it fails to parse, so a malformed timestamp never blanks a cell.
+15. **`src/components/quality/QualityGridPanel.vue`** *(NEW)* — top-level View panel. Header (title + count + refresh button), filter bar (team dropdown / status dropdown / search), data table with sticky thead, AgentCheckModal mount. Composable plumbed in once at the top.
+16. **`src/components/quality/QualityRow.vue`** *(NEW)* — one ticket row. Click or Enter expands the AgentCheckModal. JIRA link on `issueKey` opens in a new tab and stops propagation so it doesn't fire the row-expand.
+17. **`src/components/quality/StatusBadge.vue`** *(NEW)* — pill showing the literal status string, background per `colorForStatus()`. Tooltip carries the meaning (`view.statusA`, etc., or `view.statusDrift: <value>` for off-taxonomy strings). Text color is white except on bright orange (B's mid-blue and C's orange get readable contrast).
+18. **`src/components/quality/AgentCheckModal.vue`** *(NEW)* — focus-trapped modal rendering the full `agentCheck` markdown through the existing `renderMarkdown` utility. Header shows badge + issueKey link + summary, meta strip shows team/assignee/type/points/event_time, footer has "Open in JIRA" + Close. Scoped CSS for `:deep(font[color])` makes the embedded badge bold.
+19. **`vite.config.ts`** — `server.proxy: { '/api': 'http://localhost:8080' }` for dev. No-op in production (single-origin Node serves both).
+20. **`package.json`** — new deps `fastify`, `@fastify/static`, `better-sqlite3`; new devDeps `@types/better-sqlite3`, `@types/node`, `tsx`, `concurrently`. New scripts: `server` (tsx watch), `dev:all` (concurrently runs Vite + Fastify), `start` (production entry).
+21. **`deploy/Dockerfile`** *(re-created)* — multi-stage build: stage 1 compiles the SPA, stage 2 installs production deps (with throwaway build-tools layer for `better-sqlite3`'s native module) and copies `dist/` + `server/`. CMD runs Fastify via `tsx`.
+22. **`deploy/.dockerignore`** *(re-created)* — keeps `node_modules`, `data/`, `*.db`, `dist/`, `.claude/`, `PLAN.md`, etc. out of the build context.
+23. **`deploy/docker-compose.yml`** — service builds from repo root with `deploy/Dockerfile`, expects `QUALITY_API_KEY` from `deploy/.env`, mounts two volumes (existing one for `dist/config/`, new one for `data/`).
+24. **`.gitignore`** — added `data/` and `*.db*` so the runtime SQLite file never lands in git.
+25. **`src/components/layout/AppHeader.vue`** — version bump v10.89 → v10.90.
+
+### What is NOT changed
+
+- **Task / Explore behavior** — completely untouched. The same components render the same way; mode switching from View back to Task/Explore restores the previous workspace exactly. `coachSkillEnabled` semantics for Task stay identical; Explore stays free-chat.
+- **Existing webhook flow** (`src/composables/useWebhook.ts`) — still POSTs to n8n. The new server is a *separate* path: n8n → server (write), browser → server (read).
+- **Mode header markup** — `AppHeader.vue` iterates `validModes`, so adding `'view'` lit up the new button with zero markup change.
+- **DOMPurify math/code rendering** — only additions to the allow-list; FORBID_TAGS unchanged.
+- **Component conventions** — View components use the same CSS variables (`--bg-secondary`, `--accent-blue`, `--border-color`) and i18n pattern as the rest of the app.
+
+### Out of scope for v1 (spec §6, §8)
+
+- No user accounts / write-back / `tickets_audit` history table.
+- No Prometheus/trend charts (spec calls these out as parallel future work).
+- No SSE/websocket live updates — visibility-driven refresh + manual button is enough at "handful of posts per minute" volume.
+- No webhook-out when a ticket flips to D.
+
+### Verification
+
+End-to-end smoke after `npm install`:
+
+1. `npm run dev:all` — Vite 5173 + Fastify 8080 + SQLite created at `data/quality.db`.
+2. POST the spec §3.4 sample payload with `X-API-Key: <key>` → expect `201 Created`. POST again → `200 OK` (idempotent upsert).
+3. POST with `status: "一般"` → `400` with `details: ['/status must be equal to one of the allowed values']`.
+4. Omit `X-API-Key` → `401 {"error":"auth"}`.
+5. Open `http://localhost:5173`, click **View / 看板** in the header:
+   - Grid renders one row; sort is newest-first.
+   - Filter `team_key = DKKF` narrows; search on summary narrows.
+   - Click a row — modal opens, `agentCheck` markdown renders with the **colored A/B/C/D badge** visible (verifies the DOMPurify `<font>` fix).
+   - `issueKey` cell links to `https://jira.gwm.cn/browse/<key>` in a new tab.
+6. Restart Fastify — grid still shows previously POSTed tickets (SQLite WAL persistence).
+7. Switch back to Task / Explore — both work identically, no mode-switch regression.
+8. `npm test` — all existing tests pass (DOMPurify additions don't regress math/code/Chinese tests).
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `server/index.ts` | NEW — Fastify entry, static SPA, error handler |
+| `server/routes/tickets.ts` | NEW — POST + GET handlers |
+| `server/db.ts` | NEW — SQLite open + upsert + list |
+| `server/auth.ts` | NEW — X-API-Key check |
+| `server/schemas.ts` | NEW — JSON schemas + `TicketBody` type |
+| `server/migrations.sql` | NEW — SQLite DDL adapted from spec §5 |
+| `server/tsconfig.json` | NEW — Node-typed tsconfig |
+| `src/composables/useAppMode.ts` | Add `'view'` to `AppMode` and `validModes`; coach skill now only on Task |
+| `src/i18n/en.ts` / `src/i18n/zh.ts` | Add `mode.view` and 20-key `view.*` block |
+| `src/App.vue` | Mount `QualityGridPanel` v-if; hide grid-layout v-show; extend `modeDescriptions` |
+| `src/utils/markdown.ts` | Allow `<font>` + `color` in DOMPurify |
+| `src/types/quality.ts` | NEW — `QualityTicket`, `STATUS_COLORS`, `colorForStatus` |
+| `src/composables/useQualityGrid.ts` | NEW — fetch + filter + visibility-refresh |
+| `src/utils/formatTime.ts` | NEW — ISO 8601 → locale display |
+| `src/components/quality/QualityGridPanel.vue` | NEW — top-level View panel |
+| `src/components/quality/QualityRow.vue` | NEW — one row + JIRA link |
+| `src/components/quality/StatusBadge.vue` | NEW — color per §3.3, drift-signal gray |
+| `src/components/quality/AgentCheckModal.vue` | NEW — focus-trapped markdown modal |
+| `vite.config.ts` | Dev proxy `/api` → :8080 |
+| `package.json` | Fastify/SQLite deps + `server` / `dev:all` / `start` scripts |
+| `deploy/Dockerfile` | NEW — multi-stage SPA + server image |
+| `deploy/.dockerignore` | NEW |
+| `deploy/docker-compose.yml` | Build context = repo root, add `QUALITY_API_KEY` env, add data volume |
+| `.gitignore` | Add `data/` + `*.db*` |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.90 |
+| `PLAN.md` | This entry |
+| `MEMORY.MD` | New file — captures the architectural decision |
+
+---
+
+## v10.91 — Wire QUALITY_API_KEY via `deploy/.env`, shared by local dev and docker
+
+**Motivation.** v10.90 shipped the View-mode backend behind `X-API-Key` auth, but the key was still being passed on the command line each time the server started. That was fine for smoke tests; it's not fine for the user's actual workflow — they iterate on `npm run server` on a Windows workstation, then ship the same binary in a Docker container to the corporate host. The key has to flow into both runtimes from one source of truth, and it must never reach git (the repo has a public mirror at `github.com/jianguangban-ship-it/smart_agent`).
+
+**Approach.** Node 24's built-in `--env-file-if-exists` flag (confirmed locally: `node --version` → `v24.13.1`). One `.env` file at `deploy/.env`, consumed by both:
+
+- `npm run server` (and `npm run dev:all`, which composes server + Vite) — the flag is in the `tsx` invocation, so `process.env.QUALITY_API_KEY` is populated before any user code runs. `server/auth.ts:5` reads it at module load and the existing flow Just Works.
+- `docker compose up` in `deploy/` — compose auto-loads `.env` from the directory next to `docker-compose.yml` with zero extra config. The compose file's existing `${QUALITY_API_KEY:?must be set in deploy/.env}` is unchanged — its `:?` form deliberately fails the container start if the value is missing, which is the behaviour we want.
+
+**Why not `dotenv` package.** Node ≥20.6 has `--env-file` natively; Node ≥21.7 added `--env-file-if-exists`. The user is on v24.13.1 so both are available. The `-if-exists` variant is gentler: if a developer checks out the repo and forgets to drop a `.env` next to `docker-compose.yml`, `npm run server` still boots and `server/auth.ts:7-10` already prints a loud `[quality-grid] QUALITY_API_KEY is not set — all writes will be rejected` warning. With `--env-file` (no `-if-exists`), Node would exit before the warning could even print.
+
+**Why a `.env.example`.** The real `.env` is gitignored, so a fresh checkout has no breadcrumb explaining what the file even needs to contain. `deploy/.env.example` is committed and shows the shape (`QUALITY_API_KEY=<64-hex-string>`) plus the `openssl rand -hex 32` command to generate a fresh value. The `.gitignore` entry is `!deploy/.env.example` after `deploy/.env.*` so the example doesn't get caught by the wildcard.
+
+### Changes
+
+1. **`deploy/.env`** *(NEW, gitignored)* — single line: `QUALITY_API_KEY=<64-hex>`. The actual secret the user issued for the production deployment. `git check-ignore -v deploy/.env` confirms the rule matches before the file is created.
+2. **`deploy/.env.example`** *(NEW, committed)* — placeholder + comment explaining the file's purpose, where it's read from, and how to generate a new value.
+3. **`.gitignore`** — added `.env`, `.env.*`, `!.env.example`, `deploy/.env`, `deploy/.env.*`, `!deploy/.env.example`. The bang-rules re-include the example files.
+4. **`deploy/.dockerignore`** — added `.env`, `.env.*`, `!.env.example` so even a manual `docker build` from `deploy/` doesn't accidentally bake the secret into an image. Belt-and-braces: at runtime compose injects the value via the `environment:` block, not by copying the file into the image, so this ignore rule is purely defensive.
+5. **`package.json`** — two scripts updated to pass `--env-file-if-exists=deploy/.env`:
+   - `"server"`: `tsx --env-file-if-exists=deploy/.env watch server/index.ts`
+   - `"start"`: `node --env-file-if-exists=deploy/.env --import tsx server/index.ts`
+   `"dev:all"` composes `npm:dev` + `npm:server` via `concurrently`, so it inherits the flag transparently — no change there.
+6. **`src/components/layout/AppHeader.vue:11`** — version bump v10.90 → v10.91.
+
+### What is NOT changed
+
+- **`deploy/docker-compose.yml`** — already correct. `${QUALITY_API_KEY:?...}` fails fast on missing config, and compose's automatic `.env` loading (next to the compose file) does the rest.
+- **`server/auth.ts`** — reads `process.env.QUALITY_API_KEY` at module load. Node loads `--env-file-if-exists` before any user code, so the env var is populated by the time the import runs. No change needed.
+- **`server/index.ts`** — same reason; no change.
+- **Docker image build path** — image still builds the same; the secret never enters the image layer.
+
+### Verification
+
+1. **Git safety**:
+   - `git check-ignore -v deploy/.env` → match on `.gitignore:17:deploy/.env`. ✓
+   - `git check-ignore -v deploy/.env.example` → match on `.gitignore:19:!deploy/.env.example` (which means it is **NOT** ignored). ✓
+   - `git status --short` shows `?? deploy/.env.example` (untracked, awaiting first commit) and **does not** show `deploy/.env`. ✓
+2. **Local dev pickup** — `npm run server` boots; no `[quality-grid] QUALITY_API_KEY is not set` warning in the log.
+3. **Smoke test** (auth + idempotency) — see the run captured under v10.90 verification, repeated against the env-loaded key:
+   - Missing header → `401 {"error":"auth"}`
+   - Wrong key → `401 {"error":"auth"}`
+   - Correct key on a fresh issueKey → `201 {"issueKey":"…","result":"created"}`
+   - Correct key, same issueKey → `200 {"issueKey":"…","result":"updated"}`
+   - Drift status → `400 {"error":"validation","details":["/status must be equal to one of the allowed values"]}`
+4. **Type-check** — `npx vue-tsc -b --noEmit` exits 0.
+5. **Tests** — `npm test` still passes (191/194 baseline; the 3 pre-existing `formatCoach.test.ts` failures are unchanged).
+6. **Compose dry-run** *(when ready to ship, not required for local dev)* — `cd deploy && docker compose config` resolves `QUALITY_API_KEY` to the actual hex value with no `must be set in deploy/.env` error.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `deploy/.env` | NEW — gitignored, holds the production secret |
+| `deploy/.env.example` | NEW — committed placeholder + generate-key comment |
+| `.gitignore` | Add `.env` + `deploy/.env` patterns with `!*.example` re-includes |
+| `deploy/.dockerignore` | Add `.env` patterns with `!.env.example` re-include |
+| `package.json` | `server` + `start` scripts use `--env-file-if-exists=deploy/.env` |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.91 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.92 — Harden the n8n → View communication contract
+
+**Motivation.** v10.90 / v10.91 shipped the View-mode backend and got the secret-management story right, but the *actual contract* between the n8n producer (`Final-Message-Merge.java`) and the receiver (`server/schemas.ts`) had never been exercised end-to-end with a real workflow run. A side-by-side audit of the two files surfaced three producer-side defects that would 400 in production and one wiring concern (the HTTP node had to send `$json.task`, not `$json`). The user verified the receiver in isolation with PowerShell `Invoke-RestMethod` against the live server — TEST-1 row showed up in the grid — confirming the smart-agent side is healthy. This version closes the remaining gaps so the next real n8n execution lands a `201 Created` instead of a silent `400`.
+
+**The contract audit.** Walked field-by-field down spec §3.1, comparing what the producer outputs against what the validator demands:
+
+| Field | n8n produced | Server required | Verdict |
+|---|---|---|---|
+| `status` | `mergedData.status ?? null` | enum `[A,B,C,D,格式异常,未知]` | **Critical** — `null` fails enum, would 400 every time the upstream parse drops status |
+| `issueType` | `data.issue_type` (no fallback) | `string, minLength: 1` | **Critical** — undefined → "required" failure |
+| `points` | `data.estimated_points \|\| 0` | `integer, minimum: 0` | **Critical** — JIRA returns `"5"` (string) for some plugin configs; passes through unchanged → 400 |
+| `assignee`, `team_key`, etc. | string fallbacks already present | string | OK |
+
+The other concern was wiring, not code: the n8n HTTP Request node defaults to `={{ $json }}` for the JSON body, which would have shipped the DingTalk wrapper as the top-level object with the spec fields nested under `.task` — every required field missing from the receiver's perspective. The user re-configured the node body to `={{ $json.task }}` mid-session.
+
+**Why "drift fallback to 未知" rather than "drift fallback to null".** The status taxonomy in spec §3.3 designates `未知` as the canonical sentinel for "the upstream parse failed to give us a string." It renders gray (the operator's drift signal) and passes the strict enum on the receiver. `null` would have been semantically honest but practically useless — the receiver rejects, the row never makes it to the grid, and the operator sees nothing. The v10.90 implementation chose "strict enum + n8n-side coercion" over "permissive enum + frontend-side rendering"; this version makes n8n actually do the coercion.
+
+**Server-side request log.** Spec §7 calls for a per-request log line with `issueKey`, `status`, `team_key`, response code, and latency. v10.90 enabled Fastify's default logger but never wrote that summary line, so when n8n posts and gets a 400 back, the server logs show only the validation error — not which ticket failed or what was wrong with it. Added an `onResponse` hook scoped to `POST /api/tickets` that logs the structured one-liner. Validation details get attached to the request from `setErrorHandler` so the same line can include `validation: ['/status must be ...']` when the schema rejects a payload.
+
+**Why log in `onResponse` and not `preHandler`.** `onResponse` fires *after* the response is sent (so latency is real), it sees the final `reply.statusCode` (so 400/500 paths log naturally), and it has access to the parsed `req.body` (set during preParsing, before validation). For the 401 branch the auth hook short-circuits in `onRequest` — body is undefined at that point and the log line shows `issueKey: undefined`, which is the right answer (we don't know what they tried to post; they didn't authenticate).
+
+### Changes
+
+1. **`E:\n8n-code-JavaScripts\Final-Message-Merge.java`** — three single-line patches with comments explaining why each fallback exists and which spec section it implements:
+   - L26: `issueType: data.issue_type || "未知"` (was: no fallback)
+   - L31: `points: Number(data.estimated_points) || 0` (was: `data.estimated_points || 0`)
+   - L41: `status: (typeof mergedData.status === 'string' && mergedData.status) || "未知"` (was: `mergedData.status ?? null`)
+2. **`server/index.ts`** — added the spec-§7 `onResponse` hook. Stashes validation details on the request from `setErrorHandler` so the summary log line carries them on 400 paths. Imports `TicketBody` for the body type-cast (struct shape only — at log time the body may have failed validation).
+3. **`E:\n8n-code-JavaScripts\http-port-design.MD`** — appended `## 10. n8n HTTP Request node — wiring reference` covering the body expression (`={{ $json.task }}`), the Header Auth credential setup (Name = `X-API-Key`, Value = the 64-hex from `deploy/.env`), and a PowerShell-native smoke check that doesn't require Windows curl.exe quote-escaping.
+4. **`src/components/layout/AppHeader.vue:11`** — version bump v10.91 → v10.92.
+5. **`MEMORY.MD`** — appended a `## n8n contract gotchas (v10.92)` block documenting the strict-enum vs. drift-render tension that drove the producer-side fallbacks, so the next person who re-reads spec §3.2 vs §3.3 doesn't try to "fix" the apparent contradiction.
+
+### What is NOT changed
+
+- **Server validation schema** (`server/schemas.ts`) — strict enum for `status` is the right call; the fix is on the producer, not the receiver. Loosening the enum to permit `null` would have removed the receiver's drift signal entirely.
+- **Receiver behaviour for unknown fields** — `additionalProperties: true` stays. n8n is free to add v2 fields without coordinating a server release.
+- **Auth model** — still `X-API-Key` only. Header Auth credential is a UX recommendation in the docs, not a server-side enforcement change.
+- **DingTalk message construction** in `Final-Message-Merge.java` — the patches only touch the `task` object; the `dingMessage` half is untouched, so the existing DingTalk node keeps working.
+- **`useQualityGrid.ts`, `QualityGridPanel.vue`, `StatusBadge.vue`** — frontend already handles every canonical status correctly, including `未知` (gray). No changes needed.
+
+### Verification
+
+1. **Type-check** — `npx vue-tsc -b --noEmit` exits 0 (server tsconfig included).
+2. **Receiver smoke** *(already done by user mid-session)* — `Invoke-RestMethod` POST of TEST-1 returned `result : created` (HTTP 201); re-run returned `result : updated` (HTTP 200); the row appeared in the View-mode grid with the correct status badge.
+3. **Producer-side patches** — to be exercised on the next live n8n execution. Expected: `201 Created` for a fresh issue, `200 OK` for a re-check. If the AI run drops `status`, the row should still land with a gray `未知` badge — verifying both the producer fallback and the receiver's drift-signal rendering.
+4. **Logging** — restart `npm run server`; on the next POST the log line shows `{ issueKey, status, team_key, code, latency_ms }`. On a forced 400 (e.g., omit `issueKey`), the same line includes `validation: [ '/issueKey must ...' ]`.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `E:\n8n-code-JavaScripts\Final-Message-Merge.java` | 3 producer-side fallbacks: status, issueType, points |
+| `E:\n8n-code-JavaScripts\http-port-design.MD` | NEW §10 — n8n HTTP-node wiring reference + PowerShell smoke check |
+| `server/index.ts` | onResponse hook for per-request summary; setErrorHandler stashes validation details |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.92 |
+| `MEMORY.MD` | Append §"n8n contract gotchas (v10.92)" |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.93 — Promote `tsx` to dependency so the deploy image actually starts
+
+**Motivation.** The View-mode integration finally hit the deploy gate: n8n is corporate-cloud-hosted at `idcpdvvdevopsn8n.gwm.cn`, so the smart-agent server has to live on a host n8n can reach (the user's workstation can't accept inbound from cloud, by corporate policy). The producer-side patches and the receiver are both verified end-to-end against the local server; the remaining work is purely a deploy. While auditing `deploy/Dockerfile` for that deploy, found a defect that would have made the very first container start either slow-and-fragile or outright fail: `tsx` was in `devDependencies`, but the runtime stage runs `npm ci --omit=dev` and then launches the server with `npx tsx server/index.ts`. Without `tsx` in the production tree, `npx` falls through to fetching it from the npm registry on first invocation — which only works if the cloud host has outbound internet to npmjs.org and is, in any case, a startup-time round-trip that has no business existing in a deployable image.
+
+**The fix.** One line moved in `package.json` — `tsx` from `devDependencies` to `dependencies`. The runtime image is ~5 MB larger (tsx is small) and gains zero new attack surface (tsx is what the existing `npm run server` and `npm start` scripts already use locally; we are only making the production install match local behaviour). `npm install --package-lock-only` regenerates `package-lock.json` so `npm ci` in the Dockerfile sees a matching tree and doesn't error out on first build.
+
+**Why not switch to a compile-to-JS step instead.** Compiling `server/` from TS to JS at image build time and running `node server/index.js` would be the textbook "right" answer — smaller image, no tsx in production, no on-the-fly JIT. That's a bigger refactor: server tsconfig changes, two output paths (compiled JS + ESM resolution), Dockerfile gains a stage. The cost-benefit isn't there for a server that handles a handful of POSTs per minute and is shipped as a single container. tsx in production is fine; the Bun/Deno crowd does the same thing daily.
+
+**HTTP-node URL guidance for the deployer (companion §10.4 of the spec).** When smart-agent and n8n run on the same Docker host, the cleanest URL is via Docker's service DNS — `http://smart-agent:5181/api/tickets` — provided both containers join the same Docker network. If they're on different networks (typical when n8n is in an existing compose stack you don't control), use the host's internal IP — `http://<host-internal-ip>:5181/api/tickets` — and the container's outbound routing will reach the published port. `host.docker.internal` is unreliable on plain Linux Docker (no auto-gateway), so don't depend on it without `extra_hosts: ["host.docker.internal:host-gateway"]` in the smart-agent compose. The corporate cloud n8n is on Linux Docker (per its v2.9.4 self-hosted stack trace), so plan accordingly.
+
+### Changes
+
+1. **`package.json`** — `tsx` moved from `devDependencies` to `dependencies`. No version change to the `^4.19.2` spec.
+2. **`package-lock.json`** — regenerated via `npm install --package-lock-only` so `npm ci` in the Dockerfile sees a coherent tree.
+3. **`src/components/layout/AppHeader.vue:11`** — version bump v10.92 → v10.93.
+
+### What is NOT changed
+
+- **`deploy/Dockerfile`** — no edits needed. With tsx now in production deps, the existing `npm ci --omit=dev` line installs it; the existing `CMD ["npx", "tsx", "server/index.ts"]` finds it locally.
+- **`deploy/docker-compose.yml`** — port mapping `5181:5181`, env injection, and volume mounts are all correct; the deployer just needs to (a) drop a real `deploy/.env`, (b) ensure the host paths in `volumes:` exist or change them to Docker named volumes, (c) decide on the network strategy for the n8n side.
+- **Server code, frontend, n8n .java patches** — all stable since v10.92.
+
+### Verification
+
+1. **`tsx` in production deps**: `node -e "const p=require('./package.json'); console.log(p.dependencies.tsx, !!p.devDependencies.tsx)"` → prints `^4.19.2 false`.
+2. **Lock-file coherence**: `npm install --package-lock-only` returns `up to date` with no diff in dep set; `npm ci` in a clean tree would now succeed.
+3. **Runtime smoke** *(when the cloud deploy lands)*: container boots with `quality-grid listening on http://0.0.0.0:5181`; n8n's HTTP node returns 201 Created on the first real-ticket workflow run; the per-request summary log line (v10.92) shows `issueKey` / `status` / `team_key` / `code` / `latency_ms`.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `package.json` | Move `tsx` from `devDependencies` to `dependencies` |
+| `package-lock.json` | Regenerated to match the dep move |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.93 |
+| `PLAN.md` | This entry |

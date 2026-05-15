@@ -35,12 +35,18 @@ const PURIFY_CONFIG = {
     'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mtext',
     'mfrac', 'msqrt', 'mroot', 'msub', 'msup', 'msubsup', 'munder',
     'mover', 'munderover', 'mtable', 'mtr', 'mtd', 'mspace', 'mpadded',
+    // <font color="…"> is emitted by the JIRA quality-check agent for the
+    // A/B/C/D badge in agentCheck markdown. Spec §3.4 example shows
+    // <font color="#32CD32">**A**</font>. Without this, the badge color is
+    // stripped and all grades render the same.
+    'font',
   ],
   ADD_ATTR: ['style', 'class', 'aria-hidden', 'encoding', 'xmlns',
              'mathvariant', 'stretchy', 'fence', 'separator', 'accent',
              'lspace', 'rspace', 'linethickness', 'displaystyle',
              'scriptlevel', 'width', 'height', 'depth', 'voffset',
-             'columnalign', 'rowalign', 'columnspacing', 'rowspacing'],
+             'columnalign', 'rowalign', 'columnspacing', 'rowspacing',
+             'color'],
   FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input'],
 } satisfies DOMPurify.Config
 

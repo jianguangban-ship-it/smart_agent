@@ -1,4 +1,4 @@
-# Runtime configuration — `deploy/config/`
+# Runtime configuration — `config/`
 
 These JSON files drive the **Basic Information** and **Task Summary** dropdowns. Edit them and restart the container — **no Docker image rebuild required**.
 
@@ -26,8 +26,8 @@ If a project key exists in `projects.json` but is missing from `components.json`
 ## Edit workflow
 
 ```bash
-# 1. Edit the file on the host
-vi deploy/config/components.json
+# 1. Edit the file on the Docker host
+vi /usr/local/smart_agent/data/components.json
 
 # 2. Restart the container so users get the fresh JSON on next request
 docker compose restart smart-agent
