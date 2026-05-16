@@ -30,7 +30,7 @@ export async function ticketRoutes(app: FastifyInstance) {
 
   // GET /api/tickets — feeds the View mode grid. Spec §8 future-ext.
   // Public read; intranet auth is at the deploy layer.
-  app.get<{ Querystring: { team_key?: string; status?: string } }>('/tickets', async (req) => {
+  app.get<{ Querystring: { team_key?: string; status?: string; from?: string; to?: string } }>('/tickets', async (req) => {
     const rows = listTickets(req.query)
     return rows.map(rowToTicket)
   })

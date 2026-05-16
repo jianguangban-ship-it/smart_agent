@@ -20,7 +20,11 @@
       </div>
     </header>
 
+    <QualitySummaryBar :summary="summary" />
+
     <div class="filter-bar">
+      <PeriodSelector />
+
       <label class="filter-item">
         <span class="filter-label">{{ t('view.filterTeam') }}</span>
         <select v-model="filterTeam">
@@ -53,6 +57,8 @@
         />
       </label>
     </div>
+
+    <TrendMatrix :summary="summary" />
 
     <div class="table-wrap">
       <div v-if="error" class="state-error">
@@ -102,6 +108,9 @@ import { useI18n } from '@/i18n'
 import { useQualityGrid } from '@/composables/useQualityGrid'
 import QualityRow from './QualityRow.vue'
 import AgentCheckModal from './AgentCheckModal.vue'
+import PeriodSelector from './PeriodSelector.vue'
+import QualitySummaryBar from './QualitySummaryBar.vue'
+import TrendMatrix from './TrendMatrix.vue'
 import type { QualityTicket } from '@/types/quality'
 
 const { t } = useI18n()
@@ -110,6 +119,7 @@ const {
   tickets,
   filteredTickets,
   teamOptions,
+  summary,
   loading,
   error,
   filterTeam,

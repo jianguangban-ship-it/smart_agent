@@ -75,11 +75,17 @@ export function upsertTicket(t: TicketBody): 'created' | 'updated' {
 export function listTickets(filter: {
   team_key?: string
   status?: string
+  from?: string
+  to?: string
 } = {}): TicketRow[] {
   const where: string[] = []
   const params: Record<string, unknown> = {}
   if (filter.team_key) { where.push('team_key = @team_key'); params.team_key = filter.team_key }
   if (filter.status)   { where.push('status = @status');     params.status = filter.status }
+  // event_time is the n8n ISO-8601 UTC verdict time; TEXT comparison is
+  // lexicographic and correct for same-format UTC strings. idx_tickets_event_time serves this.
+  if (filter.from) { where.push('event_time >= @from'); params.from = filter.from }
+  if (filter.to)   { where.push('event_time <= @to');   params.to   = filter.to }
 
   const sql = `
     SELECT issue_key, issue_type, team_key, team, project, summary, points,

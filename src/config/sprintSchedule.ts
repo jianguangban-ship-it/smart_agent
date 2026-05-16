@@ -80,6 +80,17 @@ export function getNextSprint(entry: SprintEntry): SprintEntry | null {
   return SPRINT_SCHEDULE[idx + 1]
 }
 
+export function getPreviousSprint(entry: SprintEntry): SprintEntry | null {
+  const idx = SPRINT_SCHEDULE.indexOf(entry)
+  if (idx <= 0) return null
+  return SPRINT_SCHEDULE[idx - 1]
+}
+
+/** All sprints in a Planning Interval, schedule order (S1…S6/DRP). */
+export function sprintsInPI(pi: number): SprintEntry[] {
+  return SPRINT_SCHEDULE.filter(s => s.pi === pi)
+}
+
 /**
  * Parse a project name (e.g. "IDC_PDSW") into the cadence department prefix
  * and team-code suffix used by the cadence string. Rule (per v10.89):

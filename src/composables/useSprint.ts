@@ -11,7 +11,9 @@ import {
 const MS_PER_DAY = 86_400_000
 
 // Shared reactive clock — single 60s interval drives every consumer.
-const now = ref(new Date())
+// Exported so other composables (e.g. useTimingPhase) share the same clock
+// and the same `_setNowForTesting` seam.
+export const now = ref(new Date())
 let _tickHandle: ReturnType<typeof setInterval> | null = null
 
 export function startSprintClock(): void {

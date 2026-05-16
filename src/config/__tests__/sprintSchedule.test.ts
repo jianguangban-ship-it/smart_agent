@@ -4,6 +4,8 @@ import {
   findSprintAt,
   getCadenceString,
   getNextSprint,
+  getPreviousSprint,
+  sprintsInPI,
   parseProjectCadence,
 } from '../sprintSchedule'
 
@@ -136,6 +138,33 @@ describe('getNextSprint', () => {
   it('returns null after the very last sprint', () => {
     const last = SPRINT_SCHEDULE[SPRINT_SCHEDULE.length - 1]
     expect(getNextSprint(last)).toBeNull()
+  })
+})
+
+describe('getPreviousSprint', () => {
+  it('returns the chronologically previous sprint', () => {
+    const s4 = SPRINT_SCHEDULE.find(s => s.name === '26 PI2 S4')!
+    expect(getPreviousSprint(s4)?.name).toBe('26 PI2 S3')
+  })
+
+  it('crosses PI boundaries: 26 PI2 S1 → 26 PI1 DRP', () => {
+    const s1 = SPRINT_SCHEDULE.find(s => s.name === '26 PI2 S1')!
+    expect(getPreviousSprint(s1)?.name).toBe('26 PI1 DRP')
+  })
+
+  it('returns null before the very first sprint', () => {
+    expect(getPreviousSprint(SPRINT_SCHEDULE[0])).toBeNull()
+  })
+})
+
+describe('sprintsInPI', () => {
+  it('returns all PI2 sprints in schedule order ending with DRP', () => {
+    const pi2 = sprintsInPI(2)
+    expect(pi2.map(s => s.sprint)).toEqual(['S1', 'S2', 'S3', 'S4', 'S5', 'DRP'])
+  })
+
+  it('returns an empty array for a non-existent PI', () => {
+    expect(sprintsInPI(9)).toEqual([])
   })
 })
 
