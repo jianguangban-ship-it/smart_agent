@@ -229,7 +229,8 @@ import {
   clearHistory,
   exportRecords,
   formatTime,
-  getSessionGroups
+  getSessionGroups,
+  recordsForChannel
 } from '@/composables/useCoachHistory'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import DownloadModal from '@/components/coach/DownloadModal.vue'
@@ -255,9 +256,13 @@ watch(searchQuery, (val) => {
 
 const isSearching = computed(() => debouncedQuery.value.trim() !== '' || roleFilter.value !== 'all')
 
-const filteredRecords = computed(() =>
-  searchRecords(debouncedQuery.value, roleFilter.value)
-)
+// CoachPanel's history is scoped to the task channel (this panel is the Task
+// coach surface; Explore has its own chat). Filter at the read boundary.
+const filteredRecords = computed(() => {
+  const taskIds = new Set(recordsForChannel('task').map(r => r.id))
+  return searchRecords(debouncedQuery.value, roleFilter.value)
+    .filter(r => taskIds.has(r.id))
+})
 
 const sessionGroups = computed(() =>
   getSessionGroups(filteredRecords.value)

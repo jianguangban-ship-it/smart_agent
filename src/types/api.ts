@@ -71,6 +71,8 @@ export interface ChatMessage {
   hashId?: string         // 8-char hex from coach history record
 }
 
+export type CoachChannel = 'task' | 'explore'
+
 /** A single record in the persistent global coach history */
 export interface CoachHistoryRecord {
   id: string              // 8-char random hex
@@ -78,6 +80,7 @@ export interface CoachHistoryRecord {
   content: string         // raw unrendered content
   timestamp: number       // Date.now() at creation
   sessionId?: string      // groups records into conversations; undefined for legacy records
+  channel?: CoachChannel  // undefined === legacy 'task'
 }
 
 export interface LLMRequestBody {

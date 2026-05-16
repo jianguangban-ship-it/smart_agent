@@ -33,24 +33,35 @@
       <!-- View mode: full-width JIRA Quality Grid (n8n-fed) -->
       <QualityGridPanel v-if="appMode === 'view'" />
 
+      <!-- Explore mode: full-width chat -->
+      <ExploreChat
+        v-else-if="appMode === 'explore'"
+        :messages="exploreCoachMessages"
+        :is-loading="isExploreCoachLoading"
+        :had-error="exploreCoachHadError"
+        :backoff-secs="exploreCoachBackoffSecs"
+        @send="handleExploreSend"
+        @cancel="cancelExploreCoach"
+        @new-chat="handleExploreNewChat"
+      />
+
       <div
-        v-show="appMode !== 'view'"
+        v-show="appMode === 'task'"
         class="grid-layout"
-        :class="{ 'layout-focus': appMode === 'explore' }"
         ref="gridRef"
         :style="gridStyle"
       >
         <!-- LEFT: AI Coach -->
         <div class="col-left">
           <CoachPanel
-            :messages="coachMessages"
-            :is-loading="isCoachLoading"
-            :was-cancelled="coachWasCancelled"
-            :had-error="coachHadError"
-            :stream-speed="coachStreamSpeed"
-            :backoff-secs="coachBackoffSecs"
+            :messages="taskCoachMessages"
+            :is-loading="isTaskCoachLoading"
+            :was-cancelled="taskCoachWasCancelled"
+            :had-error="taskCoachHadError"
+            :stream-speed="taskCoachStreamSpeed"
+            :backoff-secs="taskCoachBackoffSecs"
             :description-focused="descFocused"
-            @cancel="cancelCoach"
+            @cancel="cancelTaskCoach"
             @retry="handleCoachRetry"
             @apply-chip="applyCoachChip"
             @elicit="handleElicitation"
@@ -98,7 +109,7 @@
             @analyze="handleAnalyze"
             @create="handleCreateClick"
             @reset="handleReset"
-            @cancel-coach="cancelCoach"
+            @cancel-coach="cancelTaskCoach"
             @project-change="onProjectChange"
             @suggest-links="handleSuggestLinks"
             @impact-analysis="handleImpactAnalysis"
@@ -115,7 +126,6 @@
 
         <!-- Drag handle: center | right -->
         <div
-          v-show="appMode !== 'explore'"
           class="col-drag-handle"
           @mousedown="startDrag('right', $event)"
         >
@@ -123,9 +133,8 @@
         </div>
 
         <!-- RIGHT: AI Review + JIRA -->
-        <div class="col-right" v-show="appMode !== 'explore'">
+        <div class="col-right">
           <AIReviewPanel
-            v-show="appMode !== 'explore'"
             :response="analyzeResponse"
             :previous-response="previousAnalyzeResponse"
             :is-analyzing="isAnalyzeLoading"
@@ -141,7 +150,6 @@
           />
 
           <TicketHistoryPanel
-            v-show="appMode !== 'explore'"
             :last-created-key="lastCreatedKey"
             :is-creating="isSubmitting && currentAction === 'create'"
           />
@@ -166,7 +174,6 @@
           />
 
           <JiraSearchPanel
-            v-show="appMode === 'task'"
             :is-searching="isSearching"
             :search-results="searchResults"
             :search-error="searchError"
@@ -180,7 +187,6 @@
           />
 
           <BatchPanel
-            v-show="appMode === 'task'"
             :batch-items="batchItems"
             :selected-count="selectedCount"
             @add-current="handleAddCurrentToBatch"
@@ -192,7 +198,7 @@
             @import-c-s-v="handleBatchImportCSV"
           />
 
-          <ReviewDashboard v-show="appMode === 'task'" :stats="reviewStats" @clear="clearReviewHistory" />
+          <ReviewDashboard :stats="reviewStats" @clear="clearReviewHistory" />
         </div>
       </div>
     </main>
@@ -244,6 +250,7 @@ import DevTools from '@/components/dev/DevTools.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
 import QualityGridPanel from '@/components/quality/QualityGridPanel.vue'
+import ExploreChat from '@/components/chat/ExploreChat.vue'
 
 const { t, isZh } = useI18n()
 const { addToast } = useToast()
@@ -265,7 +272,6 @@ try {
 } catch { /* ignore */ }
 
 const gridStyle = computed(() => {
-  if (appMode.value === 'explore') return undefined
   const [l, c, r] = colFractions.value
   return {
     gridTemplateColumns: `${l}fr 6px ${c}fr 6px ${r}fr`
@@ -340,7 +346,7 @@ watch(
   { immediate: true }
 )
 
-const { attachedFile, detach: detachFile } = useAttachment()
+const { attachedFile } = useAttachment()
 
 const {
   isSubmitting, currentAction,
@@ -349,9 +355,18 @@ const {
 } = useWebhook()
 
 const {
+  // task channel
+  isTaskCoachLoading, taskCoachMessages, taskCoachWasCancelled, taskCoachHadError,
+  taskCoachStreamSpeed, taskCoachBackoffSecs,
+  requestTaskCoach, cancelTaskCoach, retryTaskCoach, clearTaskCoach, restoreTaskCoachMessages,
+  // explore channel
+  isExploreCoachLoading, exploreCoachMessages, exploreCoachWasCancelled, exploreCoachHadError,
+  exploreCoachStreamSpeed, exploreCoachBackoffSecs,
+  requestExploreCoach, cancelExploreCoach, clearExploreCoach, restoreExploreCoachMessages,
+  // back-compat (read-only, active mode)
   isCoachLoading, coachResponse, coachMessages, coachWasCancelled, coachHadError,
   coachStreamSpeed, coachBackoffSecs,
-  requestCoach, cancelCoach, retryCoach, clearCoachResponse, restoreCoachMessages,
+  // analyze (unchanged)
   isAnalyzeLoading, analyzeResponse, previousAnalyzeResponse, analyzeWasCancelled, analyzeHadError,
   analyzeStreamSpeed, analyzeBackoffSecs,
   requestAnalyze, cancelAnalyze, retryAnalyze, clearAnalyzeResponse,
@@ -520,6 +535,8 @@ watch(appMode, (newMode, oldMode) => {
 // ─── Response persistence ──────────────────────────────────────────────────
 
 const LS_COACH_RESPONSE   = 'coach-last-response'
+const LS_TASK_RESPONSE    = 'task-last-response'
+const LS_EXPLORE_RESPONSE = 'explore-last-response'
 const LS_ANALYZE_RESPONSE = 'analyze-last-response'
 const LS_RESPONSE_SNAPSHOT = 'response-form-snapshot'
 
@@ -536,14 +553,17 @@ function buildFormSnapshot(): string {
 
 function saveResponsesToStorage() {
   localStorage.setItem(LS_RESPONSE_SNAPSHOT, buildFormSnapshot())
-  if (coachMessages.value.length > 0)
-    localStorage.setItem(LS_COACH_RESPONSE, JSON.stringify(coachMessages.value))
+  if (taskCoachMessages.value.length > 0)
+    localStorage.setItem(LS_TASK_RESPONSE, JSON.stringify(taskCoachMessages.value))
+  if (exploreCoachMessages.value.length > 0)
+    localStorage.setItem(LS_EXPLORE_RESPONSE, JSON.stringify(exploreCoachMessages.value))
   if (analyzeResponse.value !== null)
     localStorage.setItem(LS_ANALYZE_RESPONSE, JSON.stringify(analyzeResponse.value))
 }
 
 function clearResponsesFromStorage() {
   localStorage.removeItem(LS_COACH_RESPONSE)
+  localStorage.removeItem(LS_TASK_RESPONSE)
   localStorage.removeItem(LS_ANALYZE_RESPONSE)
   localStorage.removeItem(LS_RESPONSE_SNAPSHOT)
 }
@@ -569,17 +589,19 @@ function restoreResponsesFromStorage() {
   const snapshot = localStorage.getItem(LS_RESPONSE_SNAPSHOT)
   if (!snapshot || snapshot !== buildFormSnapshot()) return
   try {
-    const savedCoach = localStorage.getItem(LS_COACH_RESPONSE)
-    const savedAnalyze = localStorage.getItem(LS_ANALYZE_RESPONSE)
-    if (savedCoach) {
-      const parsed = JSON.parse(savedCoach)
-      // Support new ChatMessage[] format; ignore old single-object format
-      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].role) {
-        coachMessages.value = parsed
-      }
+    const tRaw = localStorage.getItem(LS_TASK_RESPONSE)
+    if (tRaw) taskCoachMessages.value = JSON.parse(tRaw)
+    const eRaw = localStorage.getItem(LS_EXPLORE_RESPONSE)
+    if (eRaw) exploreCoachMessages.value = JSON.parse(eRaw)
+    // one-time migration of the legacy single key into the task channel
+    const legacy = localStorage.getItem(LS_COACH_RESPONSE)
+    if (legacy && !tRaw) {
+      taskCoachMessages.value = JSON.parse(legacy)
+      localStorage.removeItem(LS_COACH_RESPONSE)
     }
+    const savedAnalyze = localStorage.getItem(LS_ANALYZE_RESPONSE)
     if (savedAnalyze) analyzeResponse.value = JSON.parse(savedAnalyze)
-  } catch { /* ignore malformed entries */ }
+  } catch { /* ignore corrupt cache */ }
 }
 
 // Handlers
@@ -739,7 +761,7 @@ async function confirmCreate() {
 }
 
 async function handleCoachRequest(force = false) {
-  if ((!force && !canCoachSubmit.value) || isCoachLoading.value) {
+  if ((!force && !canCoachSubmit.value) || isTaskCoachLoading.value) {
     // Restore mode flags in case a tool handler (elicitation, conflict check, etc.)
     // disabled coachSkillEnabled before calling us — we need to re-assert the mode's
     // canonical flags even on an early return.
@@ -754,12 +776,7 @@ async function handleCoachRequest(force = false) {
   }
   const payload = buildPayload('coach')
   pendingPromptOverride.value = null  // consumed — clear so it doesn't affect anything else
-  // In Explore mode, clear description and attachment immediately (acts as chat input box)
-  if (appMode.value === 'explore') {
-    form.description = ''
-    detachFile()
-  }
-  const err = await requestCoach(payload)
+  const err = await requestTaskCoach(payload)
   // Re-assert mode flags — tool-triggered handlers may have temporarily overridden coachSkillEnabled
   applyModeFlags(appMode.value)
   if (!err) {
@@ -769,6 +786,26 @@ async function handleCoachRequest(force = false) {
     errorMessage.value = err
     addToast('error', err)
   }
+}
+
+// Explore channel — own composer text; does NOT touch form.description.
+async function handleExploreSend(text: string) {
+  if (!text.trim() || isExploreCoachLoading.value) return
+  errorMessage.value = ''
+  const payload = buildPayload('coach')
+  payload.data.description = text
+  const err = await requestExploreCoach(payload)
+  if (!err) {
+    saveResponsesToStorage()
+  } else if (err !== 'cancelled') {
+    errorMessage.value = err
+    addToast('error', err)
+  }
+}
+function handleExploreNewChat() {
+  clearExploreCoach()
+  localStorage.removeItem(LS_EXPLORE_RESPONSE)
+  startNewSession('explore')
 }
 
 function handleElicitation() {
@@ -847,12 +884,12 @@ function handleReplay(content: string) {
 function handleContinueSession(sessionId: string) {
   const records = getSessionRecords(sessionId)
   if (records.length === 0) return
-  restoreCoachMessages(records)
+  restoreTaskCoachMessages(records)
 }
 
 async function handleCoachRetry() {
   errorMessage.value = ''
-  const err = await retryCoach()
+  const err = await retryTaskCoach()
   if (!err) {
     addToast('success', t('toast.coachSuccess'))
     saveResponsesToStorage()
@@ -876,28 +913,30 @@ async function handleAnalyzeRetry() {
 }
 
 function handleReset() {
-  cancelCoach()
   errorMessage.value = ''
 
   if (appMode.value === 'explore') {
     // Explore reset: only clear this mode's description and chat — leave Design/Task untouched
+    cancelExploreCoach()
     form.description = ''
     modeDescriptions.explore = ''
-    clearCoachResponse()
-    startNewSession()
+    clearExploreCoach()
+    localStorage.removeItem(LS_EXPLORE_RESPONSE)
+    startNewSession('explore')
   } else {
     // Design / Task reset: clear form, workflow, AI state — leave Explore description untouched
+    cancelTaskCoach()
     cancelAnalyze()
     resetForm()
     modeDescriptions[appMode.value] = ''
     clearResponses()
-    clearCoachResponse()
+    clearTaskCoach()
     clearAnalyzeResponse()
     clearResponsesFromStorage()
     resetWorkflow()
     lastCreatedKey.value = ''
     clearSearch()
-    startNewSession()
+    startNewSession('task')
   }
 
   addToast('info', t('toast.draftCleared'))
@@ -995,13 +1034,6 @@ onUnmounted(() => {
   gap: 0;
   transition: grid-template-columns 250ms ease-in-out;
 }
-.grid-layout.layout-focus {
-  grid-template-columns: 5fr 6px 3fr 0px 0fr !important;
-}
-.layout-focus .col-right {
-  overflow: hidden;
-  pointer-events: none;
-}
 .col-left {
   display: flex;
   flex-direction: column;
@@ -1026,11 +1058,6 @@ onUnmounted(() => {
   min-width: clamp(150px, 12vw, 350px);
   gap: var(--space-4);
 }
-.grid-layout.layout-focus .col-right {
-  min-width: 0;
-  overflow: hidden;
-}
-
 /* Drag handles between columns */
 .col-drag-handle {
   width: 6px;

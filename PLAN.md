@@ -5271,3 +5271,238 @@ The other concern was wiring, not code: the n8n HTTP Request node defaults to `=
 | `package-lock.json` | Regenerated to match the dep move |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.93 |
 | `PLAN.md` | This entry |
+
+---
+
+## v10.94 — Timing-Phase Quality Review in View mode
+
+**Motivation.** The JIRA Quality Grid showed *all* tickets with only team/status/search
+filters — no time dimension. R&D leads and scrum masters need to review ticket quality
+*over a timing phase* (this sprint, this PI, last 7/30 days, or a custom range) and compare
+teams within that phase for sprint retros. This adds a period lens plus two read-only
+widgets: a period **summary strip** and a **per-team trend matrix**.
+
+**Design decisions (locked with the user).**
+- **Time field = `event_time`** (n8n verdict time): already indexed
+  (`idx_tickets_event_time`), domain-meaningful, and retro-stable (immune to unrelated DB
+  re-writes — unlike `updated_at`, which is `CURRENT_TIMESTAMP` on every upsert).
+- **Server-side date filtering.** `GET /api/tickets` gains `from`/`to` ISO params; SQL
+  `event_time BETWEEN` uses the existing index. Team/status/search stay client-side.
+- **Both calendar & sprint presets.** Reuses the existing `useSprint`/`sprintSchedule`
+  model (added `getPreviousSprint` + `sprintsInPI`) so sprint presets need no new schedule.
+- **Snapshot-bucket trend, no schema change.** Each ticket's *latest* verdict is bucketed
+  by `event_time`. Accepted limitation: cannot reconstruct historical sprint quality if a
+  ticket was re-checked after the sprint, nor show a single ticket's quality history. The
+  future upgrade path is an append-only assessment-history table (deliberately out of scope).
+- **Per-team breakdown.** Summary + matrix describe the whole date-filtered set
+  independent of the status/search filters (you want the full A–D split for the retro).
+
+**Why not a server-side aggregation endpoint.** At a "handful of POSTs per minute"
+(spec §7) the date-filtered set is small; a pure client `summarize()` over it keeps the
+widgets perfectly in sync with the grid and is trivially unit-testable. The aggregate
+endpoint is documented as the scale path, not built now (YAGNI).
+
+### Changes
+
+1. **`server/db.ts`** — `listTickets` accepts `from`/`to`; appends indexed
+   `event_time >= @from` / `<= @to` clauses.
+2. **`server/routes/tickets.ts`** — GET querystring widened to include `from`/`to`.
+3. **`src/config/sprintSchedule.ts`** — added `getPreviousSprint()` and `sprintsInPI()`
+   (mirror `getNextSprint`).
+4. **`src/composables/useSprint.ts`** — `now` ref exported so `useTimingPhase` shares the
+   same clock + `_setNowForTesting` seam.
+5. **`src/composables/useTimingPhase.ts`** *(new)* — phase kind/preset/custom state
+   (persisted to `localStorage['view-timing-phase']`), computed `range` and trend `buckets`.
+6. **`src/composables/useQualityGrid.ts`** — sends `from`/`to`, refetches on phase change,
+   exposes pure `summarize()` → period counts + per-team `byTeam` + per-team×bucket `matrix`.
+7. **`src/components/quality/PeriodSelector.vue`, `QualitySummaryBar.vue`,
+   `TrendMatrix.vue`** *(new)* — selector, summary chips (reuse `colorForStatus`), and a
+   CSS stacked-bar matrix (no chart lib); wired into `QualityGridPanel.vue`.
+8. **`src/i18n/en.ts` + `zh.ts`** — bilingual `view.*` keys for the new UI.
+9. **Tests** — `useTimingPhase` (range/buckets/persistence), `summarize` (counts/matrix/
+   drift/out-of-range), `sprintSchedule` (prev/PI), and a new `server/__tests__/db.test.ts`
+   for the `event_time` range filter.
+10. **`src/components/layout/AppHeader.vue:11`** — version bump v10.93 → v10.94.
+
+### What is NOT changed
+
+- DB schema / migrations — snapshot model needs no new table.
+- The grid table behavior — still narrowed by the existing team/status/search filters.
+- n8n producer side and the POST contract — untouched.
+
+### Verification
+
+1. `npm run build` (vue-tsc) — clean. `npx vitest run` of the four touched/new test files
+   — 44/44 pass. Full `npm test` green except the pre-existing, unrelated
+   `formatCoach.test.ts` failures (hljs/COACH_TURN — not in this work's surface).
+2. Manual: enter View mode, seed `data/quality.db` with tickets spread over two sprints /
+   several days, switch presets + a custom range; grid count, summary chips, and matrix
+   totals reconcile (Σ matrix == period total == grid count with no client filter); ZH
+   locale shows translated labels.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `server/db.ts` | `listTickets` from/to range filter |
+| `server/routes/tickets.ts` | GET querystring +from/+to |
+| `src/config/sprintSchedule.ts` | +`getPreviousSprint`, +`sprintsInPI` |
+| `src/composables/useSprint.ts` | export shared `now` ref |
+| `src/composables/useTimingPhase.ts` | New — phase state, range, buckets |
+| `src/composables/useQualityGrid.ts` | from/to fetch, `summarize()`, summary computed |
+| `src/components/quality/PeriodSelector.vue` | New — phase selector |
+| `src/components/quality/QualitySummaryBar.vue` | New — period summary chips |
+| `src/components/quality/TrendMatrix.vue` | New — per-team trend matrix |
+| `src/components/quality/QualityGridPanel.vue` | Mount the three widgets |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | Bilingual `view.*` keys |
+| `src/config/__tests__/sprintSchedule.test.ts` | +prev/PI tests |
+| `src/composables/__tests__/useTimingPhase.test.ts` | New test |
+| `src/composables/__tests__/useQualityGrid.test.ts` | New `summarize` test |
+| `server/__tests__/db.test.ts` | New — range-filter test |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.94 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.95 — Downloadable / one-click-copy file artifacts in chat responses
+
+**Motivation.** In Explore mode (and the Task coach) when the agent writes a file —
+code, HTML, SVG, or a Markdown doc — it rendered as plain formatted markdown, so reusing
+it meant error-prone drag-selection. Claude.ai / Gemini solve this with a per-code-block
+toolbar. This adds the same: every fenced code block gets a **language label + Copy +
+Download**, and markdown written as *prose* (e.g. "write me a README") gets a
+**message-level Download .md / Copy** on the assistant bubble.
+
+**Design.** Post-render DOM enhancement owned by `ChatBubble.vue`. The markdown AST
+pipeline (`markdown.ts` / `formatCoach.ts`) is left **pure and untouched** — no regex on
+markdown, no buttons in the sanitized HTML string (respects the CLAUDE.md AST-over-regex
+rule and keeps DOMPurify decoupled). After `v-html` injects the rendered HTML, a small
+enhancer wraps each `<pre><code>` with a toolbar; a **single delegated click listener** on
+the stable `.coach-response` container resolves Copy/Download. v-html wipes the subtree on
+every (RAF-throttled) streaming render, so toolbars are simply re-injected each pass while
+the delegated listener persists on the Vue-managed element. Reuses `downloadFile()`
+(`exportFormats.ts`) and `useToast()`. Filenames inferred from language
+(`snippet[-N].<ext>`), with optional first-line filename-hint detection
+(`<!-- file: x.html -->`, `// app.ts`, `# file: main.py`).
+
+**Decisions (with the user).** Copy + Download only (no live preview / iframe — scope &
+security); all fenced blocks (not a heuristic subset); applies wherever `ChatBubble`
+renders (Explore + Task coach, one component); markdown-as-prose handled at message level.
+
+### Changes
+
+1. **`src/utils/codeArtifact.ts`** *(new)* — `LANG_FILE_MAP`, `inferLanguage`,
+   `fileMetaFor`, `detectFilenameHint`, `buildFilename`, `enhanceCodeBlocks`,
+   `setArtifactLabels`, `handleArtifactClick`. Pure + DOM, no markdown parsing.
+2. **`src/components/chat/ChatBubble.vue`** — `responseEl` ref on `.coach-response`;
+   `enhanceArtifacts()` (nextTick → enhance → localize labels) called from the existing
+   content/`isStreaming` watchers; one delegated click listener (mount/unmount); a
+   message-level footer (Copy raw markdown / Download `.md` as `response-<id>.md`) shown
+   for finished assistant messages; scoped styles for that footer.
+3. **`src/styles/coach-response.css`** — global/unscoped toolbar styles
+   (`.code-artifact`, `.code-artifact-bar`, `.ca-lang`, `.ca-btn`).
+4. **`src/i18n/en.ts` + `zh.ts`** — `coach.copyCode/downloadCode/copyResponse/downloadMd`,
+   `toast.downloaded` (bilingual).
+5. **`src/utils/__tests__/codeArtifact.test.ts`** *(new)* — 10 tests.
+6. **`src/components/layout/AppHeader.vue:11`** — version bump v10.94 → v10.95.
+
+### What is NOT changed
+
+- Markdown / sanitizer pipeline, message data model, persistence — untouched.
+- No live HTML/SVG preview, no multi-file project artifacts (explicit YAGNI).
+
+### Verification
+
+1. `npm run build` (vue-tsc + vite) — clean.
+2. `npx vitest run` — `codeArtifact.test.ts` 10/10; full suite green except the
+   pre-existing, unrelated `formatCoach.test.ts` (hljs/COACH_TURN) failures (not regressed).
+3. Manual: Explore mode — HTML/SVG/Python blocks each show label + Copy + Download
+   (correct filename/content, during stream and after); a README written as prose offers
+   message-level Download .md / Copy; ZH labels translated; reload re-injects toolbars.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/utils/codeArtifact.ts` | New — file-meta + DOM toolbar enhancer + delegated handler |
+| `src/components/chat/ChatBubble.vue` | Enhance after render, delegated click, message-level md actions |
+| `src/styles/coach-response.css` | Unscoped toolbar styles |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | Artifact labels + `toast.downloaded` |
+| `src/utils/__tests__/codeArtifact.test.ts` | New — 10 unit tests |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.95 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.96 — Independent Task & Explore AI chat channels + single-column Explore chat
+
+**Motivation.** The single shared coach pipeline meant switching Task↔Explore reused
+one conversation and one stream — asking an Explore question mid-task polluted or
+interrupted task coaching, and the in-flight task answer was lost. Task and Explore
+are now fully independent channels that stream, display, and persist concurrently. As
+part of this, Explore becomes a single-column chat surface (conversation + a docked
+composer) like Claude / Gemini, instead of riding the task coach layout.
+
+**Design.** Two independent `createStreamFlow` instances inside the single `useLLM()`
+singleton — one per channel — each owning its own messages, streaming state, and
+`AbortController`, so a task stream keeps running while the Explore panel sends and
+streams its own request (and vice versa). Coach history is channel-tagged so the two
+conversations persist side by side; legacy untagged records read as `task`. The
+Explore composer is decoupled from the task form draft so an Explore question never
+mutates `form.description`.
+
+### Changes
+
+1. **`src/composables/useCoachHistory.ts`** — records carry a channel tag
+   (`task` / `explore`), per-channel sessions, `recordsForChannel`, `setSessionId`;
+   legacy untagged records are treated as `task`.
+2. **`src/composables/useLLM.ts`** — split into two independent `createStreamFlow`
+   instances `taskCoach` / `exploreCoach` (own messages / state / `AbortController`
+   → concurrent streaming) plus `task*` / `explore*` API and read-only back-compat
+   computeds that resolve to the active mode. A contained circular-import TDZ fix
+   lazily materializes the shared `coachSkillEnabled` ref.
+3. **`src/components/chat/ExploreChat.vue`** *(new)* — single-column Explore surface
+   reusing `ChatBubble`.
+4. **`src/App.vue`** — Task routes to the task channel; new `handleExploreSend` /
+   `handleExploreNewChat` (composer decoupled from `form.description`); split
+   last-response persistence (`task-last-response` / `explore-last-response` with a
+   one-time legacy migration); renders `ExploreChat` full-width; `CoachPanel` bound
+   to the task channel; `handleReset` is channel-isolated; dead `layout-focus` CSS
+   removed.
+5. **`src/components/coach/CoachHistoryTab.vue`** — history filtered to the task channel.
+6. **`src/i18n/en.ts` + `zh.ts`** — bilingual `coach.explore*` keys.
+
+### What is NOT changed
+
+- Markdown / sanitizer pipeline — untouched.
+- `ChatBubble` rendering and the v10.95 code-artifact toolbar — untouched.
+- Analyze / deep-review flows, the server, and the message data model — untouched.
+
+### Verification
+
+1. `npm run build` (vue-tsc) — clean, 0 errors.
+2. `npx vitest run` — green except the 3 pre-existing, unrelated
+   `formatCoach.test.ts` failures (hljs/COACH_TURN — not in this work's surface,
+   not regressed). New tests: `useCoachHistory.channel.test.ts` (7),
+   `useLLM.channels.test.ts` (2), `ExploreChat.test.ts` (3).
+3. Manual E2E (Task stream running while a concurrent Explore question streams,
+   reload persistence per channel, ZH locale) — pending user (needs live dev
+   server + live LLM).
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/types/api.ts` | `CoachChannel` type + `record.channel` |
+| `src/composables/useCoachHistory.ts` | Channel scoping (per-channel sessions/records) |
+| `src/composables/useLLM.ts` | Two independent channels + circular-import TDZ fix |
+| `src/components/chat/ExploreChat.vue` | New — single-column Explore chat surface |
+| `src/App.vue` | Channel wiring, split persistence, render, channel-isolated reset |
+| `src/components/coach/CoachHistoryTab.vue` | Task-filtered history |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | Bilingual `coach.explore*` strings |
+| `src/composables/__tests__/useCoachHistory.channel.test.ts` | New — 7 tests |
+| `src/composables/__tests__/useLLM.channels.test.ts` | New — 2 tests |
+| `src/components/chat/__tests__/ExploreChat.test.ts` | New — 3 tests |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.96 |
+| `PLAN.md` | This entry |
+| `MEMORY.MD` | Architecture note (independent channels) |

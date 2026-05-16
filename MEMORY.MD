@@ -55,6 +55,52 @@ operator's primary debugging surface for "n8n posted but I don't see the
 row." Look for `code: 400` lines with `validation: [...]` to find what
 the schema rejected.
 
+## Timing-phase quality review (v10.94)
+
+View mode can review ticket quality over a timing phase. Key decisions worth
+remembering:
+
+- The phase axis is **`event_time`** (n8n verdict time), NOT `updated_at`.
+  `updated_at` is `CURRENT_TIMESTAMP` on every upsert, so it would yank a
+  ticket into a different bucket on any unrelated re-post. Don't "fix" the
+  trend to use `updated_at`.
+- Date filtering is **server-side** (`GET /api/tickets?from=&to=`, indexed
+  `event_time`); team/status/search remain client-side. The summary +
+  per-team trend matrix describe the *whole* date-filtered set, deliberately
+  independent of the status/search filters (full A–D split for retros).
+- The trend is a **snapshot model** (each ticket's latest verdict, no history
+  table). It cannot reconstruct "what Sprint S2 looked like back then" if a
+  ticket was re-checked later. The documented upgrade path is an append-only
+  assessment-history table — do not add it speculatively.
+- `useTimingPhase` shares `useSprint`'s exported `now` ref so sprint and
+  calendar presets stay on one clock and one `_setNowForTesting` seam.
+- Sprint presets reuse `sprintSchedule.ts` (`getPreviousSprint`,
+  `sprintsInPI`); no separate schedule for View mode.
+- View mode keeps the panel-card framing (`.quality-panel`: border / shadow /
+  radius / `min-height`). A v10.95 attempt to flatten it into a full-page
+  dashboard was reviewed and reverted — the user preferred the v10.94 card
+  look. Don't re-attempt the flatten without an explicit new request.
+
+## Chat file artifacts (v10.95)
+
+Chat code blocks get a Copy/Download toolbar; markdown-as-prose gets a
+message-level Download .md / Copy. Implementation rules to preserve:
+
+- The enhancer (`src/utils/codeArtifact.ts`) operates on the **rendered DOM
+  after v-html**, never on the markdown string. Do NOT move toolbar markup into
+  `markdown.ts`/`formatCoach.ts` or into the DOMPurify-sanitized HTML — the
+  pipeline stays pure (AST-over-regex rule) and the sanitizer stays decoupled.
+- `v-html` wipes the subtree on every (RAF-throttled) streaming render, so
+  `enhanceCodeBlocks` is re-run each render (idempotent per `data-artifact`).
+  Click handling is a **single delegated listener** on the stable
+  `.coach-response` element in `ChatBubble.vue` — not per-button listeners.
+- Toolbar CSS must live in `src/styles/coach-response.css` (global/unscoped)
+  because it is injected inside v-html content; ChatBubble scoped styles can't
+  reach it. The message-level footer IS real template → ChatBubble scoped.
+- Decisions: copy/download only (no iframe preview), all fenced blocks, all
+  ChatBubble usages (Explore + Task). Don't add live preview without an
+  explicit new request.
+
 ## AST-based parsing (v8.40–v8.42)
 
 Markdown + math rendering uses the unified/remark/rehype pipeline, NOT regex.
@@ -75,3 +121,25 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
 - UI version is in `src/components/layout/AppHeader.vue` (the `<span class="header-version">vX.YY</span>` line). Bump per feature.
 - Every change appends a `## vX.YY` section to `PLAN.md` (motivation → changes → not-changed → verification → file matrix).
 - `package.json` `version` is NOT bumped — UI versioning lives in the header span.
+
+## Independent Task & Explore channels (v10.96)
+
+- Task and Explore are **two independent `createStreamFlow` channels** in `useLLM`
+  (`taskCoach` / `exploreCoach`), each with its own messages, streaming state, and
+  `AbortController`. This is what lets them **stream concurrently** — an in-flight
+  task answer keeps running while an Explore question is asked and streamed.
+- `useLLM()` MUST remain instantiated **exactly once**, in `App.vue`. The single
+  instance is precisely what keeps an in-flight stream alive while its panel is
+  unmounted on a mode switch. Do **not** call `useLLM()` anywhere else.
+- Coach history is **channel-tagged**. Legacy untagged records read as `task`
+  (`r.channel ?? 'task'`). Last-response persistence is per channel
+  (`task-last-response` / `explore-last-response`); the legacy
+  `coach-last-response` key migrates **once** into the task channel.
+- The Explore composer is **decoupled from `form.description`** — asking a question
+  in Explore must never mutate the task draft.
+- `useLLM.ts` has a deliberate hoisted-`var` + `getCoachSkillRef()` lazy singleton
+  to break a `useLLM` ↔ `useAppMode` circular-import TDZ. It is guarded with
+  `// eslint-disable-line no-var`. Do **not** "modernize" it to `let` / `const` —
+  that reintroduces the crash.
+- `handleReset` is **channel-isolated**: resetting one mode never cancels or clears
+  the other channel's in-flight stream.

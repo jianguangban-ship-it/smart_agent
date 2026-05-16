@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import type { CoachHistoryRecord } from '@/types/api'
+import type { CoachHistoryRecord, CoachChannel } from '@/types/api'
 
 const LS_KEY = 'coach-history'
 const MAX_RECORDS = 200
@@ -47,13 +47,24 @@ export const coachHistory = ref<CoachHistoryRecord[]>(loadFromStorage())
 export const recordCount = computed(() => coachHistory.value.length)
 export const isNearCap = computed(() => coachHistory.value.length >= WARN_THRESHOLD)
 
-// ─── Session tracking ──────────────────────────────────────────────────────
+// ─── Session tracking (per channel) ─────────────────────────────────────────
+const sessionByChannel = ref<Record<CoachChannel, string | null>>({ task: null, explore: null })
 
+// Back-compat single ref used elsewhere (task-channel session).
 export const currentSessionId = ref<string | null>(null)
 
-export function startNewSession(): void {
-  const existingIds = new Set(coachHistory.value.map(r => r.sessionId).filter(Boolean) as string[])
-  currentSessionId.value = generateHashId(existingIds)
+export function startNewSession(channel: CoachChannel = 'task'): void {
+  const existingIds = new Set(
+    coachHistory.value.map(r => r.sessionId).filter(Boolean) as string[]
+  )
+  const id = generateHashId(existingIds)
+  sessionByChannel.value[channel] = id
+  if (channel === 'task') currentSessionId.value = id
+}
+
+export function setSessionId(channel: CoachChannel, id: string | null): void {
+  sessionByChannel.value[channel] = id
+  if (channel === 'task') currentSessionId.value = id
 }
 
 export interface SessionGroup {
@@ -102,22 +113,29 @@ export function getSessionRecords(sessionId: string): CoachHistoryRecord[] {
 
 // ─── CRUD ───────────────────────────────────────────────────────────────────
 
-export function addRecord(role: 'user' | 'assistant', content: string): CoachHistoryRecord {
-  // Auto-generate session on first record if none active
-  if (!currentSessionId.value) startNewSession()
-
+export function addRecord(
+  role: 'user' | 'assistant',
+  content: string,
+  channel: CoachChannel = 'task'
+): CoachHistoryRecord {
+  if (!sessionByChannel.value[channel]) startNewSession(channel)
   const existingIds = new Set(coachHistory.value.map(r => r.id))
   const record: CoachHistoryRecord = {
     id: generateHashId(existingIds),
-    role,
-    content,
+    role, content,
     timestamp: Date.now(),
-    sessionId: currentSessionId.value!
+    sessionId: sessionByChannel.value[channel]!,
+    channel,
   }
   // Prepend (newest first), enforce cap
   coachHistory.value = [record, ...coachHistory.value].slice(0, MAX_RECORDS)
   saveToStorage(coachHistory.value)
   return record
+}
+
+/** Records belonging to a channel; legacy untagged === 'task'. */
+export function recordsForChannel(channel: CoachChannel): CoachHistoryRecord[] {
+  return coachHistory.value.filter(r => (r.channel ?? 'task') === channel)
 }
 
 export function deleteRecords(ids: Set<string>): void {
@@ -128,7 +146,8 @@ export function deleteRecords(ids: Set<string>): void {
 export function clearHistory(): void {
   coachHistory.value = []
   localStorage.removeItem(LS_KEY)
-  startNewSession()
+  sessionByChannel.value = { task: null, explore: null }
+  currentSessionId.value = null
 }
 
 // ─── Search & Filter ────────────────────────────────────────────────────────

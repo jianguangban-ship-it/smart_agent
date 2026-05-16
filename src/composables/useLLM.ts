@@ -12,24 +12,42 @@ import { getModeTraceContext, buildDeepReviewPrompt } from '@/config/domain'
 import { useReviewHistory } from '@/composables/useReviewHistory'
 import type { TaskLevel } from '@/config/domain/traceability.task'
 import { useI18n } from '@/i18n'
-import { addRecord, currentSessionId } from '@/composables/useCoachHistory'
-import type { CoachHistoryRecord } from '@/types/api'
+import { addRecord, setSessionId } from '@/composables/useCoachHistory'
+import type { CoachHistoryRecord, CoachChannel } from '@/types/api'
 
-const LS_KEY_COACH_SKILL_ENABLED = 'coach-skill-enabled'
+// Hoisted function (no TDZ) so the localStorage key is reachable from
+// getCoachSkillRef() even when called during the circular-import cycle below.
+function lsKeyCoachSkillEnabled(): string { return 'coach-skill-enabled' }
 
 // Sole skill flag: ON in Task mode (full coach skill + structured task payload),
 // OFF in Explore mode (free chat with Response Format only). Driven by useAppMode's
 // applyModeFlags(); tool handlers (elicitation, conflict-check, etc.) temporarily flip
 // it OFF to bypass the canSubmit guard, then applyModeFlags re-asserts on return.
-export const coachSkillEnabled = ref(localStorage.getItem(LS_KEY_COACH_SKILL_ENABLED) !== 'false')
+//
+// Created via a hoisted function (getCoachSkillRef) so it survives a
+// circular-import init-order hazard: the `@/composables/useAppMode` import
+// (below) runs applyModeFlags() → setCoachSkillEnabled() at module-evaluation
+// time, BEFORE this module's body executes. A plain `const = ref()` (or `let`)
+// would be in the temporal dead zone at that point and crash. Function
+// declarations are hoisted, so getCoachSkillRef() is callable during the cycle;
+// it returns a single shared, genuine Vue Ref (stored in a hoisted `var`), so
+// every importer and consumer still gets the same reactive ref.
+var _coachSkillEnabledRef: ReturnType<typeof ref<boolean>> | undefined // eslint-disable-line no-var
+function getCoachSkillRef(): ReturnType<typeof ref<boolean>> {
+  if (!_coachSkillEnabledRef) {
+    _coachSkillEnabledRef = ref(localStorage.getItem(lsKeyCoachSkillEnabled()) !== 'false')
+  }
+  return _coachSkillEnabledRef
+}
+export const coachSkillEnabled = getCoachSkillRef()
 
 export const activeSkill = ref<SkillEntry | null>(null)
 
 export const ignoredSkillId = ref<string | null>(null)
 
 export function setCoachSkillEnabled(val: boolean): void {
-  coachSkillEnabled.value = val
-  localStorage.setItem(LS_KEY_COACH_SKILL_ENABLED, String(val))
+  getCoachSkillRef().value = val
+  localStorage.setItem(lsKeyCoachSkillEnabled(), String(val))
 }
 
 /** Tagged error class for HTTP 429 so callers can start backoff instead of showing an error */
@@ -54,6 +72,7 @@ interface StreamFlowOptions {
   onBeforeRequest?: (currentResponse: unknown) => void
   /** When true, uses chat message array model instead of single response */
   chatMode?: boolean
+  channel?: CoachChannel  // 'task' | 'explore'
 }
 
 function createStreamFlow(
@@ -113,7 +132,7 @@ function createStreamFlow(
         })
         // Save user message to global coach history
         if (opts.chatMode) {
-          const record = addRecord('user', userMessage)
+          const record = addRecord('user', userMessage, opts.channel ?? 'task')
           messages.value[messages.value.length - 1].hashId = record.id
         }
       }
@@ -185,7 +204,7 @@ function createStreamFlow(
           lastMsg.isStreaming = false
           // Save completed coach response to global history
           if (lastMsg.content) {
-            const record = addRecord('assistant', lastMsg.content)
+            const record = addRecord('assistant', lastMsg.content, opts.channel ?? 'task')
             lastMsg.hashId = record.id
           }
         }
@@ -315,6 +334,24 @@ export function useLLM() {
     return lines.join('\n')
   }
 
+  function _restoreInto(
+    flow: ReturnType<typeof createStreamFlow>,
+    records: CoachHistoryRecord[],
+    channel: CoachChannel
+  ) {
+    flow.clear()
+    if (channel === 'task') { activeSkill.value = null; ignoredSkillId.value = null }
+    for (const r of records) {
+      flow.messages.value.push({
+        id: nextMsgId(), role: r.role, content: r.content,
+        timestamp: r.timestamp, hashId: r.id,
+      })
+    }
+    if (records.length && records[0].sessionId) {
+      setSessionId(channel, records[0].sessionId)
+    }
+  }
+
   async function _callGLMStream(
     apiMessages: LLMChatMessage[],
     onChunk: (text: string) => void,
@@ -392,68 +429,44 @@ export function useLLM() {
     }
   }
 
-  // ─── Coach flow (chat mode) ────────────────────────────────────────────────
+  // ─── Coach flows (chat mode) — independent task & explore channels ─────────
 
-  const coach = createStreamFlow({
+  // Task channel — task-requirement coaching (skill + trace logic, unchanged).
+  const taskCoach = createStreamFlow({
     chatMode: true,
+    channel: 'task',
     getSystemPrompt: (lang, payload) => {
-      if (!coachSkillEnabled.value) {
-        activeSkill.value = null
-        // Explore mode: response format only (no coach skill, no domain context)
-        return getResponseFormat()
-      }
-
       const langKey = lang === 'zh' ? 'zh' as const : 'en' as const
-
-      // Run skill auto-detection on the raw user input (description only, not full payload)
       const rawInput = payload.data.description || ''
       const matched = matchSkill(rawInput, SKILL_REGISTRY, langKey)
-
       let basePrompt: string
       if (matched && matched.id !== ignoredSkillId.value) {
-        // Different skill matched — reset ignored state
-        if (ignoredSkillId.value && matched.id !== ignoredSkillId.value) {
-          ignoredSkillId.value = null
-        }
+        if (ignoredSkillId.value && matched.id !== ignoredSkillId.value) ignoredSkillId.value = null
         activeSkill.value = matched
         basePrompt = resolveSystemPrompt(matched, langKey)
       } else {
-        // No match or ignored — fall back to default coach skill
         activeSkill.value = null
-        basePrompt = getCoachSkill(appMode.value, lang)
+        basePrompt = getCoachSkill('task', lang)
       }
-
-      // Prepend context layers based on mode:
-      // Task: trace + task coach skill + response format (no role/domain — task coaching is role-agnostic)
-      // Explore: response format only (handled above via early return)
-      const traceCtx = getModeTraceContext(appMode.value,
+      const traceCtx = getModeTraceContext('task',
         (payload.data.requirement_level || 'none') as TaskLevel,
-        payload.data.parent_req_id || '',
-        langKey
-      )
-      const parts = [traceCtx, basePrompt].filter(Boolean)
-      return parts.join('\n\n')
+        payload.data.parent_req_id || '', langKey)
+      return [traceCtx, basePrompt].filter(Boolean).join('\n\n')
     },
-    getUserMessage: (payload, zh) => {
-      // Explore mode (skill OFF) → payload only has description, send it directly.
-      // Task mode (skill ON) → build structured user message from full payload.
-      if (!coachSkillEnabled.value) {
-        return payload.data.description || ''
-      }
-      return buildUserMessage(payload, zh)
-    }
+    getUserMessage: (payload, zh) => buildUserMessage(payload, zh),
   }, _callGLMStream, t, isZh)
 
-  // Backward-compatible computed: last assistant message content
-  const coachResponseCompat = computed(() => {
-    const msgs = coach.messages.value
-    if (msgs.length === 0) return null
-    const last = msgs[msgs.length - 1]
-    if (last.role === 'assistant' && last.content) {
-      return { markdown_msg: last.content, message: last.content }
-    }
-    return coach.response.value
-  })
+  // Explore channel — free chat on any topic (Response Format only).
+  const exploreCoach = createStreamFlow({
+    chatMode: true,
+    channel: 'explore',
+    getSystemPrompt: () => getResponseFormat(),
+    getUserMessage: (payload) => payload.data.description || '',
+  }, _callGLMStream, t, isZh)
+
+  // Active-channel alias for read-only shared consumers (DevTools/TaskForm).
+  const activeCoach = computed(() =>
+    appMode.value === 'explore' ? exploreCoach : taskCoach)
 
   // ─── Analyze flow ───────────────────────────────────────────────────────────
 
@@ -484,40 +497,50 @@ export function useLLM() {
   // ─── Public API (preserve existing interface) ───────────────────────────────
 
   return {
-    // Coach
-    isCoachLoading: coach.isLoading,
-    coachResponse: coachResponseCompat,
-    coachMessages: coach.messages,
-    coachWasCancelled: coach.wasCancelled,
-    coachHadError: coach.hadError,
-    coachStreamSpeed: coach.streamSpeed,
-    coachBackoffSecs: coach.backoffSecs,
-    requestCoach: (payload: WebhookPayload) => coach.request(payload),
-    cancelCoach: coach.cancel,
-    retryCoach: coach.retry,
-    clearCoachResponse: () => {
-      coach.clear()
-      activeSkill.value = null
-      ignoredSkillId.value = null
-    },
-    restoreCoachMessages: (records: CoachHistoryRecord[]) => {
-      coach.clear()
-      activeSkill.value = null
-      ignoredSkillId.value = null
-      for (const r of records) {
-        coach.messages.value.push({
-          id: nextMsgId(),
-          role: r.role,
-          content: r.content,
-          timestamp: r.timestamp,
-          hashId: r.id
-        })
-      }
-      // Resume the session so new messages join the same group
-      if (records.length > 0 && records[0].sessionId) {
-        currentSessionId.value = records[0].sessionId
-      }
-    },
+    // Task channel
+    isTaskCoachLoading: taskCoach.isLoading,
+    taskCoachMessages: taskCoach.messages,
+    taskCoachWasCancelled: taskCoach.wasCancelled,
+    taskCoachHadError: taskCoach.hadError,
+    taskCoachStreamSpeed: taskCoach.streamSpeed,
+    taskCoachBackoffSecs: taskCoach.backoffSecs,
+    requestTaskCoach: (p: WebhookPayload) => taskCoach.request(p),
+    cancelTaskCoach: taskCoach.cancel,
+    retryTaskCoach: taskCoach.retry,
+    clearTaskCoach: () => { taskCoach.clear(); activeSkill.value = null; ignoredSkillId.value = null },
+
+    // Explore channel
+    isExploreCoachLoading: exploreCoach.isLoading,
+    exploreCoachMessages: exploreCoach.messages,
+    exploreCoachWasCancelled: exploreCoach.wasCancelled,
+    exploreCoachHadError: exploreCoach.hadError,
+    exploreCoachStreamSpeed: exploreCoach.streamSpeed,
+    exploreCoachBackoffSecs: exploreCoach.backoffSecs,
+    requestExploreCoach: (p: WebhookPayload) => exploreCoach.request(p),
+    cancelExploreCoach: exploreCoach.cancel,
+    retryExploreCoach: exploreCoach.retry,
+    clearExploreCoach: () => exploreCoach.clear(),
+
+    // Per-channel restore from history
+    restoreTaskCoachMessages: (records: CoachHistoryRecord[]) =>
+      _restoreInto(taskCoach, records, 'task'),
+    restoreExploreCoachMessages: (records: CoachHistoryRecord[]) =>
+      _restoreInto(exploreCoach, records, 'explore'),
+
+    // Back-compat (read-only, resolves to active mode's channel)
+    isCoachLoading: computed(() => activeCoach.value.isLoading.value),
+    coachMessages: computed(() => activeCoach.value.messages.value),
+    coachResponse: computed(() => {
+      const msgs = activeCoach.value.messages.value
+      const last = msgs[msgs.length - 1]
+      return last?.role === 'assistant' && last.content
+        ? { markdown_msg: last.content, message: last.content }
+        : activeCoach.value.response.value
+    }),
+    coachWasCancelled: computed(() => activeCoach.value.wasCancelled.value),
+    coachHadError: computed(() => activeCoach.value.hadError.value),
+    coachStreamSpeed: computed(() => activeCoach.value.streamSpeed.value),
+    coachBackoffSecs: computed(() => activeCoach.value.backoffSecs.value),
 
     // Analyze
     isAnalyzeLoading: analyze.isLoading,
