@@ -24,11 +24,21 @@
         <span v-if="hashId" class="msg-hash">#{{ hashId }}</span>
       </span>
       <!-- Agent: formatted markdown -->
-      <div
-        v-if="message.role === 'assistant'"
-        class="coach-response"
-        v-html="formattedContent"
-      />
+      <template v-if="message.role === 'assistant'">
+        <div
+          ref="responseEl"
+          class="coach-response"
+          v-html="formattedContent"
+        />
+        <div v-if="showMsgActions" class="msg-actions">
+          <button type="button" class="msg-action-btn" @click="copyResponse">
+            {{ t('coach.copyResponse') }}
+          </button>
+          <button type="button" class="msg-action-btn" @click="downloadMd">
+            {{ t('coach.downloadMd') }}
+          </button>
+        </div>
+      </template>
       <!-- User: plain text -->
       <div v-else class="msg-user-text">
         {{ message.content }}
@@ -38,12 +48,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import type { ChatMessage } from '@/types/api'
 import { useI18n } from '@/i18n'
 import { formatCoachResponse } from '@/utils/formatCoach'
+import { useToast } from '@/composables/useToast'
+import { downloadFile } from '@/utils/exportFormats'
+import {
+  enhanceCodeBlocks,
+  setArtifactLabels,
+  handleArtifactClick,
+  type ArtifactMeta,
+} from '@/utils/codeArtifact'
 
 const { t } = useI18n()
+const { addToast } = useToast()
 const agentAvatar = '/agent_avy.png'
 
 const props = defineProps<{
@@ -53,19 +72,30 @@ const props = defineProps<{
 
 // RAF-throttled formatting for streaming messages
 const formattedContent = ref('')
+const responseEl = ref<HTMLElement | null>(null)
 let _rafId: number | null = null
+
+// Re-inject the Copy/Download toolbar after each v-html render (v-html wipes
+// the subtree, so this runs against fresh DOM every time).
+async function enhanceArtifacts() {
+  await nextTick()
+  enhanceCodeBlocks(responseEl.value)
+  setArtifactLabels(responseEl.value, t('coach.copyCode'), t('coach.downloadCode'))
+}
 
 watch(
   () => props.message.content,
   (val) => {
     if (!props.message.isStreaming) {
       formattedContent.value = formatCoachResponse({ message: val }, false)
+      enhanceArtifacts()
       return
     }
     if (_rafId !== null) return
     _rafId = requestAnimationFrame(() => {
       formattedContent.value = formatCoachResponse({ message: props.message.content }, true)
       _rafId = null
+      enhanceArtifacts()
     })
   },
   { immediate: true }
@@ -77,12 +107,45 @@ watch(
     if (!streaming && props.message.content) {
       // Final render with streaming=false to ensure complete math is shown
       formattedContent.value = formatCoachResponse({ message: props.message.content }, false)
+      enhanceArtifacts()
     }
   }
 )
 
+function onCopy(text: string) {
+  navigator.clipboard.writeText(text)
+  addToast('success', t('toast.copied'), 2000)
+}
+function onDownload(text: string, meta: ArtifactMeta) {
+  downloadFile(text, meta.filename, meta.mime)
+  addToast('success', t('toast.downloaded'), 2000)
+}
+function onResponseClick(e: Event) {
+  handleArtifactClick(e, { onCopy, onDownload })
+}
+
+const showMsgActions = computed(() =>
+  props.message.role === 'assistant' &&
+  !props.message.isStreaming &&
+  !!props.message.content
+)
+function copyResponse() {
+  navigator.clipboard.writeText(props.message.content)
+  addToast('success', t('toast.copied'), 2000)
+}
+function downloadMd() {
+  const id = props.hashId || props.message.hashId || String(props.message.timestamp)
+  downloadFile(props.message.content, `response-${id}.md`, 'text/markdown')
+  addToast('success', t('toast.downloaded'), 2000)
+}
+
+onMounted(() => {
+  responseEl.value?.addEventListener('click', onResponseClick)
+})
+
 onUnmounted(() => {
   if (_rafId !== null) cancelAnimationFrame(_rafId)
+  responseEl.value?.removeEventListener('click', onResponseClick)
 })
 
 const timeLabel = computed(() => {
@@ -201,5 +264,29 @@ const timeLabel = computed(() => {
   overflow-y: auto;
 }
 
+/* Message-level actions (markdown-as-prose: copy / download .md) */
+.msg-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.msg-action-btn {
+  padding: 2px var(--space-2);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.msg-action-btn:hover {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+/* Per-code-block toolbar styles are in src/styles/coach-response.css
+   (global/unscoped — the toolbar lives inside v-html content). */
 /* Coach response markdown styles are in src/styles/coach-response.css (global, unscoped) */
 </style>
