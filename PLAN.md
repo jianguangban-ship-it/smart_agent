@@ -5663,3 +5663,126 @@ Visual EN/ZH confirmation pending user.
 | `src/components/chat/__tests__/ExploreChat.test.ts` | +1 test (9 total) |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.100 |
 | `PLAN.md` | This entry |
+
+---
+
+## v10.101 — Task-mode composer pinned inside the coach panel (Explore-style)
+
+**Motivation.** Task mode kept the old layout: the "TASK DESCRIPTION" input lived
+in the center column bundled with the action buttons, the left coach panel only
+showed AI responses, and the whole page could scroll when a column grew. The user
+wanted Task mode to reference the Explore design — pin the description composer at
+the bottom of the coach panel, lock the page so nothing drifts while coach
+messages scroll, and keep the coach panel's guide text/emoji/chips.
+
+**Design.** `PanelShell` already renders its `#footer` slot *outside* the
+scrollable `.panel-body`, so the composer pins for free and CoachPanel's
+`.panel-body`-bound smart autoscroll is unaffected (no autoscroll change). The
+Explore viewport-lock CSS is *generalized*, not duplicated: `.app--explore-lock`
+/ `.app-main--explore` are now grouped with `.app--task-lock` /
+`.app-main--task`. `form.description` stays the single binding for
+Coach/Analyze/Create — the composer is just relocated, not forked.
+
+**Changes.**
+- `src/components/form/DescriptionEditor.vue` — new `variant` prop
+  (`'form'` default, unchanged everywhere | `'composer'`): no title/border,
+  auto-grow capped at 200px then scroll, Ctrl/Cmd+Enter emits `submit`
+  (plain Enter still inserts a newline — task description is long-form).
+- `src/components/panels/CoachPanel.vue` — new `description` v-model +
+  `canCoachSubmit` prop + `coach`/`descFocus`/`descBlur` emits; a
+  `#footer` `.coach-composer` (Task + chat tab only) with the composer-variant
+  `DescriptionEditor` and a Send (→`coach`) / Stop (→`cancel`) button.
+- `src/components/form/TaskForm.vue` — removed `DescriptionEditor` and the
+  `action-coach` button; scrollable sections wrapped in `.form-scroll`
+  (`flex:1; min-height:0; overflow-y:auto`); `.form-actions` pinned at the
+  bottom (`flex-shrink:0` + `border-top`) so Analyze/Create/Reset/Export stay
+  reachable while the center column scrolls.
+- `src/App.vue` — `.app`/`.app-main` get `app--task-lock`/`app-main--task`;
+  lock CSS grouped; `.grid-layout` gets `height:100%; min-height:0`;
+  `.col-right` switched to `overflow-y:auto; min-height:0`; CoachPanel now wired
+  with `v-model:description`, `:can-coach-submit`, `@coach`, `@desc-focus/blur`
+  (those bindings removed from TaskForm).
+
+**What is NOT changed.** Coach/Analyze/Create LLM logic; Explore/View layout and
+the existing `app--explore-lock` rules (only shared, not rewritten); no
+Enter-to-send chat behavior for the long-form description.
+
+**Verification.** `npm run build` clean (0 TS errors). `npx vitest run` — no
+regressions vs baseline (only the 3 pre-existing unrelated `formatCoach.test.ts`
+failures); +1 new test file `CoachPanel.composer.test.ts`. Visual EN/ZH Task-mode
+confirmation pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/DescriptionEditor.vue` | `variant="composer"` (compact, auto-grow cap, Ctrl/Cmd+Enter submit) |
+| `src/components/panels/CoachPanel.vue` | `description` v-model + `canCoachSubmit` + `coach`/`descFocus`/`descBlur`; `#footer` composer |
+| `src/components/form/TaskForm.vue` | Remove DescriptionEditor + Coach button; `.form-scroll` + pinned `.form-actions` |
+| `src/App.vue` | Task viewport lock (shared CSS), grid/col-right scroll, CoachPanel wiring |
+| `src/components/panels/__tests__/CoachPanel.composer.test.ts` | New test (footer composer, Send/Stop, variant) |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.101 |
+| `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |
+
+---
+
+## v10.102 — Remove JiraSearchPanel + Quality Dashboard from Task mode
+
+**Motivation.** The Task-mode right column was cluttered. JiraSearchPanel
+(duplicate check / parent-req search / sprint context) and ReviewDashboard
+(session-stats widget) were judged low-value in the day-to-day flow.
+
+**Design / decisions.**
+- **JiraSearchPanel — removed entirely.** Investigation confirmed it is fully
+  isolated: no LLM-payload coupling, zero tests, all text inline. Component +
+  `useJiraSearch` composable + all App.vue wiring deleted. View mode does NOT
+  replace this capability today; the loss is accepted.
+- **ReviewDashboard — panel UI removed, learning loop KEPT.** Its
+  `useReviewHistory` composable also feeds a "Historical Review Patterns" block
+  into the Analyze/Deep-Review system prompts via `buildLearningContext()` and
+  records on every ticket creation. Only the panel + its App.vue wiring were
+  removed; `useReviewHistory`, the `addReviewRecord` call in `confirmCreate`,
+  and the `useLLM` injection are untouched — **zero AI behavior change**.
+- **Parent Requirement input added.** JiraSearchPanel's "search parent → select"
+  was the only single-ticket UI to set `form.parentReqId` (feeds traceability
+  "missing parent" checks, the `parent_req_id` payload, and ReqIF/MD/Excel
+  exports). Replaced with a plain manual text field in `BasicInfoSection`
+  (no JIRA-backed lookup).
+
+**Changes.**
+- Deleted `src/components/panels/JiraSearchPanel.vue`,
+  `src/composables/useJiraSearch.ts`,
+  `src/components/panels/ReviewDashboard.vue`.
+- `src/App.vue` — removed both imports + `.col-right` mounts; removed the
+  `useJiraSearch()` destructure, `handleJiraSearchSelect()`, and the
+  `clearSearch()` call in `handleReset()`; the `useReviewHistory()` destructure
+  now only keeps `addRecord: addReviewRecord` (dropped panel-only
+  `reviewStats`/`clearReviewHistory`).
+- `src/components/form/BasicInfoSection.vue` — new manual "Parent Requirement"
+  text input bound to `form.parentReqId`.
+- `src/i18n/en.ts` / `zh.ts` — added `form.parentReq` + `form.parentReqPlaceholder`.
+
+**What is NOT changed.** AIReviewPanel / TicketHistoryPanel / DevTools /
+BatchPanel; Analyze/Deep-Review logic; `useReviewHistory` internals; the
+v10.101 viewport lock and composer.
+
+**Verification.** `npm run build` clean (0 TS errors). `npx vitest run` — no
+regressions vs baseline (only the 3 pre-existing unrelated `formatCoach.test.ts`
+failures); +1 new test file `BasicInfoSection.parentReq.test.ts`. Static grep
+confirms `useReviewHistory`/`addReviewRecord`/`buildLearningContext` survive and
+no dangling refs to the deleted modules. Visual EN/ZH Task-mode confirmation
+pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/panels/JiraSearchPanel.vue` | Deleted |
+| `src/composables/useJiraSearch.ts` | Deleted |
+| `src/components/panels/ReviewDashboard.vue` | Deleted (panel only) |
+| `src/App.vue` | Remove both imports/mounts; drop `useJiraSearch` + `handleJiraSearchSelect` + `clearSearch()`; trim `useReviewHistory` destructure to `addReviewRecord` |
+| `src/components/form/BasicInfoSection.vue` | Manual Parent Requirement input |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | `form.parentReq` + `form.parentReqPlaceholder` |
+| `src/components/form/__tests__/BasicInfoSection.parentReq.test.ts` | New test |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.102 |
+| `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |

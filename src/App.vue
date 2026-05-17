@@ -1,5 +1,5 @@
 <template>
-  <div class="app" :class="{ 'app--explore-lock': appMode === 'explore' }">
+  <div class="app" :class="{ 'app--explore-lock': appMode === 'explore', 'app--task-lock': appMode === 'task' }">
     <AppHeader :is-ai-busy="isAiBusy" @open-settings="showSettingsModal = true" />
 
     <!-- Settings Modal -->
@@ -29,7 +29,7 @@
       </div>
     </Transition>
 
-    <main class="app-main" :class="{ 'app-main--view': appMode === 'view', 'app-main--explore': appMode === 'explore' }">
+    <main class="app-main" :class="{ 'app-main--view': appMode === 'view', 'app-main--explore': appMode === 'explore', 'app-main--task': appMode === 'task' }">
       <!-- View mode: full-width JIRA Quality Grid (n8n-fed) -->
       <QualityGridPanel v-if="appMode === 'view'" />
 
@@ -63,7 +63,10 @@
             :stream-speed="taskCoachStreamSpeed"
             :backoff-secs="taskCoachBackoffSecs"
             :description-focused="descFocused"
+            :can-coach-submit="canCoachSubmit"
+            v-model:description="form.description"
             @cancel="cancelTaskCoach"
+            @coach="handleCoachRequest"
             @retry="handleCoachRetry"
             @apply-chip="applyCoachChip"
             @elicit="handleElicitation"
@@ -71,6 +74,8 @@
             @import-templates="handleTemplateImport"
             @replay="handleReplay"
             @continue-session="handleContinueSession"
+            @desc-focus="descFocused = true"
+            @desc-blur="descFocused = false"
           />
         </div>
 
@@ -107,7 +112,6 @@
             :checked-items="checkedItems"
             :all-checked="allChecked"
             :check-progress="checkProgress"
-            @coach="handleCoachRequest"
             @analyze="handleAnalyze"
             @create="handleCreateClick"
             @reset="handleReset"
@@ -121,8 +125,6 @@
             @export-req-i-f="handleExportReqIF"
             @export-excel="handleExportExcel"
             @clear-error="errorMessage = ''"
-            @desc-focus="descFocused = true"
-            @desc-blur="descFocused = false"
           />
         </div>
 
@@ -175,19 +177,6 @@
             :analyze-backoff-secs="analyzeBackoffSecs"
           />
 
-          <JiraSearchPanel
-            :is-searching="isSearching"
-            :search-results="searchResults"
-            :search-error="searchError"
-            :sprint-context="sprintContext"
-            :release-context="releaseContext"
-            :duplicate-warning="duplicateWarning"
-            @check-duplicates="checkDuplicates(form.projectKey, computedSummary)"
-            @search-parent="searchParentReqs(form.projectKey, form.parentReqId || computedSummary)"
-            @get-context="getSprintContext(form.projectKey)"
-            @select-result="handleJiraSearchSelect"
-          />
-
           <BatchPanel
             :batch-items="batchItems"
             :selected-count="selectedCount"
@@ -199,8 +188,6 @@
             @bulk-analyze="handleBulkAnalyze"
             @import-c-s-v="handleBatchImportCSV"
           />
-
-          <ReviewDashboard :stats="reviewStats" @clear="clearReviewHistory" />
         </div>
       </div>
     </main>
@@ -225,7 +212,6 @@ import { addTicket } from '@/composables/useTicketHistory'
 import { useReviewWorkflow } from '@/composables/useReviewWorkflow'
 import { useReviewHistory } from '@/composables/useReviewHistory'
 import { exportMarkdown, exportReqIF, exportExcelCSV, downloadFile } from '@/utils/exportFormats'
-import { useJiraSearch } from '@/composables/useJiraSearch'
 import { useBatchOps } from '@/composables/useBatchOps'
 import { getModeElicitationPrompt, buildConflictCheckPrompt, buildTraceSuggestPrompt, buildImpactAnalysisPrompt } from '@/config/domain'
 import type { TaskLevel } from '@/config/domain/traceability.task'
@@ -245,8 +231,6 @@ import CoachPanel from '@/components/panels/CoachPanel.vue'
 import AIReviewPanel from '@/components/panels/AIReviewPanel.vue'
 // JiraResponsePanel removed in v10.73 — "Creating" indicator moved to TicketHistoryPanel
 import TicketHistoryPanel from '@/components/panels/TicketHistoryPanel.vue'
-import ReviewDashboard from '@/components/panels/ReviewDashboard.vue'
-import JiraSearchPanel from '@/components/panels/JiraSearchPanel.vue'
 import BatchPanel from '@/components/panels/BatchPanel.vue'
 import DevTools from '@/components/dev/DevTools.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
@@ -382,17 +366,10 @@ const {
   allChecked, checkProgress, advanceTo, toggleCheck, resetWorkflow
 } = useReviewWorkflow()
 
-const {
-  stats: reviewStats,
-  addRecord: addReviewRecord,
-  clearAll: clearReviewHistory
-} = useReviewHistory()
-
-const {
-  isSearching, searchResults, searchError,
-  sprintContext, releaseContext, duplicateWarning,
-  checkDuplicates, searchParentReqs, getSprintContext, clearSearch
-} = useJiraSearch()
+// Panel UI removed (v10.102) but the learning loop is intentionally kept:
+// addReviewRecord still records on ticket creation and feeds
+// buildLearningContext() into the Analyze/Deep-Review prompts (useLLM).
+const { addRecord: addReviewRecord } = useReviewHistory()
 
 const lastCreatedKey = ref('')
 
@@ -671,12 +648,6 @@ function handleExportExcel() {
   addToast('success', isZh.value ? '已导出 Excel CSV' : 'Exported Excel CSV')
 }
 
-function handleJiraSearchSelect(result: { key: string; summary: string }) {
-  // Use selected result as parent requirement
-  form.parentReqId = result.key
-  addToast('info', `${result.key} → ${isZh.value ? '已设为上级需求' : 'Set as parent requirement'}`)
-}
-
 function handleAddCurrentToBatch() {
   addBatchItem({
     summary: computedSummary.value,
@@ -946,7 +917,6 @@ function handleReset() {
     clearResponsesFromStorage()
     resetWorkflow()
     lastCreatedKey.value = ''
-    clearSearch()
     startNewSession('task')
   }
 
@@ -1032,10 +1002,11 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
-/* Explore: definite-height viewport lock so the PAGE never scrolls — only the
-   message list does, keeping the composer pinned. Explore-only; do not revert
-   to relying on .app's min-height. */
-.app--explore-lock {
+/* Definite-height viewport lock so the PAGE never scrolls — only the inner
+   scroll regions do, keeping composers/actions pinned. Shared by Explore and
+   Task; do not revert either to relying on .app's min-height. */
+.app--explore-lock,
+.app--task-lock {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -1047,10 +1018,11 @@ onUnmounted(() => {
   flex: 1;
   width: 100%;
 }
-/* Explore: bounded full-height centered column. No vertical padding/growth so
-   ExploreChat fills viewport-minus-header and only its message list scrolls
-   (the composer stays pinned). Keeps the centered max-width from .app-main. */
-.app-main--explore {
+/* Bounded full-height region: no vertical padding/growth so the content
+   (ExploreChat / the Task grid) fills viewport-minus-header and only its inner
+   regions scroll. Keeps the centered max-width + horizontal padding. */
+.app-main--explore,
+.app-main--task {
   padding-top: 0;
   padding-bottom: 0;
   min-height: 0;
@@ -1061,6 +1033,10 @@ onUnmounted(() => {
   grid-template-columns: 3fr 6px 3fr 6px 2fr;
   gap: 0;
   transition: grid-template-columns 250ms ease-in-out;
+  /* Fill the locked .app-main--task so columns get a definite height and
+     scroll internally (Task-only via v-show, so unconditional is safe). */
+  height: 100%;
+  min-height: 0;
 }
 .col-left {
   display: flex;
@@ -1082,7 +1058,10 @@ onUnmounted(() => {
 .col-right {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Right column is not in the .col-left/.col-center flex-children selector, so
+     under the viewport lock it scrolls on its own instead of clipping. */
+  overflow-y: auto;
+  min-height: 0;
   min-width: clamp(150px, 12vw, 350px);
   gap: var(--space-4);
 }

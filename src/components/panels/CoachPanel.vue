@@ -130,7 +130,7 @@
       <Transition name="chat-msg">
         <div v-if="isLoading && isWaitingFirstToken" class="typing-row">
           <div class="typing-avatar-col">
-            <img src="/agent_avy.png" class="typing-avatar avatar-thinking" alt="Coach" />
+            <img :src="AGENT_AVATAR" class="typing-avatar avatar-thinking" alt="Coach" />
           </div>
           <div class="typing-bubble">
             <span class="typing-label">{{ t('coach.agentLabel') }}</span>
@@ -171,6 +171,40 @@
       @replay="handleReplay"
       @continue-session="handleContinueSession"
     />
+
+    <!-- Pinned composer (Task mode, chat tab) — rendered in PanelShell's footer
+         slot, OUTSIDE the scrollable .panel-body, so it never moves while coach
+         messages scroll and the smart autoscroll is unaffected. -->
+    <template v-if="appMode === 'task' && activeTab === 'chat'" #footer>
+      <div class="coach-composer">
+        <DescriptionEditor
+          class="coach-composer-input"
+          variant="composer"
+          v-model="descriptionModel"
+          @focus="$emit('descFocus')"
+          @blur="$emit('descBlur')"
+          @submit="onComposerSubmit"
+        />
+        <button
+          v-if="isLoading"
+          type="button"
+          class="coach-stop"
+          @click="$emit('cancel')"
+        >
+          {{ t('coach.exploreStop') }}
+        </button>
+        <button
+          v-else
+          type="button"
+          class="coach-send"
+          :disabled="!canCoachSubmit"
+          :title="t('coach.requestBtnTask')"
+          @click="$emit('coach')"
+        >
+          {{ t('coach.exploreSend') }}
+        </button>
+      </div>
+    </template>
   </PanelShell>
 </template>
 
@@ -189,6 +223,7 @@ import PanelShell from '@/components/layout/PanelShell.vue'
 import QuickChip from '@/components/shared/QuickChip.vue'
 import ChatBubble from '@/components/chat/ChatBubble.vue'
 import CoachHistoryTab from '@/components/coach/CoachHistoryTab.vue'
+import DescriptionEditor from '@/components/form/DescriptionEditor.vue'
 import { isNearCap, recordCount } from '@/composables/useCoachHistory'
 import { ICONS } from '@/config/icons'
 
@@ -200,7 +235,12 @@ const props = defineProps<{
   streamSpeed: number
   backoffSecs: number
   descriptionFocused: boolean
+  canCoachSubmit?: boolean
 }>()
+
+// Task-mode "TASK DESCRIPTION" composer (pinned in the panel footer). Bound to
+// App's form.description — the single source of truth for Coach/Analyze/Create.
+const descriptionModel = defineModel<string>('description', { default: '' })
 
 const emit = defineEmits<{
   cancel: []
@@ -211,7 +251,18 @@ const emit = defineEmits<{
   importTemplates: [templates: import('@/types/template').TemplateDefinition[]]
   replay: [content: string]
   continueSession: [sessionId: string]
+  coach: []
+  descFocus: []
+  descBlur: []
 }>()
+
+function onComposerSubmit() {
+  if (props.canCoachSubmit && !props.isLoading) emit('coach')
+}
+
+// Bound (not a literal src) so Vite's static asset transform doesn't try to
+// resolve the public-path image — keeps the component unit-testable.
+const AGENT_AVATAR = '/agent_avy.png'
 
 const activeTab = ref<'chat' | 'history'>('chat')
 
@@ -800,5 +851,38 @@ const chips = computed(() =>
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+/* Pinned Task composer (lives in .panel-footer, which already supplies the
+   padding + top border) — mirrors Explore's .explore-composer. */
+.coach-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.coach-composer-input {
+  flex: 1;
+  min-width: 0;
+}
+.coach-send,
+.coach-stop {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.coach-send {
+  background: var(--accent-orange);
+}
+.coach-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.coach-stop {
+  background: var(--accent-red);
 }
 </style>

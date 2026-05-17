@@ -61,6 +61,19 @@
         <StoryPointsPicker v-model="form.estimatedPoints" />
       </div>
     </div>
+
+    <!-- Parent Requirement (manual entry — replaces the removed JiraSearchPanel
+         parent picker; still feeds traceability checks / payload / exports) -->
+    <div class="field mt">
+      <label class="field-label" for="basic-parent-req">{{ t('form.parentReq') }}</label>
+      <input
+        id="basic-parent-req"
+        v-model="form.parentReqId"
+        type="text"
+        class="input-base"
+        :placeholder="t('form.parentReqPlaceholder')"
+      />
+    </div>
   </div>
 </template>
 

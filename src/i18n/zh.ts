@@ -25,6 +25,8 @@ export default {
     taskType: '任务类型',
     storyPoints: '故事点估算',
     aiWillVerify: 'AI 将进行二次校验',
+    parentReq: '上级需求',
+    parentReqPlaceholder: '如 DKKF-123',
     taskSummary: '任务摘要',
     fivePartInput: '五段式结构化输入',
     vehicle: '车型',

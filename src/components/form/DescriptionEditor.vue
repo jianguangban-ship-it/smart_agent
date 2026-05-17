@@ -1,6 +1,10 @@
 <template>
-  <div class="description-editor">
-    <h2 class="section-title" :class="{ 'section-title--explore': appMode === 'explore' }">
+  <div class="description-editor" :class="{ 'description-editor--composer': variant === 'composer' }">
+    <h2
+      v-if="variant !== 'composer'"
+      class="section-title"
+      :class="{ 'section-title--explore': appMode === 'explore' }"
+    >
       {{ appMode === 'explore' ? t('form.exploreDescription') : t('form.taskDescription') }}
       <span class="required-tag">* {{ t('form.required') }}</span>
     </h2>
@@ -8,9 +12,11 @@
       ref="textareaRef"
       v-model="model"
       class="input-base desc-textarea"
+      :class="{ 'desc-textarea--composer': variant === 'composer' }"
       :placeholder="appMode === 'explore' ? t('form.exploreDescriptionPlaceholder') : t('form.taskDescriptionPlaceholder')"
       @focus="emit('focus')"
       @blur="emit('blur')"
+      @keydown="onKeydown"
     ></textarea>
     <div class="desc-footer">
       <div class="desc-footer-left">
@@ -53,7 +59,13 @@ import { useI18n } from '@/i18n'
 import { appMode } from '@/composables/useAppMode'
 import { useAttachment } from '@/composables/useAttachment'
 
-const emit = defineEmits<{ focus: [], blur: [] }>()
+const props = withDefaults(defineProps<{
+  /** 'form' = full section with title/border (Task center column).
+      'composer' = compact, no title, auto-grow capped (pinned chat composer). */
+  variant?: 'form' | 'composer'
+}>(), { variant: 'form' })
+
+const emit = defineEmits<{ focus: [], blur: [], submit: [] }>()
 const model = defineModel<string>({ required: true })
 const { t } = useI18n()
 const { attachedFile, attach, detach, hasAttachment } = useAttachment()
@@ -78,10 +90,22 @@ function autoGrow() {
   const el = textareaRef.value
   if (!el) return
   el.style.height = 'auto'
-  el.style.height = el.scrollHeight + 'px'
+  // Composer variant grows up to a cap, then scrolls (mirrors Explore's autosize).
+  const cap = props.variant === 'composer' ? 200 : Infinity
+  el.style.height = Math.min(el.scrollHeight, cap) + 'px'
 }
 
 watch(model, () => nextTick(autoGrow))
+
+// Ctrl/Cmd+Enter submits (composer only); plain Enter keeps inserting a newline
+// because the task description is long-form, not chat turns.
+function onKeydown(e: KeyboardEvent) {
+  if (props.variant !== 'composer') return
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault()
+    emit('submit')
+  }
+}
 
 const wordCount = computed(() =>
   model.value.trim() ? model.value.trim().split(/\s+/).filter(Boolean).length : 0
@@ -118,6 +142,17 @@ const sentenceCount = computed(() =>
   resize: none;
   font-size: 14px;
   overflow: hidden;
+}
+
+/* Composer variant: compact, no title/border, auto-grow capped then scroll. */
+.description-editor--composer {
+  padding: 0;
+  border-bottom: none;
+}
+.desc-textarea--composer {
+  min-height: 44px;
+  max-height: 200px;
+  overflow-y: auto;
 }
 .desc-footer {
   display: flex;

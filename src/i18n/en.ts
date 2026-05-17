@@ -25,6 +25,8 @@ export default {
     taskType: 'Task Type',
     storyPoints: 'Story Points',
     aiWillVerify: 'AI will verify',
+    parentReq: 'Parent Requirement',
+    parentReqPlaceholder: 'e.g. DKKF-123',
     taskSummary: 'Task Summary',
     fivePartInput: 'Five-Part Structured Input',
     vehicle: 'Vehicle',

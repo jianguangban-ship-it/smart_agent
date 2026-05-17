@@ -19,35 +19,37 @@
     </Transition>
 
     <div class="form-card">
-      <ReviewStatusBar v-show="appMode === 'task'"
-        :review-status="reviewStatus"
-        :current-step-index="currentStepIndex"
-        :checklist="checklist"
-        :checked-items="checkedItems"
-        :all-checked="allChecked"
-        :check-progress="checkProgress"
-        @toggle-check="$emit('toggleCheck', $event)"
-        @approve="$emit('approve')"
-      />
+      <!-- Scrollable form sections (the task description moved to the pinned
+           coach-panel composer; this column scrolls internally under the
+           viewport lock while .form-actions stays pinned below). -->
+      <div class="form-scroll">
+        <ReviewStatusBar v-show="appMode === 'task'"
+          :review-status="reviewStatus"
+          :current-step-index="currentStepIndex"
+          :checklist="checklist"
+          :checked-items="checkedItems"
+          :all-checked="allChecked"
+          :check-progress="checkProgress"
+          @toggle-check="$emit('toggleCheck', $event)"
+          @approve="$emit('approve')"
+        />
 
-      <BasicInfoSection v-show="appMode !== 'explore'"
-        :form="form"
-        @project-change="$emit('projectChange')"
-      />
+        <BasicInfoSection v-show="appMode !== 'explore'"
+          :form="form"
+          @project-change="$emit('projectChange')"
+        />
 
-      <SummaryBuilder v-show="appMode !== 'explore'"
-        :summary="summary"
-        :component-history="componentHistory"
-        :computed-summary="computedSummary"
-        :quality-score="qualityScore"
-        :quality-score-color="qualityScoreColor"
-        :quality-score-label="qualityScoreLabel"
-      />
+        <SummaryBuilder v-show="appMode !== 'explore'"
+          :summary="summary"
+          :component-history="componentHistory"
+          :computed-summary="computedSummary"
+          :quality-score="qualityScore"
+          :quality-score-color="qualityScoreColor"
+          :quality-score-label="qualityScoreLabel"
+        />
+      </div>
 
-
-      <DescriptionEditor v-model="form.description" @focus="$emit('descFocus')" @blur="$emit('descBlur')" />
-
-      <!-- Action Buttons -->
+      <!-- Action Buttons (pinned at the bottom of the center column) -->
       <div class="form-actions">
         <div class="action-group-left">
         <button
@@ -91,21 +93,8 @@
         </div>
         </div>
         <div class="action-group">
-          <!-- Coach / Design Guidance -->
-          <button
-            class="action-btn action-coach"
-            :disabled="!canCoachSubmit || isSubmitting || isCoachLoading"
-            :title="appMode === 'explore' ? t('coach.requestBtnExplore') : appMode === 'task' ? t('coach.requestBtnTask') : t('coach.requestBtn')"
-            @click="$emit('coach')"
-          >
-            <svg v-if="isCoachLoading" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
-              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
-              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
-            </svg>
-            <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
-          </button>
+          <!-- Coach trigger moved to the pinned composer Send button in
+               CoachPanel; this column keeps Analyze/Create/Reset/Export. -->
           <!-- Analyze / Decompose (hidden in free-chat mode) -->
           <button
             v-show="appMode !== 'explore'"
@@ -156,7 +145,6 @@ import { appMode } from '@/composables/useAppMode'
 import type { ReviewStatus, ChecklistItem } from '@/config/domain/types'
 import BasicInfoSection from './BasicInfoSection.vue'
 import SummaryBuilder from './SummaryBuilder.vue'
-import DescriptionEditor from './DescriptionEditor.vue'
 import ReviewStatusBar from './ReviewStatusBar.vue'
 
 defineProps<{
@@ -185,7 +173,6 @@ defineProps<{
 }>()
 
 defineEmits<{
-  coach: []
   analyze: []
   create: []
   reset: []
@@ -199,8 +186,6 @@ defineEmits<{
   exportMarkdown: []
   exportReqIF: []
   exportExcel: []
-  descFocus: []
-  descBlur: []
 }>()
 
 const { t, isZh } = useI18n()
@@ -269,11 +254,18 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   display: flex;
   flex-direction: column;
 }
+.form-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 .form-actions {
   padding: var(--space-4) var(--space-5);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-color);
 }
 .action-group {
   display: flex;

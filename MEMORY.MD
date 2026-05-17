@@ -169,3 +169,51 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   min-height chain; the definite height is what guarantees the page never scrolls
   and the composer stays pinned. `ExploreChat.onNewChat()` also resets local
   composer state (draft, textarea height, scroll, stick) so a new chat opens clean.
+
+## Task-mode composer pinning (v10.101)
+
+- The viewport lock is **shared by Explore and Task**, not Explore-only (updates
+  the v10.98 note above). `App.vue` groups `.app--explore-lock, .app--task-lock`
+  and `.app-main--explore, .app-main--task` — same `100dvh; overflow:hidden` /
+  zero-vertical-padding rules. Don't "simplify" either mode back to the
+  `min-height:100vh` chain; the definite height is what keeps the page from
+  scrolling. View mode still grows normally (no lock class).
+- The Task "TASK DESCRIPTION" composer is pinned via **`PanelShell`'s `#footer`
+  slot**, which renders *outside* the scrollable `.panel-body`. Because the
+  composer is not inside `.panel-body`, CoachPanel's `.panel-body`-bound smart
+  autoscroll needed **no change** — reuse the footer slot for any future pinned
+  panel control rather than restructuring the scroller.
+- `form.description` is still the **single source of truth** for
+  Coach/Analyze/Create. The composer (`CoachPanel` `v-model:description`) and the
+  center-column Analyze/Create buttons read/write the same field — do not fork it
+  into a separate chat-input state.
+- `DescriptionEditor` has a `variant` prop: `'form'` (default — title + border,
+  used nowhere-else-changed) vs `'composer'` (compact, auto-grow capped 200px,
+  Ctrl/Cmd+Enter emits `submit`). Plain Enter inserts a newline by design — the
+  task description is long-form, not chat turns; don't add Enter-to-send.
+- Under the Task lock the **center column scrolls internally** (`.form-scroll`)
+  with `.form-actions` pinned at its bottom; `.col-right` is `overflow-y:auto`
+  (it's intentionally NOT in the `.col-left/.col-center > :deep(*)` flex-children
+  selector). Don't reintroduce page growth on `.app-main` for Task.
+- **Unit-test gotcha:** a literal `<img src="/public-asset.png">` makes
+  `@vitejs/plugin-vue` static-asset-transform throw under vitest/jsdom
+  (`ERR_INVALID_ARG_VALUE … file:///…`), failing the whole suite at *transform*
+  time (0 tests). CoachPanel's typing avatar is now `:src="AGENT_AVATAR"` const
+  to stay testable — bind public-path image `src` (don't use a string literal)
+  in any component that needs a unit test.
+
+## Task right-column cleanup (v10.102)
+
+- **JiraSearch feature fully removed** (JiraSearchPanel + `useJiraSearch`): no
+  duplicate-check / parent-req search / sprint context anywhere in the app. View
+  mode does NOT cover this. If reintroducing, prefer adding it to View mode.
+- **ReviewDashboard panel removed, but `useReviewHistory` is intentionally
+  KEPT.** It is NOT dead code: `addReviewRecord` (called in `confirmCreate`) +
+  `buildLearningContext()` feed a "Historical Review Patterns" block into the
+  Analyze/Deep-Review system prompts (`useLLM.ts`). Do not "dead-code"-remove
+  `useReviewHistory` just because its only UI is gone — that silently degrades
+  AI quality over time.
+- `form.parentReqId` now has a **plain manual text input** in
+  `BasicInfoSection` (`#basic-parent-req`). It still feeds `getModeTraceGaps`
+  traceability checks, the `parent_req_id` payload, and exports — keep an input
+  for it; it has no other UI now (besides batch-CSV import).
