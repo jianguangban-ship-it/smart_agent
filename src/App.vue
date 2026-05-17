@@ -1,5 +1,5 @@
 <template>
-  <div class="app">
+  <div class="app" :class="{ 'app--explore-lock': appMode === 'explore' }">
     <AppHeader :is-ai-busy="isAiBusy" @open-settings="showSettingsModal = true" />
 
     <!-- Settings Modal -->
@@ -29,7 +29,7 @@
       </div>
     </Transition>
 
-    <main class="app-main" :class="{ 'app-main--view': appMode === 'view' }">
+    <main class="app-main" :class="{ 'app-main--view': appMode === 'view', 'app-main--explore': appMode === 'explore' }">
       <!-- View mode: full-width JIRA Quality Grid (n8n-fed) -->
       <QualityGridPanel v-if="appMode === 'view'" />
 
@@ -43,6 +43,8 @@
         @send="handleExploreSend"
         @cancel="cancelExploreCoach"
         @new-chat="handleExploreNewChat"
+        @replay="handleExploreReplay"
+        @continue-session="handleExploreContinueSession"
       />
 
       <div
@@ -807,6 +809,15 @@ function handleExploreNewChat() {
   localStorage.removeItem(LS_EXPLORE_RESPONSE)
   startNewSession('explore')
 }
+function handleExploreReplay(content: string) {
+  // Resend the message through the Explore channel (own composer path).
+  handleExploreSend(content)
+}
+function handleExploreContinueSession(sessionId: string) {
+  const records = getSessionRecords(sessionId)
+  if (records.length === 0) return
+  restoreExploreCoachMessages(records)
+}
 
 function handleElicitation() {
   const lang = isZh.value ? 'zh' as const : 'en' as const
@@ -1021,12 +1032,29 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
+/* Explore: definite-height viewport lock so the PAGE never scrolls — only the
+   message list does, keeping the composer pinned. Explore-only; do not revert
+   to relying on .app's min-height. */
+.app--explore-lock {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
 .app-main {
   max-width: clamp(1200px, 98vw, 3600px);
   margin: 0 auto;
   padding: var(--space-6) var(--space-1);
   flex: 1;
   width: 100%;
+}
+/* Explore: bounded full-height centered column. No vertical padding/growth so
+   ExploreChat fills viewport-minus-header and only its message list scrolls
+   (the composer stays pinned). Keeps the centered max-width from .app-main. */
+.app-main--explore {
+  padding-top: 0;
+  padding-bottom: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 .grid-layout {
   display: grid;

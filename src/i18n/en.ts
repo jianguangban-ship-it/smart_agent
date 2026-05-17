@@ -167,6 +167,8 @@ export default {
     exploreStop: 'Stop',
     exploreNewChat: 'New chat',
     exploreEmpty: 'Free-form AI chat — ask anything, anytime.',
+    exploreEmptyTitle: 'Free-form AI explore ',
+    exploreEmptySub: '🌌 ask anything, anytime.',
     // History tabs & features
     tabChat: 'Chat',
     tabHistory: 'History',

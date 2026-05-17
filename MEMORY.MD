@@ -143,3 +143,29 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   that reintroduces the crash.
 - `handleReset` is **channel-isolated**: resetting one mode never cancels or clears
   the other channel's in-flight stream.
+
+## Explore-mode UX (v10.97)
+
+- `ChatBubble.vue` has an opt-in `layout` prop: `'bubble'` (default — side avatar,
+  left/right; **Task mode**) vs `'stacked'` (full-width vertical turns, inline avatar
+  in the role-label row; **Explore**). Keep the single `responseEl` content block —
+  the v10.95 artifact toolbar's delegated listener binds to it; don't duplicate it.
+- `CoachHistoryTab.vue` takes a `channel` prop (default `'task'`). Explore passes
+  `'explore'`. It is reused as-is by both Task (`CoachPanel`) and Explore
+  (`ExploreChat`) — the only channel-scoping is the `recordsForChannel(props.channel)`
+  read boundary; `clearHistory` is still **global** (deletes all channels — same as
+  Task; known parity, not a bug to "fix" without intent).
+- Explore is bounded by the `app-main--explore` modifier in `App.vue`
+  (no vertical padding, `overflow:hidden`, `min-height:0`) so only the message list
+  scrolls and the composer stays pinned. Don't reintroduce vertical padding/growth on
+  `.app-main` for Explore or the page will scroll and the composer will drift.
+- ExploreChat autoscroll **sticks to bottom only when the user is near the bottom**
+  (`scrollHeight - scrollTop - clientHeight < 40`); preserve this so streaming doesn't
+  yank a user who scrolled up to read earlier messages.
+- (v10.98) Explore's viewport lock is **definite-height**: the root `.app` gets
+  `app--explore-lock` (`height:100dvh; overflow:hidden`) only when
+  `appMode === 'explore'`. The base `.app`/`body` use `min-height:100vh` (other
+  modes need to grow) — do **not** "simplify" Explore back to relying on that
+  min-height chain; the definite height is what guarantees the page never scrolls
+  and the composer stays pinned. `ExploreChat.onNewChat()` also resets local
+  composer state (draft, textarea height, scroll, stick) so a new chat opens clean.

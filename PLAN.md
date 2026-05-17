@@ -5506,3 +5506,160 @@ mutates `form.description`.
 | `src/components/layout/AppHeader.vue` | Version bump to v10.96 |
 | `PLAN.md` | This entry |
 | `MEMORY.MD` | Architecture note (independent channels) |
+
+---
+
+## v10.97 — Explore-mode UX polish (composer, stacked layout, history, title)
+
+**Motivation.** Post-v10.96 the Explore chat still rendered left/right bubbles, the
+composer could drift (the app-shell height chain let the page scroll instead of the
+message list), there was no conversation history (Task mode had one), and a redundant
+"AI CHAT" title sat top-left. This polishes Explore into a Claude/Gemini-style chat
+**without touching Task mode**.
+
+**Changes.**
+1. `src/components/chat/ChatBubble.vue` — opt-in `layout` prop (`'bubble'` default =
+   Task unchanged; `'stacked'` = full-width vertical turns with a small inline avatar in
+   the role-label row). Single content/`responseEl` block preserved (v10.95 artifact
+   toolbar intact); avatar relocated via `v-if`, new `.layout-stacked` scoped CSS.
+2. `src/components/coach/CoachHistoryTab.vue` — added `channel` prop (default `'task'`);
+   read boundary now `recordsForChannel(props.channel)`. `CoachPanel` unchanged (default).
+3. `src/components/chat/ExploreChat.vue` — removed the visible "AI CHAT" title (kept as
+   `aria-label`); added **Chat | History** tabs; Chat passes `layout="stacked"` to
+   `ChatBubble`; History embeds `<CoachHistoryTab :channel="'explore'">`; composer only on
+   Chat; re-emits `replay`/`continue-session` and returns to Chat; autoscroll now sticks
+   to bottom only when the user is already near it (scroll-up no longer fought).
+4. `src/App.vue` — `app-main--explore` modifier (bounded full-height centered column: no
+   vertical padding/growth, `overflow:hidden`) so only the message list scrolls and the
+   composer stays pinned; wired `@replay="handleExploreReplay"` (resend via explore
+   channel) and `@continue-session="handleExploreContinueSession"`
+   (`restoreExploreCoachMessages`). View/Task framing untouched.
+
+**What is NOT changed.** Task-mode bubble layout & history; markdown/sanitizer pipeline;
+v10.95 artifact toolbar; server; message model. `clearHistory` stays global (same as Task
+— known parity, not in scope).
+
+**Verification.** `npm run build` clean (0 TS errors). `npx vitest run` — 241 passed,
+only the 3 pre-existing unrelated `formatCoach.test.ts` failures (no regressions); +8 new
+tests: `ExploreChat.test.ts` (7), `ChatBubble.layout.test.ts` (2),
+`CoachHistoryTab.channel.test.ts` (2). Manual Explore checklist (composer pinned while
+scrolling, stacked turns, no title, explore-scoped history with replay/continue, Task
+mode unaffected, ZH locale) pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/chat/ChatBubble.vue` | Opt-in `layout` prop + stacked CSS/avatar |
+| `src/components/coach/CoachHistoryTab.vue` | `channel` prop (default task) |
+| `src/components/chat/ExploreChat.vue` | No title, Chat/History tabs, stacked, autoscroll refine |
+| `src/App.vue` | `app-main--explore` framing + replay/continue wiring |
+| `src/components/chat/__tests__/ExploreChat.test.ts` | Extended (7 tests) |
+| `src/components/chat/__tests__/ChatBubble.layout.test.ts` | New (2 tests) |
+| `src/components/coach/__tests__/CoachHistoryTab.channel.test.ts` | New (2 tests) |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.97 |
+| `PLAN.md` | This entry |
+| `MEMORY.MD` | Explore UX note |
+
+---
+
+## v10.98 — Guarantee Explore composer pinned + reset composer on new chat
+
+**Motivation.** A double-check of v10.97 found the Explore composer was layout-pinned via
+flexbox but the viewport lock was only *implicit*: the page-height ancestors use
+`min-height:100vh` (`.app` in `App.vue`, `body` in `global.css`), so any stray overflow
+could scroll the whole page and carry the composer with it. Also, "New chat" cleared
+messages but not the composer's local `draft`/textarea height, so a half-typed multi-row
+draft persisted into the new chat instead of returning to its initial state.
+
+**Changes.**
+1. `src/App.vue` — added an Explore-only root modifier
+   `:class="{ 'app--explore-lock': appMode === 'explore' }"` + CSS
+   `.app--explore-lock { height:100vh; height:100dvh; overflow:hidden }`. This makes the
+   page height **definite** in Explore so the page never scrolls — only
+   `.explore-scroll` does — definitively pinning the composer. Base `.app`/`body` rules
+   untouched; Task/View unaffected (modifier is Explore-only).
+2. `src/components/chat/ExploreChat.vue` — `onNewChat()` now also resets local state:
+   `draft=''`, `stick=true`, then `nextTick` → `autosize()` (textarea back to one row)
+   and `scrollEl.scrollTop=0`. New chat opens in its clean initial bottom position.
+
+**What is NOT changed.** Global `.app`/`body` height rules, Task/View framing, message
+layout/history/title (v10.97), markdown/artifact pipeline.
+
+**Verification.** `npm run build` clean (0 TS errors). `npx vitest run` — 242 passed,
+only the 3 pre-existing unrelated `formatCoach.test.ts` failures (no regressions); +1 new
+test (ExploreChat: New chat clears the composer draft + emits new-chat; 8 total).
+Manual Explore checklist (page never scrolls, only messages; new chat resets composer;
+Task/View unaffected; toasts/modals still overlay) pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | `app--explore-lock` definite-height viewport lock (class + CSS) |
+| `src/components/chat/ExploreChat.vue` | `onNewChat` resets draft/stick/textarea/scroll |
+| `src/components/chat/__tests__/ExploreChat.test.ts` | +1 test (8 total) |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.98 |
+| `PLAN.md` | This entry |
+| `MEMORY.MD` | Explore viewport-lock note |
+
+---
+
+## v10.99 — Explore composer/induction text size bump
+
+**Motivation.** The Explore composer input and its guidance ("induction") text were a bit
+small. Nudged them one step up the type scale for readability.
+
+**Changes.** `src/components/chat/ExploreChat.vue`:
+- `.explore-input` `font-size: var(--font-base)` → `var(--font-md)` (the typed text and,
+  by inheritance, the "Ask anything…" placeholder grow).
+- `.explore-empty` (empty-state induction hint) `font-size: var(--font-sm)` →
+  `var(--font-base)`.
+
+CSS-only, one step up the existing `--font-*` scale; no logic/test changes.
+
+**Verification.** `npm run build` clean (0 TS errors). No test changes (no tests assert
+these font vars; full suite unchanged from v10.98). Visual confirmation pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/chat/ExploreChat.vue` | Bump composer input + empty-hint font size |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.99 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.100 — Artistic Explore empty-state hero
+
+**Motivation.** The Explore empty-state induction line was a single small muted sentence.
+Made it a bigger, more artistic two-line hero.
+
+**Changes.**
+- `src/i18n/en.ts` / `zh.ts` — split `coach.exploreEmpty` into `exploreEmptyTitle`
+  ("Free-form AI chat" / "自由 AI 对话") + `exploreEmptySub` ("ask anything, anytime." /
+  "随时提问任何话题。"). Old `exploreEmpty` key left in place (unused, harmless).
+- `src/components/chat/ExploreChat.vue` — empty-state is now a centered column: a large
+  `clamp(22px,3.2vw,40px)` headline with an `accent-purple → accent-blue`
+  `background-clip:text` gradient + `drop-shadow` glow, and a smaller muted subline.
+  Reuses the existing logo/chip gradient pattern; pure CSS, no new component; still
+  centered via `margin:auto` in the flex scroll area (composer pinning v10.98 intact).
+
+**What is NOT changed.** Composer/message-layout/history/other modes; no ASCII-globe or
+animated gradient (considered, not chosen).
+
+**Verification.** `npm run build` clean (0 TS errors). `npx vitest run` — 243 passed,
+only the 3 pre-existing unrelated `formatCoach.test.ts` failures (no regressions); +1 new
+test (ExploreChat empty-state renders split title + subline; 9 total in that file).
+Visual EN/ZH confirmation pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | Split into `exploreEmptyTitle` + `exploreEmptySub` |
+| `src/components/chat/ExploreChat.vue` | Two-line gradient hero empty-state + CSS |
+| `src/components/chat/__tests__/ExploreChat.test.ts` | +1 test (9 total) |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.100 |
+| `PLAN.md` | This entry |

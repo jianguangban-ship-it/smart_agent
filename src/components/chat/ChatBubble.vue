@@ -1,7 +1,7 @@
 <template>
-  <div class="chat-msg" :class="[`chat-${message.role}`]">
-    <!-- Avatar -->
-    <div class="msg-avatar-col">
+  <div class="chat-msg" :class="[`chat-${message.role}`, `layout-${layout}`]">
+    <!-- Avatar column (bubble layout only — stacked uses an inline avatar) -->
+    <div v-if="layout === 'bubble'" class="msg-avatar-col">
       <img
         v-if="message.role === 'assistant'"
         :src="agentAvatar"
@@ -19,6 +19,22 @@
     <!-- Bubble -->
     <div class="msg-bubble" :class="[`bubble-${message.role}`]">
       <span class="msg-role-label" :class="[`role-${message.role}`]">
+        <img
+          v-if="layout === 'stacked' && message.role === 'assistant'"
+          :src="agentAvatar"
+          class="msg-avatar-inline"
+          :class="{ 'avatar-thinking': message.isStreaming }"
+          alt="Coach"
+        />
+        <span
+          v-else-if="layout === 'stacked'"
+          class="msg-avatar-inline msg-avatar-inline-user"
+          aria-hidden="true"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0" />
+          </svg>
+        </span>
         {{ message.role === 'assistant' ? t('coach.agentLabel') : t('coach.userLabel') }}
         <span class="msg-time">{{ timeLabel }}</span>
         <span v-if="hashId" class="msg-hash">#{{ hashId }}</span>
@@ -65,10 +81,12 @@ const { t } = useI18n()
 const { addToast } = useToast()
 const agentAvatar = '/agent_avy.png'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   message: ChatMessage
   hashId?: string
-}>()
+  /** 'bubble' = side avatar, left/right (Task). 'stacked' = full-width turns (Explore). */
+  layout?: 'bubble' | 'stacked'
+}>(), { layout: 'bubble' })
 
 // RAF-throttled formatting for streaming messages
 const formattedContent = ref('')
@@ -284,6 +302,43 @@ const timeLabel = computed(() => {
 .msg-action-btn:hover {
   color: var(--accent-blue);
   border-color: var(--accent-blue);
+}
+
+/* ── Stacked layout (Explore): full-width vertical turns ───────────────── */
+.chat-msg.layout-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+.layout-stacked .msg-bubble {
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+}
+.layout-stacked .msg-role-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.msg-avatar-inline {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background-color: var(--bg-tertiary);
+}
+.msg-avatar-inline-user {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--accent-blue);
+  color: white;
+}
+.msg-avatar-inline-user svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* Per-code-block toolbar styles are in src/styles/coach-response.css

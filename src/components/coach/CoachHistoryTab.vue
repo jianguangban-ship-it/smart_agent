@@ -219,7 +219,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { CoachHistoryRecord } from '@/types/api'
+import type { CoachHistoryRecord, CoachChannel } from '@/types/api'
 import { useI18n } from '@/i18n'
 import {
   coachHistory,
@@ -234,6 +234,11 @@ import {
 } from '@/composables/useCoachHistory'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import DownloadModal from '@/components/coach/DownloadModal.vue'
+
+const props = withDefaults(defineProps<{
+  /** Which conversation channel this history view is scoped to. */
+  channel?: CoachChannel
+}>(), { channel: 'task' })
 
 const emit = defineEmits<{
   replay: [content: string]
@@ -256,12 +261,12 @@ watch(searchQuery, (val) => {
 
 const isSearching = computed(() => debouncedQuery.value.trim() !== '' || roleFilter.value !== 'all')
 
-// CoachPanel's history is scoped to the task channel (this panel is the Task
-// coach surface; Explore has its own chat). Filter at the read boundary.
+// History is scoped to the given channel (Task coach uses 'task', Explore
+// chat passes 'explore'). Filter at the read boundary; search is global.
 const filteredRecords = computed(() => {
-  const taskIds = new Set(recordsForChannel('task').map(r => r.id))
+  const channelIds = new Set(recordsForChannel(props.channel).map(r => r.id))
   return searchRecords(debouncedQuery.value, roleFilter.value)
-    .filter(r => taskIds.has(r.id))
+    .filter(r => channelIds.has(r.id))
 })
 
 const sessionGroups = computed(() =>

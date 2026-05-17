@@ -137,7 +137,7 @@ export default {
     titleExplore: 'AI 对话',
     emptyHint: '获取 AI 辅导，写出更优质的任务描述',
     emptySubHint: '填写基本信息和描述后，点击下方按钮',
-    emptyHintExplore: '自由 AI 对话 — 随时提问',
+    emptyHintExplore: '自由 AI — 随时提问',
     emptySubHintExplore: '在描述栏输入问题或粘贴内容，然后点击探索按钮',
     analyzing: 'AI Coach 正在分析...',
     requestBtnTask: '任务指导',
@@ -167,6 +167,8 @@ export default {
     exploreStop: '停止',
     exploreNewChat: '新对话',
     exploreEmpty: '自由 AI 对话 —— 随时提问任何话题。',
+    exploreEmptyTitle: '与 AI 自由探索',
+    exploreEmptySub: '🌌 随时提问任何话题。',
     // History tabs & features
     tabChat: '对话',
     tabHistory: '历史记录',
