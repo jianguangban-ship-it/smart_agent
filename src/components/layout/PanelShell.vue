@@ -1,6 +1,6 @@
 <template>
   <div class="panel" role="region" :aria-label="title">
-    <div class="panel-header">
+    <div v-if="!hideHeader" class="panel-header">
       <div class="panel-title">
         <slot name="icon"></slot>
         <span class="title-text">{{ title }}</span>
@@ -13,7 +13,7 @@
         </div>
       </div>
     </div>
-    <div class="panel-body" :class="{ 'panel-body--resizable': resizable }" :style="bodyStyle">
+    <div class="panel-body" :class="{ 'panel-body--resizable': resizable, 'panel-body--flush': hideHeader }" :style="bodyStyle">
       <slot></slot>
     </div>
     <div v-if="$slots.footer" class="panel-footer">
@@ -31,6 +31,7 @@ const props = withDefaults(defineProps<{
   status?: 'idle' | 'loading' | 'success' | 'error'
   statusLabel?: string
   resizable?: boolean
+  hideHeader?: boolean
   minHeight?: string
   maxHeight?: string
   height?: string
@@ -38,6 +39,7 @@ const props = withDefaults(defineProps<{
   status: 'idle',
   statusLabel: '',
   resizable: false,
+  hideHeader: false,
   minHeight: '150px',
   maxHeight: '600px',
   height: '280px'
@@ -115,6 +117,10 @@ const bodyStyle = computed(() => {
   overflow-y: auto;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background-color: var(--bg-secondary);
+}
+/* No header → body is the panel's top edge; keep all corners rounded. */
+.panel-body--flush {
+  border-radius: var(--radius-lg);
 }
 .panel-body--resizable {
   resize: vertical;

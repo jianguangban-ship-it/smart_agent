@@ -248,4 +248,45 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   a wrapper panel/scroller (double box / double scrollbar).
 - The right column is now **TicketHistory + Batch only**. No Task-Analysis
   history/persistence (deep-review perspective sub-tabs remain inside the
-  analysis view). Tab order matters for tests: indices 0/1/2 = Chat/Analysis/History.
+  analysis view). Tab order matters for tests: indices 0/1/2 = Review/Analysis/History.
+- (v10.105) Task first tab is **`coach.tabReview`** ('Review' / '评审'), NOT
+  `coach.tabChat` — `coach.tabChat` is still used by `ExploreChat`; **do not
+  merge these two keys**. `PanelShell` has a `hideHeader` prop (+
+  `panel-body--flush` full-radius); CoachPanel sets it true on
+  **all Task tabs** (`:hide-header="appMode === 'task'"`) — Review, Analysis,
+  History are all header-less "pure pages". (CoachPanel is task-only; Explore
+  uses ExploreChat.) Don't re-scope `hide-header` back to Analysis-only or
+  reintroduce the PanelShell title/model badge/status/copy in Task mode.
+- "Pure page" also needed `AIReviewPanel`'s **own** chrome gone: no
+  `.review-toolbar` title / `currentModel` LLM badge, no `.review-body`
+  `border-top`; the toolbar renders only when `response || isAnalyzing` (empty
+  "Waiting…" state is bare). PanelShell `hideHeader` alone is NOT enough —
+  AIReviewPanel had a second header-like row. Don't reintroduce a title/model
+  badge inside AIReviewPanel (the tab label already says "Analysis").
+
+## Task mode is now a 2-column layout (v10.106)
+
+- The right column is **removed**. Task mode = **CoachPanel | TaskForm** only,
+  one draggable divider. `colFractions`/`LS_COL_SIZES` is a **2-tuple**
+  (default `[1,1]`); a legacy length-3 value in localStorage is ignored (no
+  migration). The drag math is single-handle (`offsetWidth - 6`); only
+  `startDrag('left')` exists. Don't reintroduce a 3-tuple / second handle.
+- `TicketHistoryPanel` + `BatchPanel` now live at the **bottom of TaskForm's
+  `.form-scroll`** (after `AgentInfo`, before the pinned `.form-actions`) via
+  TaskForm's **`#form-extras` slot**. App.vue still owns their state/handlers
+  (Batch's events) — fill the slot from App; don't re-plumb through TaskForm.
+- `.col-right` CSS rule still exists but is dead (no element) — harmless;
+  don't rely on it.
+
+## Cross-mode AI status (v10.107)
+
+- `App.vue` `isAiBusy` is the **union of all 3 channel loading flags**
+  (`isTaskCoachLoading || isExploreCoachLoading || isAnalyzeLoading`), NOT the
+  active-channel `isCoachLoading` — keeps the AppHeader top glow accurate when
+  the user switches modes mid-stream. Don't revert to `isCoachLoading`.
+- `bgReady` ref + watchers flag a mode whose stream finished while it was NOT
+  the active `appMode` (task watcher covers both coach AND analyze); the
+  `appMode` watcher clears it on arrival. `AppHeader` shows a clickable
+  `.reply-chip` (→ `setMode`) only when `readyMode && readyMode !== appMode`.
+  Single chip, latest completion wins (no stacking). "Done" = loading flag
+  clearing (covers complete/cancel/error).

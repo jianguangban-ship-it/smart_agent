@@ -1,6 +1,6 @@
 <template>
   <div class="app" :class="{ 'app--explore-lock': appMode === 'explore', 'app--task-lock': appMode === 'task' }">
-    <AppHeader :is-ai-busy="isAiBusy" @open-settings="showSettingsModal = true" />
+    <AppHeader :is-ai-busy="isAiBusy" :ready-mode="bgReady" @open-settings="showSettingsModal = true" />
 
     <!-- Settings Modal -->
     <LLMSettings v-model="showSettingsModal" @saved="onSettingsSaved" />
@@ -146,36 +146,27 @@
             @export-req-i-f="handleExportReqIF"
             @export-excel="handleExportExcel"
             @clear-error="errorMessage = ''"
-          />
-        </div>
-
-        <!-- Drag handle: center | right -->
-        <div
-          class="col-drag-handle"
-          @mousedown="startDrag('right', $event)"
-        >
-          <div class="drag-grip"></div>
-        </div>
-
-        <!-- RIGHT: Ticket History + JIRA -->
-        <div class="col-right">
-          <TicketHistoryPanel
-            :last-created-key="lastCreatedKey"
-            :is-creating="isSubmitting && currentAction === 'create'"
-          />
-
-
-          <BatchPanel
-            :batch-items="batchItems"
-            :selected-count="selectedCount"
-            @add-current="handleAddCurrentToBatch"
-            @clear-batch="clearBatch"
-            @toggle-item="toggleBatchItem"
-            @toggle-all="toggleBatchAll"
-            @remove-item="removeBatchItem"
-            @bulk-analyze="handleBulkAnalyze"
-            @import-c-s-v="handleBatchImportCSV"
-          />
+          >
+            <!-- Ticket History + Batch relocated to the bottom of the middle
+                 column (App owns their state — slotted, no re-plumbing). -->
+            <template #form-extras>
+              <TicketHistoryPanel
+                :last-created-key="lastCreatedKey"
+                :is-creating="isSubmitting && currentAction === 'create'"
+              />
+              <BatchPanel
+                :batch-items="batchItems"
+                :selected-count="selectedCount"
+                @add-current="handleAddCurrentToBatch"
+                @clear-batch="clearBatch"
+                @toggle-item="toggleBatchItem"
+                @toggle-all="toggleBatchAll"
+                @remove-item="removeBatchItem"
+                @bulk-analyze="handleBulkAnalyze"
+                @import-c-s-v="handleBatchImportCSV"
+              />
+            </template>
+          </TaskForm>
         </div>
       </div>
     </main>
@@ -230,34 +221,34 @@ const { addToast } = useToast()
 const gridRef = ref<HTMLElement>()
 const LS_COL_SIZES = 'grid-col-sizes'
 
-// Default fractions: left 3, center 3, right 2  (total 8)
-const colFractions = ref<[number, number, number]>([3, 3, 2])
+// Default fractions: left (Coach) | center (Task form) — equal split.
+const colFractions = ref<[number, number]>([1, 1])
 
-// Restore saved sizes
+// Restore saved sizes (ignore the legacy 3-tuple from the old 3-col layout)
 try {
   const saved = localStorage.getItem(LS_COL_SIZES)
   if (saved) {
     const parsed = JSON.parse(saved)
-    if (Array.isArray(parsed) && parsed.length === 3) colFractions.value = parsed as [number, number, number]
+    if (Array.isArray(parsed) && parsed.length === 2) colFractions.value = parsed as [number, number]
   }
 } catch { /* ignore */ }
 
 const gridStyle = computed(() => {
-  const [l, c, r] = colFractions.value
+  const [l, c] = colFractions.value
   return {
-    gridTemplateColumns: `${l}fr 6px ${c}fr 6px ${r}fr`
+    gridTemplateColumns: `${l}fr 6px ${c}fr`
   }
 })
 
-let dragSide: 'left' | 'right' | null = null
+let dragSide: 'left' | null = null
 let dragStartX = 0
-let dragStartFractions: [number, number, number] = [3, 3, 2]
+let dragStartFractions: [number, number] = [1, 1]
 
-function startDrag(side: 'left' | 'right', e: MouseEvent) {
+function startDrag(side: 'left', e: MouseEvent) {
   e.preventDefault()
   dragSide = side
   dragStartX = e.clientX
-  dragStartFractions = [...colFractions.value] as [number, number, number]
+  dragStartFractions = [...colFractions.value] as [number, number]
   document.addEventListener('mousemove', onDrag)
   document.addEventListener('mouseup', stopDrag)
   document.body.style.cursor = 'col-resize'
@@ -266,26 +257,18 @@ function startDrag(side: 'left' | 'right', e: MouseEvent) {
 
 function onDrag(e: MouseEvent) {
   if (!gridRef.value || !dragSide) return
-  const gridWidth = gridRef.value.offsetWidth - 12 // subtract 2 handle widths (6px each)
-  const totalFr = dragStartFractions[0] + dragStartFractions[1] + dragStartFractions[2]
+  const gridWidth = gridRef.value.offsetWidth - 6 // subtract the single 6px handle
+  const totalFr = dragStartFractions[0] + dragStartFractions[1]
   const dx = e.clientX - dragStartX
   const dFr = (dx / gridWidth) * totalFr
   const minFr = 1 // minimum column fraction
 
-  const [l, c, r] = dragStartFractions
-  if (dragSide === 'left') {
-    let newL = l + dFr
-    let newC = c - dFr
-    if (newL < minFr) { newC += newL - minFr; newL = minFr }
-    if (newC < minFr) { newL += newC - minFr; newC = minFr }
-    colFractions.value = [+newL.toFixed(3), +newC.toFixed(3), r]
-  } else {
-    let newC = c + dFr
-    let newR = r - dFr
-    if (newC < minFr) { newR += newC - minFr; newC = minFr }
-    if (newR < minFr) { newC += newR - minFr; newR = minFr }
-    colFractions.value = [l, +newC.toFixed(3), +newR.toFixed(3)]
-  }
+  const [l, c] = dragStartFractions
+  let newL = l + dFr
+  let newC = c - dFr
+  if (newL < minFr) { newC += newL - minFr; newL = minFr }
+  if (newC < minFr) { newL += newC - minFr; newC = minFr }
+  colFractions.value = [+newL.toFixed(3), +newC.toFixed(3)]
 }
 
 function stopDrag() {
@@ -390,8 +373,23 @@ watch(showConfirmModal, (open) => {
 const formIsSubmitting = computed(() => isSubmitting.value || isAnalyzeLoading.value)
 const formCurrentAction = computed(() => isAnalyzeLoading.value ? 'analyze' : currentAction.value)
 
-// Drives the breathing glow on AppHeader's bottom border while AI is streaming
-const isAiBusy = computed(() => isCoachLoading.value || isAnalyzeLoading.value)
+// Drives the breathing glow on AppHeader's bottom border while AI is streaming.
+// Union of ALL channels so the glow stays accurate across mode switches
+// (not just the active mode's coach).
+const isAiBusy = computed(() =>
+  isTaskCoachLoading.value || isExploreCoachLoading.value || isAnalyzeLoading.value)
+
+// Cross-mode awareness: when a stream finishes while its mode is NOT active,
+// flag that mode so AppHeader can show a "reply ready" chip. Latest wins.
+const bgReady = ref<'task' | 'explore' | null>(null)
+
+function markBgDone(mode: 'task' | 'explore') {
+  if (appMode.value !== mode) bgReady.value = mode
+}
+watch(isTaskCoachLoading, (now, prev) => { if (prev && !now) markBgDone('task') })
+watch(isAnalyzeLoading, (now, prev) => { if (prev && !now) markBgDone('task') })
+watch(isExploreCoachLoading, (now, prev) => { if (prev && !now) markBgDone('explore') })
+watch(appMode, (m) => { if (m === bgReady.value) bgReady.value = null })
 
 // Per-mode coach submit guard
 const canCoachSubmit = computed(() => {
@@ -1013,7 +1011,7 @@ onUnmounted(() => {
 }
 .grid-layout {
   display: grid;
-  grid-template-columns: 3fr 6px 3fr 6px 2fr;
+  grid-template-columns: 1fr 6px 1fr;
   gap: 0;
   transition: grid-template-columns 250ms ease-in-out;
   /* Fill the locked .app-main--task so columns get a definite height and

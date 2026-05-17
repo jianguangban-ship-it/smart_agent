@@ -140,6 +140,30 @@ describe('CoachPanel — Analysis tab', () => {
     const wrapper = withSlot()
     expect(wrapper.findAll('.coach-tab').length).toBe(2) // Chat | History only
   })
+
+  it('hides the PanelShell header on every Task tab (Review/Analysis/History)', async () => {
+    appMode.value = 'task'
+    const wrapper = withSlot()
+    const tabs = wrapper.findAll('.coach-tab')
+    expect(wrapper.find('.panel-header').exists()).toBe(false) // Review
+
+    await tabs[1].trigger('click') // Analysis
+    expect(wrapper.find('.panel-header').exists()).toBe(false)
+
+    await tabs[2].trigger('click') // History
+    expect(wrapper.find('.panel-header').exists()).toBe(false)
+
+    // Flush body radius applied when header hidden.
+    expect(wrapper.find('.panel-body--flush').exists()).toBe(true)
+  })
+
+  it('labels the first tab Review (task), not Chat', () => {
+    appMode.value = 'task'
+    const label = withSlot().findAll('.coach-tab')[0].text()
+    // Locale-agnostic: the tabReview key (EN 'Review' / ZH '评审'), not tabChat.
+    expect(label).toMatch(/Review|评审/)
+    expect(label).not.toMatch(/Chat|对话/)
+  })
 })
 
 describe('DescriptionEditor — variant', () => {

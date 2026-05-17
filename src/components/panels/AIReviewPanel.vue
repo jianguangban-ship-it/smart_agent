@@ -1,10 +1,8 @@
 <template>
   <div class="review-panel">
     <div class="review-content">
-      <div class="review-toolbar">
-        <span class="header-title">{{ ICONS.reviewPanel }} {{ t('panel.aiAgentResponse') }}</span>
+      <div v-if="response || isAnalyzing" class="review-toolbar">
         <span class="header-actions">
-          <span class="mode-badge badge-llm" :title="currentModel">{{ currentModel }}</span>
           <span v-if="isAnalyzing" class="status-badge status-loading">
             <svg class="mini-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
               <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
@@ -135,10 +133,7 @@ import { useI18n } from '@/i18n'
 import { formatCoachResponse } from '@/utils/formatCoach'
 import { diffWords } from '@/utils/diffText'
 import { useToast } from '@/composables/useToast'
-import { currentModel } from '@/config/llm'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
-import { ICONS } from '@/config/icons'
-import { appMode } from '@/composables/useAppMode'
 
 const props = defineProps<{
   response: unknown
@@ -309,15 +304,13 @@ async function copyResponse() {
 .review-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 0 10px;
+  justify-content: flex-end;
+  padding: 4px 0 8px;
   user-select: none;
   color: var(--text-primary);
   font-weight: 500;
   font-size: var(--font-lg);
 }
-.header-title { flex: 1; }
-
 .header-actions {
   display: flex;
   align-items: center;
@@ -389,8 +382,7 @@ async function copyResponse() {
 }
 
 .review-body {
-  border-top: 1px solid var(--border-color);
-  padding: 10px 0 4px;
+  padding: 4px 0;
 }
 
 /* Empty / loading states */

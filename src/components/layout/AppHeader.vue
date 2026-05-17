@@ -8,9 +8,20 @@
       </div>
       <h1 v-if="currentLang === 'en'" class="header-title"><span class="logo-a">A</span><span class="logo-g">G</span><span class="logo-ec">ec</span></h1>
       <h1 v-else class="header-title">{{ t('header.title') }}</h1>
-      <span class="header-version">v10.104</span>
+      <span class="header-version">v10.107</span>
     </div>
     <div class="header-right">
+      <!-- Cross-mode "reply ready" chip: a background-mode stream finished -->
+      <button
+        v-if="readyMode && readyMode !== appMode"
+        class="reply-chip"
+        :class="'reply-chip--' + readyMode"
+        @click="setMode(readyMode)"
+        :title="t('header.replyReady')"
+      >
+        ↩ {{ t('mode.' + readyMode) }} {{ t('header.replyReady') }}
+      </button>
+
       <!-- Mode Switcher -->
       <div class="toggle-group mode-group">
         <button
@@ -110,7 +121,7 @@ const { t, setLang, currentLang, isZh } = useI18n()
 const isProd = useProductionMode
 const { isDark, toggleTheme } = useTheme()
 
-defineProps<{ isAiBusy?: boolean }>()
+defineProps<{ isAiBusy?: boolean; readyMode?: 'task' | 'explore' | null }>()
 defineEmits<{ openSettings: [] }>()
 
 function openHelp() {
@@ -352,4 +363,31 @@ function openHelp() {
 }
 .mode-btn.mode-explore.active { background: #a78bfa; color: #fff; }
 .mode-btn.mode-task.active    { background: #34d399; color: #fff; }
+
+/* Cross-mode "reply ready" chip */
+.reply-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-xs, 10px);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #fff;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  animation: replyChipIn 0.25s ease-out;
+}
+.reply-chip:hover { filter: brightness(1.12); }
+.reply-chip--task    { background: #34d399; }
+.reply-chip--explore { background: #a78bfa; }
+@keyframes replyChipIn {
+  from { opacity: 0; transform: translateY(-3px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reply-chip { animation: none; }
+}
 </style>

@@ -51,6 +51,10 @@
         <!-- Slim agent strip — directly under the Live Preview, bottom of the
              middle column (replaces the removed DevTools Agent State) -->
         <AgentInfo v-show="appMode === 'task'" :jira-response="jiraResponse" />
+
+        <!-- Bottom-of-column extras (Ticket History, Batch) — App owns their
+             state; slotted here so no prop/event re-plumbing through TaskForm. -->
+        <slot name="form-extras" />
       </div>
 
       <!-- Action Buttons (pinned at the bottom of the center column) -->

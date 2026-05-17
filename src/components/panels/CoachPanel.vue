@@ -3,6 +3,7 @@
     :title="ICONS.coachPanel + ' ' + (appMode === 'task' ? t('coach.titleTask') : t('coach.titleExplore'))"
     :status="statusInfo.status"
     :status-label="t('status.' + statusInfo.key)"
+    :hide-header="appMode === 'task'"
     max-height="2500px"
   >
     <template #header-actions>
@@ -28,7 +29,7 @@
         :class="{ 'tab-active': activeTab === 'chat' }"
         @click="activeTab = 'chat'"
       >
-        {{ t('coach.tabChat') }}
+        {{ t('coach.tabReview') }}
       </button>
       <button
         v-if="appMode === 'task'"

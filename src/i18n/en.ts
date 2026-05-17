@@ -6,7 +6,8 @@ export default {
   header: {
     title: 'Agentic Engineering Platform',
     themeDark: 'Switch to dark mode',
-    themeLight: 'Switch to light mode'
+    themeLight: 'Switch to light mode',
+    replyReady: 'reply ready'
   },
   mode: {
     explore: 'Explore',
@@ -173,6 +174,7 @@ export default {
     exploreEmptySub: '🌌 ask anything, anytime.',
     // History tabs & features
     tabChat: 'Chat',
+    tabReview: 'Review',
     tabAnalysis: 'Analysis',
     tabHistory: 'History',
     historySearch: 'Search messages...',

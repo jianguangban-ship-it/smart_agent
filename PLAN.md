@@ -5896,3 +5896,148 @@ user.
 | `src/components/panels/__tests__/CoachPanel.composer.test.ts` | +3 Analysis-tab tests; History-tab index fixed |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.104 |
 | `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |
+
+---
+
+## v10.105 — CoachPanel polish: "Chat" → "Review"; bare Analysis tab
+
+**Motivation.** Task coaching is really a review flow → rename the first tab.
+And the Analysis tab still showed the `PanelShell` header (panel title left,
+LLM/model badge right); user wants it as a pure page.
+
+**Design.** `coach.tabChat` is shared with `ExploreChat` — added a **new**
+`coach.tabReview` key used only by CoachPanel so Explore's "Chat" tab is
+untouched. `PanelShell` gains a `hideHeader` prop (`v-if` on `.panel-header` +
+a `panel-body--flush` full-radius modifier so the borderless top still looks
+right); CoachPanel binds **`:hide-header="appMode === 'task'"`** so the
+PanelShell header (title, LLM/model badge, status, copy-last-response, bottom
+line) is dropped on **every** Task tab — Review, Analysis, History all match
+the bare look. (Header-only affordances are intentionally gone in Task mode;
+the chat body still shows streaming state, AIReviewPanel keeps its own copy.)
+
+**Changes.**
+- `src/i18n/en.ts` / `zh.ts` — new `coach.tabReview` ('Review' / '评审');
+  `coach.tabChat` kept for ExploreChat.
+- `src/components/layout/PanelShell.vue` — `hideHeader?: boolean` prop →
+  `v-if="!hideHeader"` on `.panel-header`; `.panel-body--flush` radius.
+- `src/components/panels/CoachPanel.vue` — first tab → `t('coach.tabReview')`;
+  `:hide-header="appMode === 'task'"` on `<PanelShell>` (header hidden on all
+  Task tabs, not just Analysis).
+- `src/components/panels/AIReviewPanel.vue` — the "pure page" also required
+  removing **AIReviewPanel's own** internal chrome (left over from the v10.104
+  de-chrome): dropped the `.review-toolbar` title ("🔍 Task Analysis") and the
+  `currentModel` LLM badge, made the toolbar render only when `response ||
+  isAnalyzing` (so the empty "Waiting…" state is truly bare), and removed the
+  `.review-body` `border-top` line. Removed now-unused `ICONS` / `currentModel`
+  / `appMode` imports. Functional controls (status/result badges, diff, copy)
+  remain, right-aligned, only when there is analysis content.
+
+**What is NOT changed.** ExploreChat (still "Chat"); the PanelShell title text
+itself; analyze logic; other panels.
+
+**Verification.** `npm run build` clean. `npx vitest run` — no regressions vs
+baseline (only the 3 pre-existing unrelated `formatCoach.test.ts`); CoachPanel
+test +2 (header hidden only on Analysis; first tab labelled "Review"). Visual
+EN/ZH pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | New `coach.tabReview` |
+| `src/components/layout/PanelShell.vue` | `hideHeader` prop + flush body radius |
+| `src/components/panels/CoachPanel.vue` | First tab → `tabReview`; `:hide-header` on Analysis |
+| `src/components/panels/AIReviewPanel.vue` | Remove internal toolbar title + LLM badge + body border-top; toolbar only when content; drop dead imports |
+| `src/components/panels/__tests__/CoachPanel.composer.test.ts` | +2 tests (bare Analysis header; "Review" label) |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.105 |
+| `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |
+
+---
+
+## v10.106 — Remove the right column; Ticket History + Batch → bottom of middle column
+
+**Motivation.** After prior cleanups the Task right column held only
+`TicketHistoryPanel` + `BatchPanel`. User wants the right column gone, both
+panels at the bottom of the middle column, and the freed width shared by the
+left (Coach) + middle (Task form) columns → a 2-column draggable layout.
+
+**Design (slot, no re-plumbing).** `TaskForm` exposes a `#form-extras` slot at
+the end of `.form-scroll` (after `<AgentInfo>`, before the pinned
+`.form-actions`). `App.vue` fills it with the existing `<TicketHistoryPanel>` +
+`<BatchPanel>` verbatim, so App keeps owning their state/handlers (Batch's 7
+events) — same pattern as the v10.104 `#analysis` slot.
+
+**Changes.**
+- `src/components/form/TaskForm.vue` — `<slot name="form-extras" />` after
+  `<AgentInfo>` inside `.form-scroll`.
+- `src/App.vue` — deleted `.col-right` (TicketHistory + Batch) and the 2nd
+  `col-drag-handle` (`startDrag('right')`); TaskForm now wraps
+  `<template #form-extras>` with TicketHistory + Batch (bindings unchanged).
+  Grid 3→2 col: `colFractions` → `[number, number]` default `[1,1]`;
+  LS restore accepts only `length === 2` (legacy 3-tuple ignored, no crash);
+  `gridStyle` → `${l}fr 6px ${c}fr`; drag math single-handle
+  (`offsetWidth - 6`, `[l,c]` clamp, removed the `'right'` branch);
+  `dragSide`/`startDrag` narrowed to `'left'`; static `.grid-layout` fallback
+  → `1fr 6px 1fr`. The `@media (max-width:1024px)` collapse rule unchanged.
+
+**What is NOT changed.** TicketHistory/Batch internals; CoachPanel; analyze
+logic; the v10.101 viewport lock; v10.105 bare headers; the now-unused
+`.col-right` CSS rule left in place (harmless; out of scope).
+
+**Verification.** `npm run build` clean (0 TS errors — confirms the
+`colFractions` narrowing + drag-math compile). `npx vitest run` — no
+regressions vs baseline (only the 3 pre-existing unrelated
+`formatCoach.test.ts`; no grid unit tests — layout verified manually). Static
+grep: no `col-right` / `startDrag('right'` in App.vue; `#form-extras` slot in
+TaskForm and filled in App.vue. Visual EN/ZH (2-col drag+persist, history/batch
+at column bottom, viewport lock holds) pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/TaskForm.vue` | `#form-extras` slot after `<AgentInfo>` |
+| `src/App.vue` | Delete `.col-right` + 2nd drag handle; TaskForm `#form-extras` = TicketHistory + Batch; 3→2 col grid (colFractions/gridStyle/drag/LS/fallback CSS) |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.106 |
+| `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |
+
+---
+
+## v10.107 — Cross-mode AI status: accurate glow + "reply ready" chip
+
+**Motivation.** The top breathing glow followed only the active mode's coach
+channel (`isCoachLoading`), so switching modes mid-stream dropped the glow and
+a background-mode completion gave no signal.
+
+**Solution.**
+- `App.vue`: `isAiBusy` is now the **union of all channels**
+  (`isTaskCoachLoading || isExploreCoachLoading || isAnalyzeLoading`) — the
+  glow stays accurate regardless of active mode. Added `bgReady` ref + three
+  loading-flag watchers (true→false; if owning mode ≠ active `appMode`, set
+  `bgReady` to that mode; task covers coach + analyze) + an `appMode` watcher
+  that clears `bgReady` on arrival. Passes `:ready-mode="bgReady"`.
+- `AppHeader.vue`: new `readyMode` prop; a clickable `.reply-chip` shown before
+  the mode switcher only when `readyMode && readyMode !== appMode`; click →
+  `setMode(readyMode)` (App's `appMode` watch then clears it). Tinted with the
+  target mode's switcher color; fade-in, reduced-motion safe.
+- i18n: `header.replyReady` ('reply ready' / '回复已就绪'); chip reuses
+  existing `mode.*` names.
+
+**What is NOT changed.** Streaming/cancel/error logic ("done" = loading flag
+clearing); single chip (latest completion wins, no stacking); View has no AI;
+no Explore/Task internal UI changes.
+
+**Verification.** `npm run build` clean (0 TS errors). `npx vitest run` — no
+regressions vs baseline (only the 3 pre-existing unrelated
+`formatCoach.test.ts`); +1 new `AppHeader.replyChip.test.ts` (3 tests). Visual
+EN/ZH cross-mode behavior pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | `isAiBusy` union; `bgReady` + watchers; `:ready-mode` |
+| `src/components/layout/AppHeader.vue` | `readyMode` prop + `.reply-chip` (→ `setMode`) + styles; v10.106 → v10.107 |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | `header.replyReady` |
+| `src/components/layout/__tests__/AppHeader.replyChip.test.ts` | New (3 tests) |
+| `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |

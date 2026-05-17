@@ -6,7 +6,8 @@ export default {
   header: {
     title: '智能工程平台',
     themeDark: '切换深色模式',
-    themeLight: '切换浅色模式'
+    themeLight: '切换浅色模式',
+    replyReady: '回复已就绪'
   },
   mode: {
     explore: '探索',
@@ -173,6 +174,7 @@ export default {
     exploreEmptySub: '🌌 随时提问任何话题。',
     // History tabs & features
     tabChat: '对话',
+    tabReview: '评审',
     tabAnalysis: '分析',
     tabHistory: '历史记录',
     historySearch: '搜索消息...',
