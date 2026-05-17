@@ -5841,3 +5841,58 @@ Task-mode confirmation pending user.
 | `src/components/form/__tests__/AgentInfo.test.ts` | New test |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.103 |
 | `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |
+
+---
+
+## v10.104 — Task Analysis merged into CoachPanel as a 3rd tab (Chat | Analysis | History)
+
+**Motivation.** The left CoachPanel's tabbed `PanelShell` chrome is the design
+the user likes. The right-column Task Analysis (`AIReviewPanel`) was a
+differently-styled collapsible `<details>` block. Consolidate: move Task
+Analysis into the left CoachPanel as a third tab and drop the right-column
+Analysis panel. No analysis history (deep-review perspective sub-tabs stay
+inside the analysis view).
+
+**Design (low-coupling slot).** CoachPanel hosts the Analysis tab via a
+`#analysis` **named slot**; `App.vue` still owns all analyze state and just
+moves the existing `<AIReviewPanel>` element into that slot — no analyze prop
+re-plumbing through CoachPanel. CoachPanel learns one extra boolean
+(`isAnalyzing`) and `watch`es it to auto-switch to the Analysis tab when an
+analyze run starts (so results surface without a manual click).
+`AIReviewPanel` is de-chromed (no `<details>`, no own panel border/scroll) so it
+renders cleanly inside CoachPanel's `PanelShell` `.panel-body`.
+
+**Changes.**
+- `src/components/panels/CoachPanel.vue` — `activeTab` adds `'analysis'`;
+  task-only "Analysis" tab button (order Chat | Analysis | History);
+  `<slot name="analysis">` branch in the body; `isAnalyzing` prop + watch
+  auto-switch. Footer composer already gated to chat tab → hidden on Analysis.
+- `src/components/panels/AIReviewPanel.vue` — `<details>/<summary>` → plain
+  always-open `.review-content` (`.review-toolbar` + `.review-body`); removed
+  `toggle`/`detailsEl`/`hasContent`; dropped outer panel border/bg and the
+  body's `max-height/overflow` (PanelShell scrolls). Props/emits unchanged.
+- `src/App.vue` — moved `<AIReviewPanel>` from `.col-right` into CoachPanel's
+  `#analysis` slot; added `:is-analyzing="isAnalyzeLoading"` to CoachPanel.
+  Right column = TicketHistory + Batch only.
+- `src/i18n/en.ts` / `zh.ts` — `coach.tabAnalysis` ('Analysis' / '分析').
+
+**What is NOT changed.** Analyze/Deep-Review LLM logic; TicketHistory/Batch;
+v10.101 composer/lock; no analysis persistence.
+
+**Verification.** `npm run build` clean (0 TS errors). `npx vitest run` — no
+regressions vs baseline (only the 3 pre-existing unrelated
+`formatCoach.test.ts`); CoachPanel tests extended (+3: Analysis tab renders
+slot, auto-switch on `isAnalyzing`, hidden in Explore). Visual EN/ZH pending
+user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/panels/CoachPanel.vue` | 3rd "Analysis" tab + `#analysis` slot + `isAnalyzing` auto-switch |
+| `src/components/panels/AIReviewPanel.vue` | De-chromed (no `<details>`); embeds in PanelShell body |
+| `src/App.vue` | `<AIReviewPanel>` moved into CoachPanel `#analysis` slot; `:is-analyzing` added; right column trimmed |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | `coach.tabAnalysis` |
+| `src/components/panels/__tests__/CoachPanel.composer.test.ts` | +3 Analysis-tab tests; History-tab index fixed |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.104 |
+| `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |

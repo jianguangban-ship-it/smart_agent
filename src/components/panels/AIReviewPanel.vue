@@ -1,9 +1,9 @@
 <template>
   <div class="review-panel">
-    <details :open="hasContent || isAnalyzing">
-      <summary class="review-header" @click.prevent="toggle">
+    <div class="review-content">
+      <div class="review-toolbar">
         <span class="header-title">{{ ICONS.reviewPanel }} {{ t('panel.aiAgentResponse') }}</span>
-        <span class="header-actions" @click.stop>
+        <span class="header-actions">
           <span class="mode-badge badge-llm" :title="currentModel">{{ currentModel }}</span>
           <span v-if="isAnalyzing" class="status-badge status-loading">
             <svg class="mini-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
@@ -39,7 +39,7 @@
             </svg>
           </button>
         </span>
-      </summary>
+      </div>
 
       <div class="review-body">
         <!-- Empty state / backoff state -->
@@ -125,7 +125,7 @@
         <!-- Webhook JSON result -->
         <JsonViewer v-else :data="response" />
       </div>
-    </details>
+    </div>
   </div>
 </template>
 
@@ -161,13 +161,7 @@ const { addToast } = useToast()
 const retryCountdown = ref(0)
 const showDiff = ref(false)
 const activeTab = ref('all')
-const detailsEl = ref<HTMLDetailsElement | null>(null)
 let _cooldownTimer: number | null = null
-
-function toggle(e: Event) {
-  const details = (e.target as HTMLElement).closest('details')
-  if (details) details.open = !details.open
-}
 
 function handleRetry() {
   emit('retry')
@@ -187,7 +181,6 @@ onUnmounted(() => {
   if (_rafId !== null) cancelAnimationFrame(_rafId)
 })
 
-const hasContent = computed(() => !!props.response || props.isAnalyzing)
 
 // AI result badges — parse final_points / split_number from the LLM JSON response
 // The response is { message: '{"final_points":5,"split_number":4,...}' }
@@ -307,26 +300,22 @@ async function copyResponse() {
 </script>
 
 <style scoped>
+/* Embedded inside CoachPanel's Analysis tab — no own panel chrome/scroll
+   (PanelShell's .panel-body provides the box + scroller). */
 .review-panel {
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
   font-size: 12px;
 }
 
-.review-header {
+.review-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  cursor: pointer;
+  padding: 8px 0 10px;
   user-select: none;
-  list-style: none;
   color: var(--text-primary);
   font-weight: 500;
   font-size: var(--font-lg);
 }
-.review-header::-webkit-details-marker { display: none; }
 .header-title { flex: 1; }
 
 .header-actions {
@@ -401,9 +390,7 @@ async function copyResponse() {
 
 .review-body {
   border-top: 1px solid var(--border-color);
-  padding: 8px 12px 10px;
-  max-height: 2500px;
-  overflow-y: auto;
+  padding: 10px 0 4px;
 }
 
 /* Empty / loading states */

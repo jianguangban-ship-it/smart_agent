@@ -233,3 +233,19 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
 - Now-unused `dev.*` i18n keys are intentionally **left in place** (no pruning
   — harmless, avoids churn). Removed DevTools-only App.vue bindings:
   `activeModel`/`getModel`, `analyzeSkillModified`, `customTemplatesModified`.
+
+## Task Analysis is now CoachPanel's Analysis tab (v10.104)
+
+- `CoachPanel` tabs are **Chat | Analysis | History** (Analysis is
+  `appMode === 'task'`-only). The Analysis tab renders a **`#analysis` named
+  slot** — `App.vue` still owns all analyze state and passes
+  `<AIReviewPanel>` into that slot. **Do not re-plumb analyze props through
+  CoachPanel**; only `:is-analyzing` is passed (CoachPanel `watch`es it to
+  auto-switch to the Analysis tab when an analyze run starts).
+- `AIReviewPanel` is **de-chromed**: no `<details>`/collapse, no own panel
+  border/background, no `max-height/overflow` on `.review-body` — it relies on
+  CoachPanel's `PanelShell .panel-body` for the box + scroll. Don't reintroduce
+  a wrapper panel/scroller (double box / double scrollbar).
+- The right column is now **TicketHistory + Batch only**. No Task-Analysis
+  history/persistence (deep-review perspective sub-tabs remain inside the
+  analysis view). Tab order matters for tests: indices 0/1/2 = Chat/Analysis/History.

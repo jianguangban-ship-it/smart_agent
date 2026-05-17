@@ -88,14 +88,57 @@ describe('CoachPanel — pinned Task composer', () => {
     const wrapper = mountPanel()
     expect(wrapper.find('.coach-composer').exists()).toBe(true)
 
-    // Switch to History tab → composer hidden.
-    await wrapper.findAll('.coach-tab')[1].trigger('click')
+    // Switch to History tab (task order: Chat | Analysis | History) → composer hidden.
+    await wrapper.findAll('.coach-tab')[2].trigger('click')
     expect(wrapper.find('.coach-composer').exists()).toBe(false)
 
     // Explore mode → no Task composer at all.
     appMode.value = 'explore'
     const explore = mountPanel()
     expect(explore.find('.coach-composer').exists()).toBe(false)
+  })
+})
+
+describe('CoachPanel — Analysis tab', () => {
+  const withSlot = (props: Record<string, unknown> = {}) =>
+    mount(CoachPanel, {
+      props: {
+        messages: [] as ChatMessage[],
+        isLoading: false, wasCancelled: false, hadError: false,
+        streamSpeed: 0, backoffSecs: 0, descriptionFocused: false,
+        canCoachSubmit: true, description: '', ...props,
+      },
+      slots: { analysis: '<div class="analysis-slot">ANALYSIS</div>' },
+      global: { stubs: { ChatBubble: ChatBubbleStub, CoachHistoryTab: HistoryStub, QuickChip: QuickChipStub, AsciiGlobe: GlobeStub } },
+    })
+
+  it('shows a task-only Analysis tab that renders the #analysis slot', async () => {
+    appMode.value = 'task'
+    const wrapper = withSlot()
+    const tabs = wrapper.findAll('.coach-tab')
+    expect(tabs.length).toBe(3) // Chat | Analysis | History
+    expect(wrapper.find('.analysis-slot').exists()).toBe(false) // chat tab first
+
+    await tabs[1].trigger('click') // Analysis
+    expect(wrapper.find('.coach-analysis').exists()).toBe(true)
+    expect(wrapper.find('.analysis-slot').text()).toBe('ANALYSIS')
+    // Composer hidden on the Analysis tab.
+    expect(wrapper.find('.coach-composer').exists()).toBe(false)
+  })
+
+  it('auto-switches to the Analysis tab when isAnalyzing flips true', async () => {
+    appMode.value = 'task'
+    const wrapper = withSlot({ isAnalyzing: false })
+    expect(wrapper.find('.analysis-slot').exists()).toBe(false)
+    await wrapper.setProps({ isAnalyzing: true })
+    expect(wrapper.find('.coach-analysis').exists()).toBe(true)
+    expect(wrapper.find('.analysis-slot').exists()).toBe(true)
+  })
+
+  it('hides the Analysis tab in Explore mode', () => {
+    appMode.value = 'explore'
+    const wrapper = withSlot()
+    expect(wrapper.findAll('.coach-tab').length).toBe(2) // Chat | History only
   })
 })
 

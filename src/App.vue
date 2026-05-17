@@ -64,6 +64,7 @@
             :backoff-secs="taskCoachBackoffSecs"
             :description-focused="descFocused"
             :can-coach-submit="canCoachSubmit"
+            :is-analyzing="isAnalyzeLoading"
             v-model:description="form.description"
             @cancel="cancelTaskCoach"
             @coach="handleCoachRequest"
@@ -76,7 +77,26 @@
             @continue-session="handleContinueSession"
             @desc-focus="descFocused = true"
             @desc-blur="descFocused = false"
-          />
+          >
+            <!-- Task Analysis lives as CoachPanel's Analysis tab (App still
+                 owns analyze state — slotted, no prop re-plumbing). -->
+            <template #analysis>
+              <AIReviewPanel
+                :response="analyzeResponse"
+                :previous-response="previousAnalyzeResponse"
+                :is-analyzing="isAnalyzeLoading"
+                :is-deep-review="isDeepReview"
+                :has-error="!!errorMessage && formCurrentAction === 'analyze'"
+                :was-cancelled="analyzeWasCancelled"
+                :had-error="analyzeHadError"
+                :stream-speed="analyzeStreamSpeed"
+                :backoff-secs="analyzeBackoffSecs"
+                :estimated-points="form.estimatedPoints"
+                @cancel="cancelAnalyze"
+                @retry="handleAnalyzeRetry"
+              />
+            </template>
+          </CoachPanel>
         </div>
 
         <!-- Drag handle: left | center -->
@@ -137,23 +157,8 @@
           <div class="drag-grip"></div>
         </div>
 
-        <!-- RIGHT: AI Review + JIRA -->
+        <!-- RIGHT: Ticket History + JIRA -->
         <div class="col-right">
-          <AIReviewPanel
-            :response="analyzeResponse"
-            :previous-response="previousAnalyzeResponse"
-            :is-analyzing="isAnalyzeLoading"
-            :is-deep-review="isDeepReview"
-            :has-error="!!errorMessage && formCurrentAction === 'analyze'"
-            :was-cancelled="analyzeWasCancelled"
-            :had-error="analyzeHadError"
-            :stream-speed="analyzeStreamSpeed"
-            :backoff-secs="analyzeBackoffSecs"
-            :estimated-points="form.estimatedPoints"
-            @cancel="cancelAnalyze"
-            @retry="handleAnalyzeRetry"
-          />
-
           <TicketHistoryPanel
             :last-created-key="lastCreatedKey"
             :is-creating="isSubmitting && currentAction === 'create'"

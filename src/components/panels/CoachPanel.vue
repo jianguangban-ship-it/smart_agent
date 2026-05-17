@@ -31,6 +31,14 @@
         {{ t('coach.tabChat') }}
       </button>
       <button
+        v-if="appMode === 'task'"
+        class="coach-tab"
+        :class="{ 'tab-active': activeTab === 'analysis' }"
+        @click="activeTab = 'analysis'"
+      >
+        {{ t('coach.tabAnalysis') }}
+      </button>
+      <button
         class="coach-tab"
         :class="{ 'tab-active': activeTab === 'history' }"
         @click="activeTab = 'history'"
@@ -165,6 +173,12 @@
     </div>
     </template>
 
+    <!-- Analysis tab (Task mode) — host the AIReviewPanel via slot; App.vue
+         still owns all analyze state, so no prop re-plumbing here. -->
+    <div v-else-if="activeTab === 'analysis'" class="coach-analysis">
+      <slot name="analysis" />
+    </div>
+
     <!-- History tab -->
     <CoachHistoryTab
       v-if="activeTab === 'history'"
@@ -236,6 +250,7 @@ const props = defineProps<{
   backoffSecs: number
   descriptionFocused: boolean
   canCoachSubmit?: boolean
+  isAnalyzing?: boolean
 }>()
 
 // Task-mode "TASK DESCRIPTION" composer (pinned in the panel footer). Bound to
@@ -264,7 +279,13 @@ function onComposerSubmit() {
 // resolve the public-path image — keeps the component unit-testable.
 const AGENT_AVATAR = '/agent_avy.png'
 
-const activeTab = ref<'chat' | 'history'>('chat')
+const activeTab = ref<'chat' | 'analysis' | 'history'>('chat')
+
+// Surface analyze results without a manual tab click: when an analyze run
+// starts, jump to the Analysis tab.
+watch(() => props.isAnalyzing, (now) => {
+  if (now) activeTab.value = 'analysis'
+})
 
 function handleReplay(content: string) {
   activeTab.value = 'chat'

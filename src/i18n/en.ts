@@ -173,6 +173,7 @@ export default {
     exploreEmptySub: '🌌 ask anything, anytime.',
     // History tabs & features
     tabChat: 'Chat',
+    tabAnalysis: 'Analysis',
     tabHistory: 'History',
     historySearch: 'Search messages...',
     historyFilterAll: 'All',

@@ -173,6 +173,7 @@ export default {
     exploreEmptySub: '🌌 随时提问任何话题。',
     // History tabs & features
     tabChat: '对话',
+    tabAnalysis: '分析',
     tabHistory: '历史记录',
     historySearch: '搜索消息...',
     historyFilterAll: '全部',
