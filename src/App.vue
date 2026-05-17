@@ -112,6 +112,7 @@
             :checked-items="checkedItems"
             :all-checked="allChecked"
             :check-progress="checkProgress"
+            :jira-response="jiraResponse"
             @analyze="handleAnalyze"
             @create="handleCreateClick"
             @reset="handleReset"
@@ -158,24 +159,6 @@
             :is-creating="isSubmitting && currentAction === 'create'"
           />
 
-          <DevTools
-            :payload="jsonPayload"
-            :coach-messages="coachMessages"
-            :active-model="activeModel"
-            :jira-response="jiraResponse"
-            :analyze-skill-modified="analyzeSkillModified"
-            :custom-templates-modified="customTemplatesModified"
-            :is-coach-loading="isCoachLoading"
-            :is-analyze-loading="isAnalyzeLoading"
-            :coach-had-error="coachHadError"
-            :analyze-had-error="analyzeHadError"
-            :coach-was-cancelled="coachWasCancelled"
-            :analyze-was-cancelled="analyzeWasCancelled"
-            :coach-stream-speed="coachStreamSpeed"
-            :analyze-stream-speed="analyzeStreamSpeed"
-            :coach-backoff-secs="coachBackoffSecs"
-            :analyze-backoff-secs="analyzeBackoffSecs"
-          />
 
           <BatchPanel
             :batch-items="batchItems"
@@ -217,10 +200,8 @@ import { getModeElicitationPrompt, buildConflictCheckPrompt, buildTraceSuggestPr
 import type { TaskLevel } from '@/config/domain/traceability.task'
 import { currentRole } from '@/composables/useRole'
 import { useAttachment } from '@/composables/useAttachment'
-import { getTemplateContent, effectiveTemplates, setCustomTemplates, customTemplatesModified } from '@/config/templates/index'
+import { getTemplateContent, effectiveTemplates, setCustomTemplates } from '@/config/templates/index'
 import type { TemplateDefinition } from '@/types/template'
-import { analyzeSkillModified } from '@/config/skills/index'
-import { getModel } from '@/config/llm'
 import { getSessionRecords, startNewSession } from '@/composables/useCoachHistory'
 
 import AppHeader from '@/components/layout/AppHeader.vue'
@@ -232,7 +213,6 @@ import AIReviewPanel from '@/components/panels/AIReviewPanel.vue'
 // JiraResponsePanel removed in v10.73 — "Creating" indicator moved to TicketHistoryPanel
 import TicketHistoryPanel from '@/components/panels/TicketHistoryPanel.vue'
 import BatchPanel from '@/components/panels/BatchPanel.vue'
-import DevTools from '@/components/dev/DevTools.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
 import QualityGridPanel from '@/components/quality/QualityGridPanel.vue'
@@ -379,8 +359,6 @@ const {
   toggleItem: toggleBatchItem, toggleAll: toggleBatchAll,
   clearBatch, importCSV: importBatchCSV
 } = useBatchOps()
-
-const activeModel = computed(() => getModel())
 
 const errorMessage = ref('')
 const showConfirmModal = ref(false)

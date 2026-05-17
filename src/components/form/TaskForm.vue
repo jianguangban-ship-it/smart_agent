@@ -47,6 +47,10 @@
           :quality-score-color="qualityScoreColor"
           :quality-score-label="qualityScoreLabel"
         />
+
+        <!-- Slim agent strip — directly under the Live Preview, bottom of the
+             middle column (replaces the removed DevTools Agent State) -->
+        <AgentInfo v-show="appMode === 'task'" :jira-response="jiraResponse" />
       </div>
 
       <!-- Action Buttons (pinned at the bottom of the center column) -->
@@ -146,6 +150,7 @@ import type { ReviewStatus, ChecklistItem } from '@/config/domain/types'
 import BasicInfoSection from './BasicInfoSection.vue'
 import SummaryBuilder from './SummaryBuilder.vue'
 import ReviewStatusBar from './ReviewStatusBar.vue'
+import AgentInfo from './AgentInfo.vue'
 
 defineProps<{
   form: FormState
@@ -170,6 +175,7 @@ defineProps<{
   checkedItems: Set<string>
   allChecked: boolean
   checkProgress: number
+  jiraResponse?: unknown
 }>()
 
 defineEmits<{

@@ -217,3 +217,19 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   `BasicInfoSection` (`#basic-parent-req`). It still feeds `getModeTraceGaps`
   traceability checks, the `parent_req_id` payload, and exports — keep an input
   for it; it has no other UI now (besides batch-CSV import).
+
+## DevTools removed; slim Agent strip (v10.103)
+
+- **DevTools panel fully removed** (payload viewer, raw-coach viewer, active
+  webhook, agent state). `jsonPayload` (App.vue computed) is **still needed** —
+  the create-confirm modal renders it via `<JsonViewer :data="jsonPayload"/>`;
+  do not delete it as "DevTools dead code".
+- The slim agent info lives in `src/components/form/AgentInfo.vue`, rendered in
+  `TaskForm` after `SummaryBuilder` (bottom of the middle column, under the
+  Live Preview / `QualityMeter`). It is **self-contained**: model from
+  `@/config/llm` `currentModel`, role from `useRole` `currentRoleDefinition`,
+  skill from `useLLM` `activeSkill` — only `jiraResponse` is plumbed
+  App → TaskForm → AgentInfo. Don't reintroduce prop plumbing for model/role/skill.
+- Now-unused `dev.*` i18n keys are intentionally **left in place** (no pruning
+  — harmless, avoids churn). Removed DevTools-only App.vue bindings:
+  `activeModel`/`getModel`, `analyzeSkillModified`, `customTemplatesModified`.

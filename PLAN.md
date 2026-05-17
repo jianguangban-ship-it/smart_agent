@@ -5786,3 +5786,58 @@ pending user.
 | `src/components/form/__tests__/BasicInfoSection.parentReq.test.ts` | New test |
 | `src/components/layout/AppHeader.vue` | Version bump to v10.102 |
 | `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |
+
+---
+
+## v10.103 — Remove DevTools panel; slim Agent strip under Live Preview
+
+**Motivation.** Continued Task right-column cleanup. DevTools' four sections
+were judged unneeded in-UI: Request Payload (n8n's received message is enough
+for debugging), raw Coach Payload (symbol rendering is trusted now), Active
+Webhook (visible in source). Agent State mixed user-relevant info with debug
+flags — keep a slim subset, relocated; drop the debug rows.
+
+**Design.** With all four sections gone the panel is empty, so the whole
+DevTools panel + its App.vue wiring is removed. `jsonPayload` is **kept** (the
+create-confirm modal still renders it). The slim Agent info (Model / Active
+Role / Active Skill + JIRA-created key·points·view) moves to a new
+`AgentInfo.vue` rendered at the bottom of the middle column, directly under the
+Live Preview (`QualityMeter` in `SummaryBuilder`), inside TaskForm's
+`.form-scroll` (scrolls with the form; v10.101 pinned actions intact).
+`AgentInfo` is self-contained — model/role/skill pulled straight from
+`@/config/llm` + `useRole` + `useLLM` (no prop plumbing); only `jiraResponse`
+is passed through TaskForm. Existing `dev.*` i18n keys reused (no new keys);
+now-unused `dev.*` keys left in place (no pruning — YAGNI).
+
+**Changes.**
+- Deleted `src/components/dev/DevTools.vue` (dir now empty).
+- New `src/components/form/AgentInfo.vue` — slim strip; reuses DevTools' JIRA
+  parse logic + link styles.
+- `src/components/form/TaskForm.vue` — new `jiraResponse?: unknown` prop;
+  `<AgentInfo v-show="appMode === 'task'" :jira-response>` after SummaryBuilder.
+- `src/App.vue` — removed DevTools import + mount; passes `:jira-response` to
+  TaskForm; removed now-dead DevTools-only bindings (`activeModel` + its
+  `getModel` import, `analyzeSkillModified` import, `customTemplatesModified`
+  from the templates import).
+
+**What is NOT changed.** AIReviewPanel / TicketHistoryPanel / BatchPanel;
+n8n/LLM logic; the v10.101 viewport lock / composer; `jsonPayload` (kept for
+the confirm modal).
+
+**Verification.** `npm run build` clean (0 TS errors). `npx vitest run` — no
+regressions vs baseline (only the 3 pre-existing unrelated
+`formatCoach.test.ts`); +1 new `AgentInfo.test.ts`. Static grep: no `DevTools`
+refs remain; `jsonPayload` still used by the confirm modal. Visual EN/ZH
+Task-mode confirmation pending user.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/dev/DevTools.vue` | Deleted |
+| `src/components/form/AgentInfo.vue` | New — slim agent strip |
+| `src/components/form/TaskForm.vue` | `jiraResponse` prop; render `<AgentInfo>` under SummaryBuilder |
+| `src/App.vue` | Remove DevTools import+mount; pass `jira-response`; drop dead DevTools-only bindings |
+| `src/components/form/__tests__/AgentInfo.test.ts` | New test |
+| `src/components/layout/AppHeader.vue` | Version bump to v10.103 |
+| `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |
