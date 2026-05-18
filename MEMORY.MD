@@ -290,3 +290,25 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   `.reply-chip` (→ `setMode`) only when `readyMode && readyMode !== appMode`.
   Single chip, latest completion wins (no stacking). "Done" = loading flag
   clearing (covers complete/cancel/error).
+
+## Action-trigger tooltip labels (v10.108)
+
+- Composer Send button tooltip = i18n `coach.requestBtnTask` ("Review" /
+  "评审"); Analyze button tooltip = `form.aiAnalyze` ("Analysis" / "分析").
+  Both keys are **tooltip-only** (`:title` at `CoachPanel.vue:216` and
+  `TaskForm.vue:112`) — no visible button-label uses them, so the values can
+  be reworded freely without layout impact.
+
+## Explore composer file-loading (v10.109)
+
+- Explore-mode file attachment is centralized in `useAttachment.ts`:
+  `applyAttachment(text)` is the **single source of truth** for the prepend
+  format and is called from BOTH `buildPayload` (explore case) and
+  `handleExploreSend` in `App.vue`. Do not re-inline the prepend string.
+- `handleExploreSend` overwrites `payload.data.description`, so any Explore
+  payload mutation must go through `applyAttachment` or it will be lost.
+- The picker UI lives in `ExploreChat.vue` (not `DescriptionEditor.vue` — its
+  `appMode==='explore'` attach branch is unreachable since Explore renders
+  `ExploreChat`). Single file, allow-list `ALLOWED_ATTACH_EXTS`, 512 KB cap;
+  `.html`/`.json` sent as raw text (no parsing/stripping).
+- Attachment is `detach()`-ed only after a successful (non-cancelled) send.

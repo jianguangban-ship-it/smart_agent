@@ -42,29 +42,58 @@
         </div>
       </div>
 
-      <div class="explore-composer">
-        <textarea
-          ref="taEl"
-          v-model="draft"
-          class="explore-input"
-          :placeholder="t('coach.explorePlaceholder')"
-          rows="1"
-          @keydown="onKeydown"
-          @input="autosize"
-        />
-        <button
-          v-if="isLoading"
-          type="button"
-          class="explore-stop"
-          @click="$emit('cancel')"
-        >{{ t('coach.exploreStop') }}</button>
-        <button
-          v-else
-          type="button"
-          class="explore-send"
-          :disabled="!draft.trim()"
-          @click="send"
-        >{{ t('coach.exploreSend') }}</button>
+      <div class="explore-composer-wrap">
+        <Transition name="chip-fade">
+          <span v-if="hasAttachment && attachedFile" class="attach-chip">
+            <svg class="attach-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+            </svg>
+            {{ attachedFile.name }}
+            <button class="attach-remove" @click="detach" :title="t('form.removeAttachment')">×</button>
+          </span>
+        </Transition>
+        <div class="explore-composer">
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept=".md,.markdown,.txt,.html,.htm,.json"
+            class="hidden-file-input"
+            @change="handleFileSelect"
+          />
+          <button
+            type="button"
+            class="attach-btn"
+            :title="t('coach.loadFile')"
+            @click="openFilePicker"
+          >
+            <svg class="attach-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.49"/>
+            </svg>
+            <span class="attach-label">{{ t('coach.loadFileLabel') }}</span>
+          </button>
+          <textarea
+            ref="taEl"
+            v-model="draft"
+            class="explore-input"
+            :placeholder="t('coach.explorePlaceholder')"
+            rows="1"
+            @keydown="onKeydown"
+            @input="autosize"
+          />
+          <button
+            v-if="isLoading"
+            type="button"
+            class="explore-stop"
+            @click="$emit('cancel')"
+          >{{ t('coach.exploreStop') }}</button>
+          <button
+            v-else
+            type="button"
+            class="explore-send"
+            :disabled="!draft.trim()"
+            @click="send"
+          >{{ t('coach.exploreSend') }}</button>
+        </div>
       </div>
     </template>
 
@@ -83,9 +112,13 @@ import { ref, watch, nextTick } from 'vue'
 import { useI18n } from '@/i18n'
 import ChatBubble from './ChatBubble.vue'
 import CoachHistoryTab from '@/components/coach/CoachHistoryTab.vue'
+import { useAttachment, type AttachError } from '@/composables/useAttachment'
+import { useToast } from '@/composables/useToast'
 import type { ChatMessage } from '@/types/api'
 
 const { t } = useI18n()
+const { attachedFile, attachValidated, detach, hasAttachment } = useAttachment()
+const { addToast } = useToast()
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -104,6 +137,25 @@ const emit = defineEmits<{
 const activeTab = ref<'chat' | 'history'>('chat')
 const draft = ref('')
 const taEl = ref<HTMLTextAreaElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+function openFilePicker() {
+  fileInputRef.value?.click()
+}
+
+async function handleFileSelect(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    await attachValidated(file)
+  } catch (err) {
+    const reason = err as AttachError
+    addToast('error', t(reason === 'size' ? 'toast.fileTooLarge' : 'toast.invalidComposerFile'))
+  }
+  // Reset so the same file can be re-selected
+  input.value = ''
+}
 const scrollEl = ref<HTMLElement | null>(null)
 // Stick to bottom only when the user is already near it — don't yank them
 // down while they've scrolled up to read earlier messages.
@@ -289,4 +341,99 @@ watch(
 .explore-send { background: var(--accent-blue); }
 .explore-send:disabled { opacity: 0.5; cursor: default; }
 .explore-stop { background: var(--accent-red); }
+
+/* File-loading composer */
+.explore-composer-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  border-top: 1px solid var(--border-color);
+}
+.explore-composer-wrap .explore-composer {
+  border-top: none;
+  padding: 0;
+}
+.hidden-file-input {
+  display: none;
+}
+.attach-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  align-self: flex-end;
+  margin-bottom: 6px;
+  transition: all 0.15s ease;
+}
+.attach-btn:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: var(--blue-subtle, rgba(96, 165, 250, 0.08));
+}
+.attach-icon {
+  width: 13px;
+  height: 13px;
+}
+.attach-label {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--blue-subtle, rgba(96, 165, 250, 0.1));
+  border: 1px solid var(--accent-blue);
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-self: flex-start;
+}
+.attach-chip-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.attach-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--accent-blue);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.attach-remove:hover {
+  background: rgba(96, 165, 250, 0.2);
+}
+.chip-fade-enter-active,
+.chip-fade-leave-active {
+  transition: all 0.2s ease;
+}
+.chip-fade-enter-from,
+.chip-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-8px);
+}
 </style>

@@ -195,7 +195,7 @@ import { useBatchOps } from '@/composables/useBatchOps'
 import { getModeElicitationPrompt, buildConflictCheckPrompt, buildTraceSuggestPrompt, buildImpactAnalysisPrompt } from '@/config/domain'
 import type { TaskLevel } from '@/config/domain/traceability.task'
 import { currentRole } from '@/composables/useRole'
-import { useAttachment } from '@/composables/useAttachment'
+import { useAttachment, applyAttachment } from '@/composables/useAttachment'
 import { getTemplateContent, effectiveTemplates, setCustomTemplates } from '@/config/templates/index'
 import type { TemplateDefinition } from '@/types/template'
 import { getSessionRecords, startNewSession } from '@/composables/useCoachHistory'
@@ -300,7 +300,7 @@ watch(
   { immediate: true }
 )
 
-const { attachedFile } = useAttachment()
+const { attachedFile, detach: detachAttachment } = useAttachment()
 
 const {
   isSubmitting, currentAction,
@@ -445,11 +445,8 @@ function buildPayload(action: 'analyze' | 'create' | 'coach' | 'preview' | 'deep
 
   switch (appMode.value) {
     case 'explore': {
-      // Prepend attached file content (markdown) if present
-      const exploreDesc = attachedFile.value
-        ? `[Attached file: ${attachedFile.value.name}]\n\n${attachedFile.value.content}\n\n---\n\n${desc}`
-        : desc
-      return { meta, data: { description: exploreDesc } }
+      // Prepend attached file content (centralized in useAttachment)
+      return { meta, data: { description: applyAttachment(desc) } }
     }
 
     case 'task':
@@ -747,9 +744,10 @@ async function handleExploreSend(text: string) {
   if (!text.trim() || isExploreCoachLoading.value) return
   errorMessage.value = ''
   const payload = buildPayload('coach')
-  payload.data.description = text
+  payload.data.description = applyAttachment(text)
   const err = await requestExploreCoach(payload)
   if (!err) {
+    detachAttachment()
     saveResponsesToStorage()
   } else if (err !== 'cancelled') {
     errorMessage.value = err

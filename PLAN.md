@@ -6041,3 +6041,86 @@ EN/ZH cross-mode behavior pending user.
 | `src/i18n/en.ts`, `src/i18n/zh.ts` | `header.replyReady` |
 | `src/components/layout/__tests__/AppHeader.replyChip.test.ts` | New (3 tests) |
 | `PLAN.md`, `MEMORY.MD` | This entry + architectural memory |
+
+---
+
+## v10.108 — Tooltip relabel: "Review" & "Analysis"
+
+**Motivation.** In Task mode the composer Send button tooltip read "Task
+Guidance" and the Analyze button tooltip read "Analyze Task". These no longer
+matched how the workflow reads to users; the two triggers are conceptually a
+**Review** step and an **Analysis** step. (An earlier idea to remove the
+in-progress "running" sub-UI in the analysis panel was aborted — no behavior
+or component changes were made.)
+
+**Solution.** Pure i18n value change. Both keys are used *only* as `:title`
+tooltips (verified across all `*.vue`):
+- `coach.requestBtnTask`: `Task Guidance` / `任务指导` → `Review` / `评审`
+  (tooltip on the pinned composer Send button — `CoachPanel.vue:216`)
+- `form.aiAnalyze`: `Analyze Task` / `分析任务` → `Analysis` / `分析`
+  (tooltip on the Analyze button — `TaskForm.vue:112`)
+
+**What is NOT changed.** No component, template, or logic changes. The
+analysis panel running/stop sub-UIs in `AIReviewPanel.vue` are untouched.
+
+**Verification.** `npm run build` clean. Hover Send → "Review"/"评审";
+hover Analyze → "Analysis"/"分析". No other UI label affected (tooltip-only
+keys).
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/i18n/en.ts` | `coach.requestBtnTask` → `Review`; `form.aiAnalyze` → `Analysis` |
+| `src/i18n/zh.ts` | `coach.requestBtnTask` → `评审`; `form.aiAnalyze` → `分析` |
+| `src/components/layout/AppHeader.vue` | v10.107 → v10.108 |
+| `PLAN.md`, `MEMORY.MD` | This entry |
+
+---
+
+## v10.109 — Explore composer: load .md / .html / .json files
+
+**Motivation.** In Explore mode users could only type into the chat composer.
+They wanted to feed a local file (a spec, an HTML page, a JSON payload) as
+context without copy-pasting. A file-attach system already existed
+(`useAttachment.ts` + a `.md/.txt` picker in `DescriptionEditor.vue`) but was
+**dead for Explore chat**: Explore renders `ExploreChat.vue`, not
+`DescriptionEditor`, and `handleExploreSend` overwrote
+`payload.data.description` with the raw composer text, discarding the
+attachment prepend in `buildPayload`.
+
+**Solution.** Surface a "Load file" control directly in the `ExploreChat`
+composer (single file, `.md/.markdown/.txt/.html/.htm/.json`, raw text via
+`FileReader.readAsText`, max 512 KB), reusing the existing `useAttachment`
+composable and the `DescriptionEditor` chip UI/styles.
+- `useAttachment.ts`: new `applyAttachment(text)` — single source of truth
+  for the prepend format (`[Attached file: name]\n\n<content>\n\n---\n\n<text>`);
+  new `attachValidated(file)` with extension allow-list + size guard
+  (`ALLOWED_ATTACH_EXTS`, `MAX_ATTACH_BYTES`, `AttachError` = 'type' | 'size').
+- `App.vue`: `buildPayload` explore case and `handleExploreSend` now both use
+  `applyAttachment(...)`; attachment is `detach()`-ed after a successful
+  Explore send so the chip clears.
+- `ExploreChat.vue`: hidden file input + Load-file button + removable chip
+  (`chip-fade`); validation errors raise a localized toast via `useToast`.
+- i18n: `coach.loadFile`, `coach.loadFileLabel`, `toast.invalidComposerFile`,
+  `toast.fileTooLarge` (EN + ZH).
+
+**What is NOT changed.** Attach-as-context only (not dumped into the
+textarea); single file at a time; `.html` sent as raw source (no stripping —
+project rule: no regex/DOM munging of input). `DescriptionEditor`'s explore
+attach branch is now redundant in Explore mode but left untouched.
+
+**Verification.** `npm run build` clean. Explore mode: load each type → chip
++ filename; Send → content prepended; unsupported type / >512 KB → toast, no
+chip; chip × removes attachment. EN/ZH localized.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/composables/useAttachment.ts` | `applyAttachment`, `attachValidated`, allow-list/size consts |
+| `src/App.vue` | `applyAttachment` in `buildPayload` explore + `handleExploreSend`; `detach` after send |
+| `src/components/chat/ExploreChat.vue` | Load-file button, chip, file input, validation toast, styles |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | `coach.loadFile/loadFileLabel`, `toast.invalidComposerFile/fileTooLarge` |
+| `src/components/layout/AppHeader.vue` | v10.108 → v10.109 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
