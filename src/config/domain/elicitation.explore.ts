@@ -89,6 +89,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       hintZh: '定义故障条件下的行为'
     }
   ],
+  'app-developer': [
+    {
+      questionEn: 'What are the algorithm inputs/outputs, units, and valid ranges?',
+      questionZh: '算法的输入/输出、单位和有效范围是什么？',
+      hintEn: 'Prevents ambiguity in algorithm implementation',
+      hintZh: '避免算法实现中的歧义'
+    },
+    {
+      questionEn: 'What is the expected behavior at limits or under degraded sensor input?',
+      questionZh: '在极限工况或传感器降级输入下期望的行为是什么？',
+      hintEn: 'Defines robustness and fallback strategy',
+      hintZh: '定义鲁棒性与降级策略'
+    }
+  ],
   'hw-designer': [
     {
       questionEn: 'What are the key electrical or physical parameters?',
@@ -129,6 +143,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       questionZh: '可度量的通过/失败标准是什么？',
       hintEn: 'Ensures objective evaluation',
       hintZh: '确保客观评估'
+    }
+  ],
+  'devops-engineer': [
+    {
+      questionEn: 'What environments and toolchain versions must this run reproducibly on?',
+      questionZh: '需要在哪些环境和工具链版本上可复现地运行？',
+      hintEn: 'Pins reproducibility constraints early',
+      hintZh: '尽早固定可复现性约束'
+    },
+    {
+      questionEn: 'What monitoring, alerting, or rollback is expected on failure?',
+      questionZh: '故障时期望什么样的监控、告警或回滚？',
+      hintEn: 'Defines operational behavior under failure',
+      hintZh: '定义故障下的运维行为'
     }
   ]
 }

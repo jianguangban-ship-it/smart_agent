@@ -179,14 +179,19 @@ describe('DescriptionEditor — variant', () => {
     expect(form.find('.desc-textarea--composer').exists()).toBe(false)
   })
 
-  it('composer variant emits submit on Ctrl/Cmd+Enter only', async () => {
+  it('composer variant emits submit on Enter; Shift+Enter and IME composition do not', async () => {
     const wrapper = mount(DescriptionEditor, {
       props: { modelValue: 'hello', variant: 'composer' },
     })
     const ta = wrapper.get('textarea')
-    await ta.trigger('keydown', { key: 'Enter' })
+    // Shift+Enter = newline, must not submit
+    await ta.trigger('keydown', { key: 'Enter', shiftKey: true })
     expect(wrapper.emitted('submit')).toBeFalsy()
-    await ta.trigger('keydown', { key: 'Enter', ctrlKey: true })
+    // Enter during IME composition (e.g. confirming a pinyin candidate) must not submit
+    await ta.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(wrapper.emitted('submit')).toBeFalsy()
+    // Plain Enter submits
+    await ta.trigger('keydown', { key: 'Enter' })
     expect(wrapper.emitted('submit')).toBeTruthy()
   })
 })

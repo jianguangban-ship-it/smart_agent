@@ -95,7 +95,7 @@ export const CLASSIFICATION_OPTIONS = [
   'Cybersecurity',
 ]
 
-export const LAYER_OPTIONS = ['SYS', 'SW', 'APP', 'HW', 'ME', 'TEST', 'SWF']
+export const LAYER_OPTIONS = ['SYS', 'SW', 'APP', 'HW', 'ME', 'VV', 'Devops']
 
 // Safety fallback only. Edit public/config/components.json or deploy/config/components.json for runtime changes.
 // Keyed by project key — each Agile Team gets its own component scope.

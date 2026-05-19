@@ -2,8 +2,8 @@ import { ref, computed } from 'vue'
 import type { LLMRequestBody, LLMStreamChunk, LLMChatMessage, WebhookPayload, ChatMessage } from '@/types/api'
 import { getProviderUrl, getApiKey, getModel } from '@/config/llm'
 import { ICONS } from '@/config/icons'
-import { getCoachSkill, getAnalyzeSkill, getResponseFormat } from '@/config/skills/index'
-import { SKILL_REGISTRY, resolveSystemPrompt } from '@/config/skills/registry'
+import { getCoachSkillTaskRaw, getAnalyzeSkill, getResponseFormat } from '@/config/skills/index'
+import { SKILL_REGISTRY } from '@/config/skills/registry'
 import type { SkillEntry } from '@/config/skills/registry'
 import { matchSkill } from '@/utils/skillMatcher'
 import { currentRole } from '@/composables/useRole'
@@ -438,20 +438,25 @@ export function useLLM() {
     getSystemPrompt: (lang, payload) => {
       const langKey = lang === 'zh' ? 'zh' as const : 'en' as const
       const rawInput = payload.data.description || ''
+      // The layer-routed coach skill is ALWAYS the base prompt and is never
+      // replaced or weakened. A matched registry skill (if any) is appended
+      // as an *additional* specialty layer — additive, not a substitute — so
+      // the discipline baseline from the Layer selection is always preserved.
+      const baseSkill = getCoachSkillTaskRaw(langKey)
       const matched = matchSkill(rawInput, SKILL_REGISTRY, langKey)
-      let basePrompt: string
+      let specialtySkill = ''
       if (matched && matched.id !== ignoredSkillId.value) {
         if (ignoredSkillId.value && matched.id !== ignoredSkillId.value) ignoredSkillId.value = null
         activeSkill.value = matched
-        basePrompt = resolveSystemPrompt(matched, langKey)
+        specialtySkill = matched.getRawPrompt ? matched.getRawPrompt(langKey) : matched.systemPrompt
       } else {
         activeSkill.value = null
-        basePrompt = getCoachSkill('task', lang)
       }
       const traceCtx = getModeTraceContext('task',
         (payload.data.requirement_level || 'none') as TaskLevel,
         payload.data.parent_req_id || '', langKey)
-      return [traceCtx, basePrompt].filter(Boolean).join('\n\n')
+      return [traceCtx, baseSkill, specialtySkill, getResponseFormat()]
+        .filter(Boolean).join('\n\n')
     },
     getUserMessage: (payload, zh) => buildUserMessage(payload, zh),
   }, _callGLMStream, t, isZh)

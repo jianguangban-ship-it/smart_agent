@@ -50,7 +50,20 @@
 
         <!-- Slim agent strip — directly under the Live Preview, bottom of the
              middle column (replaces the removed DevTools Agent State) -->
-        <AgentInfo v-show="appMode === 'task'" :jira-response="jiraResponse" />
+        <AgentInfo
+          v-show="appMode === 'task'"
+          :jira-response="jiraResponse"
+          :is-task-coach-loading="isTaskCoachLoading"
+          :task-coach-stream-speed="taskCoachStreamSpeed"
+          :task-coach-had-error="taskCoachHadError"
+          :task-coach-was-cancelled="taskCoachWasCancelled"
+          :task-coach-backoff-secs="taskCoachBackoffSecs"
+          :is-analyze-loading="isAnalyzeLoading"
+          :analyze-stream-speed="analyzeStreamSpeed"
+          :analyze-had-error="analyzeHadError"
+          :analyze-was-cancelled="analyzeWasCancelled"
+          :analyze-backoff-secs="analyzeBackoffSecs"
+        />
 
         <!-- Bottom-of-column extras (Ticket History, Batch) — App owns their
              state; slotted here so no prop/event re-plumbing through TaskForm. -->
@@ -180,6 +193,16 @@ defineProps<{
   allChecked: boolean
   checkProgress: number
   jiraResponse?: unknown
+  isTaskCoachLoading?: boolean
+  taskCoachStreamSpeed?: number
+  taskCoachHadError?: boolean
+  taskCoachWasCancelled?: boolean
+  taskCoachBackoffSecs?: number
+  isAnalyzeLoading?: boolean
+  analyzeStreamSpeed?: number
+  analyzeHadError?: boolean
+  analyzeWasCancelled?: boolean
+  analyzeBackoffSecs?: number
 }>()
 
 defineEmits<{

@@ -879,7 +879,7 @@ const chips = computed(() =>
    padding + top border) — mirrors Explore's .explore-composer. */
 .coach-composer {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--space-2);
 }
 .coach-composer-input {
@@ -888,7 +888,15 @@ const chips = computed(() =>
 }
 .coach-send,
 .coach-stop {
-  padding: var(--space-2) var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Match the composer textarea's single-line height
+     (.desc-textarea--composer min-height: 44px in DescriptionEditor.vue) so
+     the button forms one aligned row with the input; combined with the
+     parent's align-items: flex-start the tops line up. */
+  height: 54px;
+  padding: 0 var(--space-4);
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--font-base);

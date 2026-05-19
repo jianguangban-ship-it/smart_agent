@@ -6124,3 +6124,385 @@ chip; chip × removes attachment. EN/ZH localized.
 | `src/i18n/en.ts`, `src/i18n/zh.ts` | `coach.loadFile/loadFileLabel`, `toast.invalidComposerFile/fileTooLarge` |
 | `src/components/layout/AppHeader.vue` | v10.108 → v10.109 |
 | `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.110
+
+**New role: `app-developer` (Chassis Control Algorithm Engineer).** The `APP`
+layer previously auto-routed to `sw-developer`, sharing SW Developer context,
+weights, and elicitation questions. `useRole.ts` was extended (by user) with a
+distinct `app-developer` role definition; this entry wires it through the rest
+of the codebase so the role is first-class and the TS build stays green.
+
+**Rationale.** `Record<UserRole, …>` maps are exhaustive — adding a union
+member breaks `tsc` until every such map gets the new key. Switch/case role
+handlers all have `default` branches, so they degrade gracefully to generic
+behavior (acceptable; can be specialized later if needed).
+
+**Changes.**
+- `LAYER_ROLE_MAP`: `APP` now → `app-developer` (was `sw-developer`).
+- `ROLE_WEIGHTS`: added `app-developer` entry (mirrors `sw-developer` profile).
+- `elicitation.task.ts` / `elicitation.explore.ts`: added `app-developer`
+  question sets tailored to control-algorithm work (modules, MIL/SIL/HIL
+  validation, I/O ranges, degraded-input robustness).
+- Fixed typo in user's `useRole.ts` `app-developer.contextEn` ("he" → "The").
+
+**Verification.** `npm run build` clean (no TS errors; only pre-existing
+chunk-size warning).
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/composables/useRole.ts` | `app-developer` role def (user) + typo fix |
+| `src/composables/useForm.ts` | `LAYER_ROLE_MAP` APP→app-developer; `ROLE_WEIGHTS` entry |
+| `src/config/domain/elicitation.task.ts` | `app-developer` question set |
+| `src/config/domain/elicitation.explore.ts` | `app-developer` question set |
+| `src/components/layout/AppHeader.vue` | v10.109 → v10.110 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.111
+
+**Layer rename `TEST`→`VV`, `SWF`→`Devops`; new independent role
+`devops-engineer`.** User updated `LAYER_OPTIONS` (constants.ts) +
+`summary-options.json` layers to `[SYS, SW, APP, HW, ME, VV, Devops]` and
+wired `TASK_SKILL_MAP` (`VV` reuses the TEST skill content; `Devops` →
+new `coach-skill-task-devops-{en,zh}.md`). This entry makes `Devops` a
+first-class role and re-keys the router to the new layer codes.
+
+**Changes.**
+- `useRole.ts`: added `devops-engineer` to `UserRole` + a full role
+  definition (DevOps SW engineer — CI/CD, release automation, IaC,
+  observability, reproducible build/test env). EN+ZH.
+- `useForm.ts` `LAYER_ROLE_MAP`: dropped stale `SWF`/`TEST` keys; added
+  `VV → vv-engineer`, `Devops → devops-engineer`.
+- `useForm.ts` `ROLE_WEIGHTS`: added `devops-engineer` entry.
+- `elicitation.task.ts` / `elicitation.explore.ts`: `devops-engineer`
+  question sets (pipeline scope, rollback, reproducibility, monitoring).
+
+**~~Known cosmetic mismatch~~ — RESOLVED (see v10.116).** The TEST skill
+files were renamed to `coach-skill-task-vv-{en,zh}.md` and the imports in
+`skills/index.ts` rewired to `taskSkillVV*`. `TASK_SKILL_MAP['VV']` now loads
+the real `coach-skill-task-vv-*.md`, so `activeTaskSkillFile` is accurate for
+VV. No mismatch remains.
+
+**Verification.** `npm run build` clean (no TS errors).
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/composables/useRole.ts` | `devops-engineer` role def + union |
+| `src/composables/useForm.ts` | `LAYER_ROLE_MAP` re-key; `ROLE_WEIGHTS` entry |
+| `src/config/domain/elicitation.task.ts` | `devops-engineer` question set |
+| `src/config/domain/elicitation.explore.ts` | `devops-engineer` question set |
+| `src/config/skills/index.ts` | `TASK_SKILL_MAP` VV/Devops keys (user) |
+| `src/config/constants.ts`, `public/config/summary-options.json` | layer rename (user) |
+| `src/components/layout/AppHeader.vue` | v10.110 → v10.111 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.112
+
+**Fix: AGENT STATE "Active skill" never routed on Layer change.** Full
+layer-by-layer test showed Active Role updates per layer but Active skill
+stayed `—` until a message was sent. Root cause: `AgentInfo.vue` bound the
+Active-skill row to `useLLM.activeSkill`, which is only populated mid-request
+when typed input pattern-matches a `SKILL_REGISTRY` entry — Layer selection
+never touches it. The layer-routed skill (`activeTaskSkillName`, driven by the
+`activeTaskLayer` watcher in `useForm.ts`) was correct but never surfaced.
+
+**Change.** `AgentInfo.vue` now shows `displaySkill = activeSkill?.name ||
+activeTaskSkillName || '—'`: the message-matched skill still takes precedence
+for the current turn (purple), otherwise the layer-routed Task Coach skill is
+shown (blue), so the row reflects the Layer selection immediately.
+
+**Verification.** `npm run build` clean. Cycling each Layer now updates both
+Active Role and Active skill in AGENT STATE without sending a message.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/AgentInfo.vue` | `displaySkill` computed; bind to `activeTaskSkillName` fallback |
+| `src/components/layout/AppHeader.vue` | v10.111 → v10.112 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.113
+
+**Registry skill is now additive, never a replacement for the layer-routed
+skill.** Decision: keep the `activeSkill` / skill-chip / `SKILL_REGISTRY`
+mechanism, but guarantee it cannot weaken or override the layer-routed
+discipline baseline (user's points 1–5: Task mode needs deterministic,
+non-confusing requirement guidance).
+
+**Before.** `taskCoach.getSystemPrompt` did `if (matched) basePrompt =
+resolveSystemPrompt(matched)` *else* `basePrompt = getCoachSkill(...)` — a
+registry match **replaced** the layer-routed coach skill entirely.
+
+**After.** The layer-routed coach skill (`getCoachSkillTaskRaw(lang)`) is
+ALWAYS the base. A matched registry skill is appended as an additional
+specialty layer. Prompt assembly: `[traceCtx, baseSkill, specialtySkill,
+responseFormat]` — composed from raw parts so the response-format block is
+not duplicated. `activeSkill`/`ignoredSkillId`/chip/dismiss all unchanged
+(visibility + per-thread opt-out preserved). Registry is still empty, so
+behavior is identical today; this hardens the design contract.
+
+Removed now-unused imports `getCoachSkill`, `resolveSystemPrompt` from
+`useLLM.ts`.
+
+**Verification.** `npm run build` clean; skillMatcher + registry +
+CoachPanel.composer tests pass (26/26).
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/composables/useLLM.ts` | layer skill always base; registry match appended (additive); import cleanup |
+| `src/components/layout/AppHeader.vue` | v10.112 → v10.113 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.114
+
+**AGENT STATE "Active Skill" now shows the additive composition.** Following
+v10.113 (registry skill is appended, not a replacement), the panel was still
+either/or (`activeSkill?.name || activeTaskSkillName`), which misrepresented
+the actual prompt — the layer skill is always present and a specialty is
+appended after it.
+
+**Change.** `AgentInfo.vue` `displaySkill`: always shows the layer-routed
+base; when a registry skill is appended it renders `"<base> + <specialty>"`,
+mirroring the `[baseSkill, specialtySkill]` order in `useLLM.ts`. Color:
+purple when a specialty is appended, blue for base-only, muted for none.
+
+**Verification.** `npm run build` clean.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/AgentInfo.vue` | `displaySkill` shows `base + appended` |
+| `src/components/layout/AppHeader.vue` | v10.113 → v10.114 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.115
+
+**AGENT STATE "Active Skill" now shows the skill file name.** On Layer
+selection the row displays the routed task coach skill *and its source file*,
+e.g. `Task Coach (SYS) - coach-skill-task-sys-en.md`. A matched registry
+skill is still appended as `+ <specialty>`.
+
+**Change.** `AgentInfo.vue`: import `activeTaskSkillFile`; `displaySkill` =
+`<name> - <file>` (+ ` + <specialty>` when appended). File name is reactive
+to layer + language (`coach-skill-task-<layer>-<lang>.md`).
+
+**Note.** For the `VV` layer the file resolves to `coach-skill-task-vv-en.md`,
+which exists and is the file actually loaded (`TASK_SKILL_MAP['VV']` →
+`taskSkillVV*`). Accurate — no mismatch (the earlier TEST-skill caveat was
+resolved by the rename; see v10.116).
+
+**Verification.** `npm run build` clean.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/AgentInfo.vue` | `displaySkill` shows `<name> - <file>` |
+| `src/components/layout/AppHeader.vue` | v10.114 → v10.115 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.116
+
+**Verified: VV skill files exist — earlier "cosmetic mismatch" caveat was
+stale and is now corrected.** The TEST skill files had already been renamed
+to `coach-skill-task-vv-{en,zh}.md` and `skills/index.ts` rewired to
+`taskSkillVV*` imports + `TASK_SKILL_MAP['VV']`. Confirmed: no
+`coach-skill-task-test-*` files or `taskSkillTest` references remain
+anywhere in `src/`. AGENT STATE's `Task Coach (VV) - coach-skill-task-vv-en.md`
+is accurate — that file exists and is the one loaded.
+
+The incorrect VV caveats in the v10.111 and v10.115 entries (and the
+matching MEMORY.MD lines) were corrected to reflect this. No source-logic
+change this entry; documentation accuracy fix + version bump.
+
+**Verification.** Directory listing + `grep` for `task-test`/`taskSkillTest`
+→ no matches; `npm run build` clean.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `PLAN.md` | Corrected stale VV caveats (v10.111, v10.115); this entry |
+| `MEMORY.MD` | Corrected stale VV caveat lines |
+| `src/components/layout/AppHeader.vue` | v10.115 → v10.116 |
+
+## v10.117
+
+**Fix: Task composer & Review/Send button vertical misalignment.** In Task
+mode with the Review (Analysis) panel active, the pinned composer's
+send/stop button sat lower than the composer's visual center.
+
+**Root cause.** `.coach-composer` used `align-items: flex-end`, aligning the
+button's bottom edge to the bottom of the whole `DescriptionEditor` block
+(textarea **+** its internal `.desc-footer` char counter), not the textarea.
+
+**Change.** `src/components/panels/CoachPanel.vue:882` —
+`align-items: flex-end` → `align-items: center`. The send and stop buttons
+(same row) are now vertically centered against the composer input block.
+CSS-only; no template/i18n/logic change. Explore composer
+(`.explore-composer`) intentionally left untouched (out of scope).
+
+**Verification.** `npm run build` clean; `CoachPanel.composer.test.ts`
+passes. Manual: single-line + auto-grown multi-line composer, Stop state,
+light + dark — button stays centered.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/panels/CoachPanel.vue` | `.coach-composer` `align-items: flex-end` → `center` |
+| `src/components/layout/AppHeader.vue` | v10.116 → v10.117 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.118
+
+**Correction to v10.117 — composer/Send alignment done properly.** v10.117's
+`align-items: center` was the wrong reference frame: the Task composer is a
+`DescriptionEditor` (textarea **+** a `.desc-footer` word/sentence counter,
+`margin-top: 4px`), so centering the row centered the button against
+textarea+counter, leaving it visibly low against the input box. User
+confirmed the desired look: **button matches the single-line textarea height
+and tops are aligned** (standard chat-composer row; counter sits below).
+
+**Change.** `src/components/panels/CoachPanel.vue`:
+- `.coach-composer`: `align-items: center` → `align-items: flex-start`
+  (button top = textarea top, since the composer-variant editor has
+  `padding: 0` so its top edge is the textarea top).
+- `.coach-send, .coach-stop`: `display: inline-flex` + center label;
+  `height: 44px` to match `.desc-textarea--composer` `min-height: 44px`
+  (DescriptionEditor.vue:153); `padding: var(--space-2) var(--space-4)` →
+  `padding: 0 var(--space-4)` (height now fixed, horizontal padding kept).
+
+Single-line: button and textarea read as one aligned row. Multi-line: the
+textarea auto-grows while the 44px button stays pinned at the top (standard
+composer behavior). Stop button shares the rule, so it behaves identically.
+Explore's `.explore-composer` still out of scope.
+
+**Verification.** `npm run build` clean; `CoachPanel.composer.test.ts`
+passes (11/11). Manual: Task → Review tab, single + multi-line + Stop state,
+light + dark.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/panels/CoachPanel.vue` | `.coach-composer` flex-start; `.coach-send/.coach-stop` height 44px + flex-center |
+| `src/components/layout/AppHeader.vue` | v10.117 → v10.118 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.119
+
+**Task composer send hotkey: Ctrl/Cmd+Enter → Enter.** Per user request,
+the Task-mode Review composer now submits on plain **Enter**; **Shift+Enter**
+inserts a newline.
+
+**Change.** `src/components/form/DescriptionEditor.vue` `onKeydown` (composer
+variant only — `variant="composer"` is used solely at `CoachPanel.vue:197`
+inside the `appMode === 'task'` footer, so Explore/form variants are
+unaffected): submit when `key === 'Enter' && !shiftKey && !isComposing`.
+
+**Bilingual safeguard.** Added an `e.isComposing` guard: with a Chinese
+(pinyin) IME, Enter confirms a candidate — without this guard that keypress
+would wrongly submit. Required by the project's bilingual rule.
+
+**Tests.** Updated `CoachPanel.composer.test.ts` keybinding test: Enter
+submits; Shift+Enter and `isComposing` Enter do not. 11/11 pass.
+
+**Verification.** `npm run build` clean; composer tests 11/11.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/DescriptionEditor.vue` | `onKeydown`: Enter submits, Shift+Enter newline, IME guard |
+| `src/components/panels/__tests__/CoachPanel.composer.test.ts` | Updated keybinding test |
+| `src/components/layout/AppHeader.vue` | v10.118 → v10.119 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.120
+
+**Explore composer / send button alignment (mirrors Task v10.118).** User
+asked the Explore composer's initial (empty, rows=1) height to equal the send
+button height so the row is center-aligned at rest.
+
+**Structure.** Unlike Task (DescriptionEditor + counter footer), the Explore
+composer is a flat flex row in `ExploreChat.vue`: attach button + bare
+`<textarea rows="1">` + send/stop button. It used `align-items: flex-end`
+with no matched heights, so the elements were unequal height.
+
+**Change** (`src/components/chat/ExploreChat.vue`):
+- `.explore-composer`: `align-items: flex-end` → `center`.
+- `.explore-input`: add `min-height: 44px` (empty height = button height;
+  `autosize()` still grows it to `max-height: 200px` on input — the global
+  `* { box-sizing: border-box }` reset keeps 44px inclusive of padding+border).
+- `.explore-send, .explore-stop`: `display: inline-flex` + centered label;
+  `height: 44px`; `padding: var(--space-2) var(--space-4)` → `0 var(--space-4)`.
+
+At rest all three elements sit on one centered 44px row. When the textarea
+auto-grows multi-line, the buttons stay vertically centered (Explore is
+chat-style; consistent with the user's center-align request). 44px matches
+the Task composer convention (v10.118) — still no shared variable; see MEMORY.
+
+**Verification.** `npm run build` clean; `ExploreChat.test.ts` 9/9 pass.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/chat/ExploreChat.vue` | `.explore-composer` center; `.explore-input` min-height 44px; `.explore-send/.explore-stop` height 44px + flex-center |
+| `src/components/layout/AppHeader.vue` | v10.119 → v10.120 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.121
+
+**AGENT STATE panel redesign — restore deleted DevTools telemetry.** When
+DevTools was removed (v10.103), AgentInfo was reduced to a 3-row strip. User
+supplied a demo (`final-UI-design.jpg`) restoring operational telemetry in a
+2-column grid.
+
+**Layout.** `AgentInfo.vue` now renders an `.agent-grid` (2-col, row-major
+pairing), collapsing to 1 col under 620px:
+
+| Left | Right |
+|---|---|
+| Model | Coach 流式输出 (是 + tok/s) |
+| Active Role | 分析 流式输出 |
+| Active Skill (+ `[已修改]`) | Coach 错误/取消 |
+| 分析提示词 (已修改/否) | 分析 错误/取消 |
+
+Full-width Backoff row (only when a 429 countdown is active, user-chosen
+addition). Existing divider + JIRA / AI Points / View block unchanged below.
+**Custom Templates row deliberately excluded** — no template-customization
+feature exists, so the flag would be meaningless.
+
+**Data.** No new i18n keys, no new useLLM state. `coachSkillTaskModified` /
+`analyzeSkillModified` imported directly from `@/config/skills`. Per-channel
+runtime refs threaded App → TaskForm → AgentInfo as **optional props with
+safe defaults** (mirrors existing `jiraResponse` path). Colors mirror the
+deleted DevTools (green=coach stream, purple=analyze stream, orange=modified/
+cancelled/backoff, red=error, muted=idle).
+
+**Tests.** `AgentInfo.test.ts` updated for the new 8-row grid + a new test
+asserting telemetry props (tok/s badge, cancel, backoff row). 4/4 pass.
+
+**Verification.** `npm run build` clean; `AgentInfo.test.ts` 4/4;
+`CoachPanel.composer.test.ts` unaffected (11/11).
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/AgentInfo.vue` | 2-col telemetry grid; 10 optional props; skill-modified imports; backoff row |
+| `src/components/form/TaskForm.vue` | 10 optional props added + forwarded to `<AgentInfo>` |
+| `src/App.vue` | 10 useLLM refs bound on `<TaskForm>` |
+| `src/components/form/__tests__/AgentInfo.test.ts` | Updated row-count test + new telemetry test |
+| `src/components/layout/AppHeader.vue` | v10.120 → v10.121 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |

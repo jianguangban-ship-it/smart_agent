@@ -43,5 +43,5 @@
     "DP-EPS-100fit", "R-EPS-100fit", "RWS-100fit", "SBW-10fit", "R-EPS-10fit",
     "PB011A01", "PB012A01", "SB0042XA1"
   ],
-  "layers": ["SYS", "SW", "APP", "HW", "ME", "TEST", "SWF"]
+  "layers": ["SYS", "SW", "APP", "HW", "ME", "VV", "Devops"]
 }

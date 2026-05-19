@@ -306,7 +306,7 @@ watch(
 }
 .explore-composer {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-5) var(--space-4);
   border-top: 1px solid var(--border-color);
@@ -314,6 +314,9 @@ watch(
 .explore-input {
   flex: 1;
   resize: none;
+  /* Empty (rows=1) height matches the send button so the row is
+     center-aligned at rest; autosize() grows it up to max-height on input. */
+  min-height: 44px;
   max-height: 200px;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-color);
@@ -330,7 +333,12 @@ watch(
   box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.25);
 }
 .explore-send, .explore-stop {
-  padding: var(--space-2) var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Same height as the empty .explore-input so both align in one row. */
+  height: 44px;
+  padding: 0 var(--space-4);
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--font-base);

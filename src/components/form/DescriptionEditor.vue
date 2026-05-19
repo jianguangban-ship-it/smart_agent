@@ -97,11 +97,12 @@ function autoGrow() {
 
 watch(model, () => nextTick(autoGrow))
 
-// Ctrl/Cmd+Enter submits (composer only); plain Enter keeps inserting a newline
-// because the task description is long-form, not chat turns.
+// Enter submits (composer only); Shift+Enter inserts a newline. The
+// `isComposing` guard is essential for the bilingual (Chinese) IME: pressing
+// Enter to confirm a pinyin candidate must NOT submit the message.
 function onKeydown(e: KeyboardEvent) {
   if (props.variant !== 'composer') return
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault()
     emit('submit')
   }

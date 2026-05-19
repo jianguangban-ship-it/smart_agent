@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-export type UserRole = '' | 'system-architect' | 'sw-developer' | 'hw-designer' | 'me-designer' | 'vv-engineer'
+export type UserRole = '' | 'system-architect' | 'sw-developer' | 'app-developer' |'hw-designer' | 'me-designer' | 'vv-engineer' | 'devops-engineer'
 
 export interface RoleDefinition {
   id: UserRole
@@ -40,6 +40,17 @@ export const ROLES: RoleDefinition[] = [
     placeholderZh: '描述软件需求或变更请求。包含：验收标准、输入验证规则、预期行为、错误场景、以及任何API或接口约束...'
   },
   {
+    id: 'app-developer',
+    labelEn: 'App Developer',
+    labelZh: '应用开发',
+    shortEn: 'APP',
+    shortZh: '应用',
+    contextEn: 'The user is a Vehicle Chassis Control Algorithm Development Engineer. Key focus areas include: vehicle braking and lateral control algorithms, steering control (longitudinal control) algorithms, suspension control (vertical control) algorithms, vehicle motion observer algorithms, and adaptive vehicle motion control algorithms. Additionally, expertise extends to algorithm integration and testing, performance optimization, and cross-platform compatibility.',
+    contextZh: '用户是车辆底盘系统控制算法开发工程师。重点关注：车辆制动即横向控制算法、转向控制系统即纵向控制算法、悬架控制系统即垂向控制算法、车辆运动观测器算法、车辆自适应运动控制算法、算法集成和测试、性能优化、以及跨平台兼容性。',
+    placeholderEn: 'Describe the application requirement or change request. Include: user interface specifications, user experience considerations, integration points with backend services, performance targets, and platform-specific requirements...',
+    placeholderZh: '描述应用需求或变更请求。包含：算法变更要点、接口设计、输入验证规则、预期行为、错误场景、算法集成点、性能目标、以及平台特定需求...'
+  },
+  {
     id: 'hw-designer',
     labelEn: 'HW Designer',
     labelZh: '硬件设计',
@@ -71,6 +82,17 @@ export const ROLES: RoleDefinition[] = [
     contextZh: '用户是验证确认工程师。重点关注：需求的可测试性、验证方法（评审/分析/仿真/测试/演示）、测试覆盖率、通过/失败标准、测试环境搭建（HIL/SIL/MIL）、以及从测试用例到需求的追溯性。',
     placeholderEn: 'Describe the test case, verification activity, or validation finding. Include: verification method (test/analysis/review/demo), pass/fail criteria, test environment (HIL/SIL), preconditions, and linked requirement ID...',
     placeholderZh: '描述测试用例、验证活动或确认发现。包含：验证方法（测试/分析/评审/演示）、通过/失败标准、测试环境（HIL/SIL）、前置条件、以及关联的需求ID...'
+  },
+  {
+    id: 'devops-engineer',
+    labelEn: 'DevOps Engineer',
+    labelZh: '研发运维',
+    shortEn: 'DevOps',
+    shortZh: '运维',
+    contextEn: 'The user is a Development & Operations (DevOps) Software Engineer. Focus on: CI/CD pipelines, build and release automation, toolchain and environment configuration, infrastructure-as-code, containerization, deployment strategy, versioning and artifact management, monitoring/observability, and reproducibility of the build & test environment.',
+    contextZh: '用户是研发运维（DevOps）软件工程师。重点关注：CI/CD 流水线、构建与发布自动化、工具链与环境配置、基础设施即代码、容器化、部署策略、版本与制品管理、监控/可观测性、以及构建与测试环境的可复现性。',
+    placeholderEn: 'Describe the DevOps/automation requirement or change. Include: pipeline stages affected, build/release scope, environment or toolchain config, rollback strategy, monitoring/alerting needs, and reproducibility constraints...',
+    placeholderZh: '描述研发运维/自动化需求或变更。包含：受影响的流水线阶段、构建/发布范围、环境或工具链配置、回滚策略、监控/告警需求、以及可复现性约束...'
   }
 ]
 

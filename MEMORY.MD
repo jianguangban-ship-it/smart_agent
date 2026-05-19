@@ -312,3 +312,109 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   `ExploreChat`). Single file, allow-list `ALLOWED_ATTACH_EXTS`, 512 KB cap;
   `.html`/`.json` sent as raw text (no parsing/stripping).
 - Attachment is `detach()`-ed only after a successful (non-cancelled) send.
+
+## v10.110 — `app-developer` role
+- Roles are a TS union `UserRole` in `src/composables/useRole.ts`. Adding one
+  REQUIRES updating every exhaustive `Record<UserRole, …>`: `ROLE_WEIGHTS`
+  (`useForm.ts`), `ROLE_QUESTIONS` (`elicitation.task.ts`,
+  `elicitation.explore.ts`) — otherwise `tsc`/`npm run build` fails.
+- Switch/case role handlers (conflicts, review-perspectives,
+  review-workflow.task, trace-impact, traceability.design) all have `default`
+  → new roles degrade to generic behavior; no build break, specialize later.
+- Layer→Role routing is `LAYER_ROLE_MAP` in `useForm.ts` (NOT useRole). `APP`
+  now maps to `app-developer`; `SW`/`SWF` still `sw-developer`.
+
+## v10.111 — layer rename + `devops-engineer`
+- Layer codes are now `[SYS, SW, APP, HW, ME, VV, Devops]` (was TEST/SWF).
+  Source of truth at runtime = `public/config/summary-options.json`;
+  `constants.ts LAYER_OPTIONS` is fallback only.
+- Adding a role still requires: `UserRole` union + `ROLES` (useRole.ts),
+  `ROLE_WEIGHTS` (useForm.ts), `ROLE_QUESTIONS` x2 (elicitation.task/explore)
+  — all exhaustive `Record<UserRole,…>`, else `tsc` fails.
+- (Resolved v10.116) TEST skill files were renamed to
+  `coach-skill-task-vv-{en,zh}.md` + imports rewired, so `VV` loads the real
+  vv file and `activeTaskSkillFile` is accurate. No mismatch.
+
+## v10.112 — AGENT STATE Active-skill source
+- Two distinct "skill" concepts: `useLLM.activeSkill` = message-matched
+  SKILL_REGISTRY entry, set ONLY during a sent task request; vs
+  `skills/index.ts activeTaskSkillName` = layer-routed Task Coach default,
+  updated live by the `activeTaskLayer` watcher in useForm.ts.
+- `AgentInfo.vue` "Active skill" now = `activeSkill?.name ||
+  activeTaskSkillName || '—'` (matched skill wins, else layer default).
+- Diagnostic rule: if an AGENT STATE row "doesn't route on layer change",
+  check which source it binds to — role binds to `currentRoleDefinition`
+  (live via LAYER_ROLE_MAP); skill needed the layer-driven fallback.
+
+## v10.113 — registry skill is additive, not a replacement
+- `taskCoach.getSystemPrompt` (useLLM.ts): layer-routed coach skill
+  (`getCoachSkillTaskRaw`) is ALWAYS the base; a matched SKILL_REGISTRY
+  entry is APPENDED as a specialty layer, never substituted. Order:
+  `[traceCtx, baseSkill, specialtySkill, responseFormat]`.
+- Compose from RAW skill parts (getCoachSkillTaskRaw + matched raw prompt)
+  and append `getResponseFormat()` ONCE — using getCoachSkill +
+  resolveSystemPrompt together would duplicate the response-format block.
+- Design contract: layer routing is the deterministic discipline baseline
+  and must never be weakened/replaced by the fuzzy registry match. Registry
+  stays (chip/dismiss intact) but is purely additive. Registry empty today.
+
+## v10.114 — AGENT STATE shows additive skill composition
+- `AgentInfo.vue displaySkill`: always shows layer-routed base
+  (`activeTaskSkillName`); appends `+ <activeSkill.name>` when a registry
+  skill is appended. Mirrors useLLM.ts `[baseSkill, specialtySkill]` order.
+  Not either/or anymore (that was pre-v10.113 replacement semantics).
+
+## v10.115 — Active Skill shows source file name
+- `AgentInfo.vue displaySkill` = `${activeTaskSkillName} - ${activeTaskSkillFile}`
+  (+ ` + ${activeSkill.name}` when a registry skill is appended). e.g.
+  "Task Coach (SYS) - coach-skill-task-sys-en.md". File is reactive to
+  layer + lang. VV shows coach-skill-task-vv-en.md — accurate, that file
+  exists and is loaded (no mismatch; resolved v10.116).
+
+## v10.117 — Task composer/button alignment
+- `.coach-composer` (CoachPanel.vue) uses `align-items: center` (was
+  flex-end). flex-end aligned the send button to the bottom of the whole
+  DescriptionEditor block (textarea + .desc-footer counter), looking
+  misaligned. Center fixes it. Explore's `.explore-composer` is separate.
+
+## v10.118 — Task composer/button alignment (correct fix)
+- The Task composer is DescriptionEditor (textarea + `.desc-footer` counter,
+  margin-top 4px) — NOT a bare textarea. So `.coach-composer` row-centering
+  references textarea+counter and looks wrong against the input box.
+- Correct approach (user-confirmed "match textarea, top-aligned"):
+  `.coach-composer { align-items: flex-start }` + `.coach-send/.coach-stop
+  { height: 44px }` to match `.desc-textarea--composer` min-height 44px
+  (DescriptionEditor.vue:153). Button pins to top; counter sits below.
+- If `.desc-textarea--composer` min-height ever changes, update the button
+  height to match (no shared variable today).
+
+## v10.119 — Task composer submits on Enter
+- `DescriptionEditor.vue onKeydown` (composer variant): Enter submits,
+  Shift+Enter = newline. Guarded by `!e.isComposing` — mandatory for the
+  bilingual Chinese IME (Enter confirms a pinyin candidate; must not submit).
+  Any future Enter-to-submit input in this repo must keep the isComposing
+  guard. composer variant is task-only (CoachPanel.vue:197).
+
+## v10.120 — Explore composer row alignment
+- Explore composer (`ExploreChat.vue`) is a flat flex row: attach btn +
+  `<textarea rows=1 .explore-input>` + `.explore-send/.explore-stop`. NOT a
+  DescriptionEditor (that's Task only).
+- Aligned via: `.explore-composer { align-items: center }`, `.explore-input
+  { min-height: 44px }`, buttons `{ height: 44px }`. autosize() grows the
+  textarea on input; min-height holds the empty state at 44.
+- 44px is now used in 3 places (Task button + Task .desc-textarea--composer
+  + Explore composer) with NO shared variable — change all together if the
+  composer row height ever changes.
+
+## v10.121 — AGENT STATE telemetry restored
+- `AgentInfo.vue` is a 2-col grid (`.agent-grid`, row-major pairing, collapses
+  <620px) restoring deleted-DevTools telemetry: Model/Role/Skill(+[已修改])/
+  Analyze-prompt | Coach&Analyze streaming(+tok/s) & error/cancel; full-width
+  Backoff row when 429 active; JIRA block unchanged below.
+- Per-channel runtime state threaded App→TaskForm→AgentInfo as OPTIONAL props
+  w/ withDefaults (same path as jiraResponse). Skill-modified flags imported
+  directly from @/config/skills (module exports), NOT props.
+- No new i18n keys / no new useLLM state — everything already existed. Color
+  rules mirror deleted DevTools (git show 10e61b3^:src/components/dev/DevTools.vue).
+- Custom Templates row intentionally NOT restored — no template-customization
+  feature exists, flag would be meaningless.

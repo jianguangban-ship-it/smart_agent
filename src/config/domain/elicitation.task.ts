@@ -64,6 +64,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       hintZh: '编码前确定测试策略'
     }
   ],
+  'app-developer': [
+    {
+      questionEn: 'Which control algorithm/module is affected? (braking, steering, suspension, motion observer)',
+      questionZh: '涉及哪个控制算法/模块？（制动、转向、悬架、运动观测器）',
+      hintEn: 'Scopes the algorithm change',
+      hintZh: '界定算法变更范围'
+    },
+    {
+      questionEn: 'What is the validation approach? (MIL/SIL/HIL/bench/vehicle)',
+      questionZh: '验证方案是什么？（MIL/SIL/HIL/台架/实车）',
+      hintEn: 'Algorithm test strategy',
+      hintZh: '算法测试策略'
+    }
+  ],
   'hw-designer': [
     {
       questionEn: 'Which component or board is affected?',
@@ -104,6 +118,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       questionZh: '需要什么测试环境？（HIL/SIL/台架/实车）',
       hintEn: 'Resource planning',
       hintZh: '资源规划'
+    }
+  ],
+  'devops-engineer': [
+    {
+      questionEn: 'Which pipeline stages or build/release jobs are affected?',
+      questionZh: '涉及哪些流水线阶段或构建/发布任务？',
+      hintEn: 'Scopes the CI/CD change',
+      hintZh: '界定 CI/CD 变更范围'
+    },
+    {
+      questionEn: 'What is the rollback / failure-recovery strategy?',
+      questionZh: '回滚/失败恢复策略是什么？',
+      hintEn: 'Operational safety before deployment',
+      hintZh: '部署前的运维安全保障'
     }
   ]
 }

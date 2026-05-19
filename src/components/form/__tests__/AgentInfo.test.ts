@@ -13,13 +13,32 @@ beforeAll(() => {
 import AgentInfo from '../AgentInfo.vue'
 
 describe('AgentInfo — slim agent strip', () => {
-  it('renders Model / Active Role / Active Skill and no JIRA rows without a response', () => {
+  it('renders the telemetry grid (8 base rows) and no JIRA rows without a response', () => {
     const wrapper = mount(AgentInfo)
-    // Model / Role / Skill = the 3 base rows
-    expect(wrapper.findAll('.config-row').length).toBe(3)
+    // Model, Coach streaming, Role, Analyze streaming, Skill,
+    // Coach error/cancel, Analyze prompt, Analyze error/cancel = 8 grid rows.
+    // Backoff row is hidden (secs default 0); JIRA block absent.
+    expect(wrapper.findAll('.agent-grid .config-row').length).toBe(8)
     expect(wrapper.find('.config-url').exists()).toBe(true) // model value
+    expect(wrapper.find('.backoff-row').exists()).toBe(false)
     expect(wrapper.find('.jira-key-link').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('AI Points')
+  })
+
+  it('reflects per-channel telemetry props (streaming + speed, cancel, backoff)', () => {
+    const wrapper = mount(AgentInfo, {
+      props: {
+        isTaskCoachLoading: true,
+        taskCoachStreamSpeed: 107,
+        analyzeWasCancelled: true,
+        taskCoachBackoffSecs: 7,
+      },
+    })
+    const text = wrapper.text()
+    expect(text).toContain('107')          // tok/s speed badge while streaming
+    expect(wrapper.find('.speed').exists()).toBe(true)
+    expect(wrapper.find('.backoff-row').exists()).toBe(true) // 429 countdown visible
+    expect(text).toContain('7s')
   })
 
   it('renders the JIRA key link / points / view link when a response is present', () => {

@@ -100,6 +100,11 @@ export function useForm() {
       vehicle: 6, product: 6, layer: 6, component: 8, detail: 12,
       descriptionPresent: 12, descriptionLength: 20
     },
+    'app-developer': {
+      projectKey: 8, issueType: 8, assignee: 8, estimatedPoints: 6,
+      vehicle: 6, product: 6, layer: 6, component: 8, detail: 12,
+      descriptionPresent: 12, descriptionLength: 20
+    },
     'hw-designer': {
       projectKey: 6, issueType: 6, assignee: 6, estimatedPoints: 4,
       vehicle: 8, product: 8, layer: 8, component: 10, detail: 10,
@@ -114,6 +119,11 @@ export function useForm() {
       projectKey: 6, issueType: 6, assignee: 4, estimatedPoints: 2,
       vehicle: 6, product: 6, layer: 6, component: 6, detail: 8,
       descriptionPresent: 16, descriptionLength: 34
+    },
+    'devops-engineer': {
+      projectKey: 8, issueType: 8, assignee: 6, estimatedPoints: 4,
+      vehicle: 4, product: 4, layer: 6, component: 8, detail: 12,
+      descriptionPresent: 14, descriptionLength: 26
     }
   }
 
@@ -168,12 +178,12 @@ export function useForm() {
   // Auto-set role so the correct skill, context, and weights activate immediately.
   const LAYER_ROLE_MAP: Record<string, UserRole> = {
     SYS:  'system-architect',
-    SW:   'sw-developer',
-    APP:  'sw-developer',
-    SWF:  'sw-developer',
-    HW:   'hw-designer',
-    ME:   'me-designer',
-    TEST: 'vv-engineer',
+    SW:     'sw-developer',
+    APP:    'app-developer',
+    HW:     'hw-designer',
+    ME:     'me-designer',
+    VV:     'vv-engineer',
+    Devops: 'devops-engineer',
   }
 
   watch(() => summary.layer, (layer) => {

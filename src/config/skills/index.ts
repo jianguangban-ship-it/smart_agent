@@ -16,10 +16,10 @@ import taskSkillHwEn from './coach-skill-task-hw-en.md?raw'
 import taskSkillHwZh from './coach-skill-task-hw-zh.md?raw'
 import taskSkillMeEn from './coach-skill-task-me-en.md?raw'
 import taskSkillMeZh from './coach-skill-task-me-zh.md?raw'
-import taskSkillTestEn from './coach-skill-task-test-en.md?raw'
-import taskSkillTestZh from './coach-skill-task-test-zh.md?raw'
-import taskSkillSwfEn from './coach-skill-task-swf-en.md?raw'
-import taskSkillSwfZh from './coach-skill-task-swf-zh.md?raw'
+import taskSkillVVEn from './coach-skill-task-vv-en.md?raw'
+import taskSkillVVZh from './coach-skill-task-vv-zh.md?raw'
+import taskSkillDevopsEn from './coach-skill-task-devops-en.md?raw'
+import taskSkillDevopsZh from './coach-skill-task-devops-zh.md?raw'
 
 const TASK_SKILL_MAP: Record<string, { en: string; zh: string }> = {
   SYS:  { en: taskSkillSysEn, zh: taskSkillSysZh },
@@ -27,14 +27,14 @@ const TASK_SKILL_MAP: Record<string, { en: string; zh: string }> = {
   APP:  { en: taskSkillAppEn, zh: taskSkillAppZh },
   HW:   { en: taskSkillHwEn, zh: taskSkillHwZh },
   ME:   { en: taskSkillMeEn, zh: taskSkillMeZh },
-  TEST: { en: taskSkillTestEn, zh: taskSkillTestZh },
-  SWF:  { en: taskSkillSwfEn, zh: taskSkillSwfZh },
+  VV:   { en: taskSkillVVEn, zh: taskSkillVVZh },
+  Devops:  { en: taskSkillDevopsEn, zh: taskSkillDevopsZh },
 }
 
 // ─── localStorage keys ──────────────────────────────────────────────────────
 const LS_KEY_COACH_SKILL_TASK = 'coach-skill-task'
-const LS_KEY_ANALYZE_SKILL = 'analyze-skill'
-const LS_KEY_RESPONSE_FORMAT = 'response-format'
+const LS_KEY_ANALYZE_SKILL    = 'analyze-skill'
+const LS_KEY_RESPONSE_FORMAT  = 'response-format'
 
 /** Reactive flags — true when a localStorage override is active */
 export const coachSkillTaskModified = ref(localStorage.getItem(LS_KEY_COACH_SKILL_TASK) !== null)

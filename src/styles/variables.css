@@ -36,9 +36,9 @@
   --bg-secondary: #2F2E2B;     /* panels, cards — warm elevated (Claude bg-000) */
   --bg-tertiary: #3A3935;      /* inputs, dropdowns, nested surfaces */
   --border-color: #4A4740;     /* warm border — low-contrast separator */
-  --text-primary: #FDFAF2;     /* warm white (Claude text-000) */
+  --text-primary: #f0eeeb;     /* warm white (Claude text-000) */
   --text-secondary: #BEB9B0;   /* warm light gray (Claude text-200) */
-  --text-muted: #918D85;       /* warm muted (Claude text-400 adjusted) */
+  --text-muted: #a5a19a;       /* warm muted (Claude text-400 adjusted) */
   --accent-green: #5DBB30;     /* warm yellow-green (Claude success-000) */
   --accent-blue: #6BAAE0;      /* soft blue (Claude accent-000) */
   --accent-red: #D94848;       /* warm red (Claude danger-100) */
@@ -79,7 +79,7 @@
   --border-color: #D6D2C9;     /* warm border */
   --text-primary: #1A1A17;     /* warm near-black */
   --text-secondary: #4A4840;   /* warm dark gray */
-  --text-muted: #8F8C83;       /* warm muted */
+  --text-muted: #646463;       /* warm muted */
   --accent-green: #2D8A4E;
   --accent-blue: #2B6CB0;
   --accent-red: #C53030;
