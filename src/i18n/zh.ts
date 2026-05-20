@@ -263,6 +263,7 @@ export default {
     title: '工单历史',
     empty: '暂无已创建的工单',
     clear: '清空',
+    removeEntry: '从历史中移除',
     ticketKey: '工单',
     justNow: '刚刚',
     minsAgo: '分钟前',

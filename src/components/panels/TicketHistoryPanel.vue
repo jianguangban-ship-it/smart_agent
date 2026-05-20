@@ -2,7 +2,13 @@
   <div class="history-panel">
     <details :open="!!lastCreatedKey || isCreating">
       <summary class="history-summary">
-        <span class="summary-title">{{ ICONS.ticketHistory }} {{ t('history.title') }}</span>
+        <span class="summary-title">
+          <!-- Disclosure chevron — rotates 90° when <details> is open. -->
+          <svg class="summary-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="9 6 15 12 9 18" />
+          </svg>
+          {{ ICONS.ticketHistory }} {{ t('history.title') }}
+        </span>
         <span class="summary-right">
           <Transition name="badge-fade" mode="out-in">
             <span v-if="isCreating && !lastCreatedKey" key="creating" class="creating-badge">
@@ -44,9 +50,15 @@
               rel="noopener noreferrer"
             >{{ entry.key }}</a>
             <span class="entry-summary">{{ entry.summary }}</span>
+            <button
+              class="entry-remove"
+              @click.prevent="removeTicket(entry.key, entry.date)"
+              :title="t('history.removeEntry')"
+              :aria-label="t('history.removeEntry')"
+            >×</button>
             <div class="entry-meta">
-              <span class="entry-badge">{{ entry.project }}</span>
-              <span class="entry-badge">{{ entry.issueType }}</span>
+              <span class="entry-badge entry-badge--project">{{ entry.project }}</span>
+              <span class="entry-badge entry-badge--type">{{ entry.issueType }}</span>
               <span class="entry-date">{{ relativeDate(entry.date) }}</span>
             </div>
           </div>
@@ -57,8 +69,9 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from '@/i18n'
-import { ticketHistory, clearHistory } from '@/composables/useTicketHistory'
+import { ticketHistory, clearHistory, removeTicket } from '@/composables/useTicketHistory'
 import { ICONS } from '@/config/icons'
 
 defineProps<{
@@ -68,8 +81,20 @@ defineProps<{
 
 const { t } = useI18n()
 
+// Tick `now` once per minute so relative dates ("3m ago" → "4m ago" → "1h
+// ago") update without requiring an unrelated re-render. Referencing
+// `now.value` inside relativeDate registers the dependency on the template.
+const now = ref(Date.now())
+let tickId: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  tickId = setInterval(() => { now.value = Date.now() }, 60_000)
+})
+onBeforeUnmount(() => {
+  if (tickId !== null) clearInterval(tickId)
+})
+
 function relativeDate(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
+  const diff = now.value - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return t('history.justNow')
   if (mins < 60) return `${mins}${t('history.minsAgo')}`
@@ -99,7 +124,20 @@ function relativeDate(iso: string): string {
   font-size: 12px;
 }
 .history-summary::-webkit-details-marker { display: none; }
-.summary-title { flex: 1; }
+.summary-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+.summary-chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+details[open] > .history-summary .summary-chevron { transform: rotate(90deg); }
 
 .summary-right {
   display: flex;
@@ -194,7 +232,7 @@ function relativeDate(iso: string): string {
 
 .entry-row {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   grid-template-rows: auto auto;
   gap: 2px 8px;
   padding: 6px 8px;
@@ -217,6 +255,7 @@ function relativeDate(iso: string): string {
   grid-column: 1;
   white-space: nowrap;
   text-decoration: none;
+  align-self: center;
 }
 .entry-key:hover {
   text-decoration: underline;
@@ -227,7 +266,42 @@ function relativeDate(iso: string): string {
   color: var(--text-primary);
   grid-row: 1;
   grid-column: 2;
+  /* Clamp long JIRA summaries to two lines so row height stays predictable. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   word-break: break-word;
+}
+
+/* Per-entry × — appears on row hover/focus to avoid visual clutter at rest. */
+.entry-remove {
+  grid-row: 1;
+  grid-column: 3;
+  align-self: start;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background-color 0.15s;
+}
+.entry-row:hover .entry-remove,
+.entry-remove:focus-visible {
+  opacity: 1;
+}
+.entry-remove:hover {
+  color: var(--accent-red);
+  background-color: color-mix(in srgb, var(--accent-red) 12%, transparent);
 }
 
 .entry-meta {
@@ -243,9 +317,18 @@ function relativeDate(iso: string): string {
   font-size: 10px;
   padding: 1px 5px;
   border-radius: var(--radius-sm);
+}
+/* Project = "where" → blue (matches entry-key). */
+.entry-badge--project {
   background-color: var(--blue-wash);
   color: var(--accent-blue);
   border: 1px solid var(--blue-subtle);
+}
+/* Issue type = "what kind" → purple, visually distinct from Project. */
+.entry-badge--type {
+  background-color: color-mix(in srgb, var(--accent-purple) 10%, transparent);
+  color: var(--accent-purple);
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 25%, transparent);
 }
 
 .entry-date {

@@ -1,6 +1,14 @@
 <template>
   <div class="agent-info">
-    <div class="agent-title">{{ ICONS.devAgent }} {{ t('dev.agentState') }}</div>
+    <details open>
+      <summary class="agent-summary">
+        <!-- Disclosure chevron — rotates 90° when <details> is open. Mirrors
+             the TicketHistoryPanel.vue collapse-expand UX (v10.122). -->
+        <svg class="summary-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="9 6 15 12 9 18" />
+        </svg>
+        {{ ICONS.devAgent }} {{ t('dev.agentState') }}
+      </summary>
 
     <!-- 2-column telemetry grid (row-major pairing: left, right, left, right…) -->
     <div class="agent-grid">
@@ -96,6 +104,7 @@
         </div>
       </div>
     </template>
+    </details>
   </div>
 </template>
 
@@ -171,7 +180,14 @@ const jiraViewUrl = computed(() => (parsedJira.value as Record<string, string>)?
   padding: var(--space-5);
   border-top: 1px solid var(--border-color);
 }
-.agent-title {
+/* Summary header — clickable, mirrors TicketHistoryPanel.vue:89–110 (v10.122). */
+.agent-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
   font-size: var(--font-sm);
   font-weight: 500;
   text-transform: uppercase;
@@ -179,6 +195,18 @@ const jiraViewUrl = computed(() => (parsedJira.value as Record<string, string>)?
   color: var(--text-muted);
   margin-bottom: var(--space-3);
 }
+.agent-summary::-webkit-details-marker { display: none; }
+.summary-chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+details[open] > .agent-summary .summary-chevron { transform: rotate(90deg); }
+/* When the panel is collapsed, drop the title's bottom margin so the
+   border-top of the next sibling sits flush against the summary. */
+details:not([open]) > .agent-summary { margin-bottom: 0; }
 .agent-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -6506,3 +6506,279 @@ asserting telemetry props (tok/s badge, cancel, backoff row). 4/4 pass.
 | `src/components/form/__tests__/AgentInfo.test.ts` | Updated row-count test + new telemetry test |
 | `src/components/layout/AppHeader.vue` | v10.120 → v10.121 |
 | `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.122
+
+**Ticket History panel — five UX polish improvements (from review).**
+
+1. **Live relative dates.** A local `now` ref ticks every 60s and is read
+   inside `relativeDate(iso)`, so "just now" / "Xm ago" / "Xh ago" / "Xd ago"
+   update without an unrelated re-render. Cleaned up in `onBeforeUnmount`.
+2. **Disclosure chevron.** Restored a visual affordance for the `<details>`:
+   an inline SVG `polyline` chevron inside `.summary-title` that rotates 90°
+   via `details[open] > .history-summary .summary-chevron { transform:
+   rotate(90deg) }`. 0.18s ease.
+3. **Summary line-clamp.** `.entry-summary` now uses `-webkit-line-clamp: 2`
+   (with `display: -webkit-box`, `-webkit-box-orient: vertical`, `overflow:
+   hidden`) so long JIRA summaries no longer blow up row height.
+4. **Per-entry × button.** New `removeTicket(key, date)` exported from
+   `useTicketHistory.ts` (filters the active-mode storage). Button sits in a
+   new grid column (col 3, row 1), idle `opacity: 0`, revealed on row hover
+   or keyboard focus; hover state in `--accent-red`. `aria-label` +
+   `title` use the new `history.removeEntry` i18n key (EN/ZH).
+5. **Differentiated badges.** `.entry-badge` split into
+   `.entry-badge--project` (blue, matches `.entry-key`) and
+   `.entry-badge--type` (purple via `color-mix(... var(--accent-purple) ...)`
+   to mirror the existing created/creating badge pattern). Project = where,
+   Type = what kind — now visually distinct at a glance.
+
+**No new state, no logic risk.** Composable change is additive
+(`removeTicket` alongside existing `clearHistory`). The `<details>`
+auto-open behavior, "Creating…/Created" transitions, `entry-new` ring, and
+localStorage scheme are unchanged.
+
+**Verification.** `npm run build` clean. No dedicated TicketHistoryPanel
+test exists; other touched tests (none) unaffected.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/panels/TicketHistoryPanel.vue` | chevron, live-now ref, line-clamp, × button, badge split |
+| `src/composables/useTicketHistory.ts` | new `removeTicket(key, date)` export |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | new `history.removeEntry` key |
+| `src/components/layout/AppHeader.vue` | v10.121 → v10.122 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.123
+
+**AGENT STATE is now collapsible (mirrors v10.122 Ticket History chevron UX).**
+User asked the same collapse-expand affordance be applied to AGENT STATE.
+
+**Change.** `src/components/form/AgentInfo.vue` only:
+- Wrapped the panel body in `<details open><summary class="agent-summary">…
+  </summary>…</details>`. The `.agent-grid` and the optional JIRA block
+  are unchanged as `<details>` children.
+- Moved the title icon + `t('dev.agentState')` label into the `<summary>`,
+  prefixed by the same chevron SVG used in TicketHistoryPanel.vue:6–9.
+- Renamed `.agent-title` → `.agent-summary` and converted it to the
+  TicketHistoryPanel summary pattern (flex, cursor pointer, list-style:none,
+  hide `::-webkit-details-marker`). Kept the existing uppercase/letter-spacing
+  /muted-color treatment so the section still reads as a heading.
+- Added `.summary-chevron` (width/height 12px, muted color, 0.18s ease
+  transition) and the rotation rule:
+  `details[open] > .agent-summary .summary-chevron { transform: rotate(90deg) }`.
+- Drop the summary's bottom margin when the panel is collapsed
+  (`details:not([open]) > .agent-summary { margin-bottom: 0 }`) so nothing
+  visually "hangs" below the closed summary.
+
+**Default open**, no localStorage persistence, no reactive `:open` binding —
+user toggle persists across renders. Did NOT adopt TicketHistoryPanel's
+`!!lastCreatedKey || isCreating` force-open trigger: AGENT STATE has no
+clean "fresh result" analog (jiraResponse only appears in the create flow;
+streaming/error are continuous and would fight a user who collapsed the panel).
+
+**Verification.** `npm run build` clean; `AgentInfo.test.ts` 4/4 pass with
+**no test changes** (assertions hit children that remain rendered inside
+`<details>` regardless of open state).
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/AgentInfo.vue` | `<details><summary>` wrap + chevron SVG + summary CSS |
+| `src/components/layout/AppHeader.vue` | v10.122 → v10.123 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.124
+
+**Task-mode bottom action bar — UX overhaul (A–H from review).** Two
+screenshots showed: (a) idle bar with 4 icon-only buttons of mixed sizes
+that relied on tooltips for meaning, (b) streaming state with two reds
+doing the same job (composer Stop + right-column Cancel) plus an empty
+slot where Create lives. Eight changes in `TaskForm.vue`:
+
+A. **Removed the streaming-Cancel duplicate.** The left-most action-bar
+   button no longer icon-swaps to a pulsing red Cancel during streaming.
+   It stays as Reset and is disabled while `isSubmitting || isCoachLoading`.
+   The composer Stop button (CoachPanel) is now the sole cancel surface.
+   Dropped dead CSS: `.action-cancel`, `@keyframes cancelPulse`,
+   `<Transition name="icon-swap">` + `.icon-swap-*` rules.
+
+B. **44px row height across the bar** (`.action-btn { height: 44px }`),
+   matching the composer Send/Stop heights set in v10.118/v10.120. Left
+   composer row and right action bar now read as one horizontal band.
+   Dropped the prior `clamp(28px, …, 48px)` icon-button sizing.
+
+C. **Labels alongside icons.** Analyze, Create, and Export now show
+   their `t('form.aiAnalyze')` / `t('form.confirmCreate')` / "Export"
+   labels next to the icon. Reset stays icon-only via
+   `.action-btn--icon` (fixed 44×44, no padding), since its refresh
+   glyph is unambiguous.
+
+D. **Disabled vs dimmed visually distinct.**
+   - `:disabled` → `opacity: 0.4; filter: grayscale(0.55)` ("not available
+     yet").
+   - `.dimmed` → `opacity: 0.55; filter: none` ("already used, still
+     available"). Color is preserved.
+
+E. **Sparkles icon for Analyze.** Replaced the metaphorical flask with a
+   two-star sparkles SVG — reads as "AI" rather than "chemistry".
+
+F. **Reserved space for Create.** `v-if="hasAiResponse"` + `<Transition>`
+   replaced with `v-show="appMode === 'task'"` + `:class="{ 'invisible-slot':
+   !hasAiResponse }"`. The button is always in the layout; `.invisible-slot
+   { opacity: 0; pointer-events: none }` plus the existing `.action-btn`
+   opacity transition fade it in cleanly. No more layout jump when Create
+   arrives. `:disabled` extended to gate on `!hasAiResponse` so it stays
+   non-interactive in the placeholder state. Dropped the now-stale
+   `animation: fadeIn` on `.action-create`.
+
+G. **Export chevron.** Added `<svg class="action-chevron">` (the same
+   `polyline 9 6 15 12 9 18`-style glyph the rest of the app uses) plus
+   the "Export" label, signalling the button opens a menu rather than
+   firing an action.
+
+H. **Hotkey hints in tooltips** (existing global bindings — no rewiring):
+   `:title="t('form.aiAnalyze') + ' (Ctrl+Shift+Enter)'"` on Analyze and
+   `:title="t('form.confirmCreate') + ' (Ctrl+Shift+C)'"` on Create. The
+   shortcuts were already wired in `App.vue handleKeyboard()`; they
+   were just invisible to new users.
+
+**No i18n changes** (reused `form.aiAnalyze` / `form.confirmCreate`),
+**no useLLM/composable changes**, **no behavioral regressions** in
+existing handlers. The Send/Stop/Analyze/Create/Reset/Export wiring is
+identical.
+
+**Verification.** `npm run build` clean; `AgentInfo.test.ts` 4/4,
+`CoachPanel.composer.test.ts` 11/11 — 15/15.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/TaskForm.vue` | Action-bar template + CSS rewrite (A–H); dropped dead `.action-cancel` / `cancelPulse` / `.icon-swap-*` |
+| `src/components/layout/AppHeader.vue` | v10.123 → v10.124 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.125
+
+**Composer Send/Stop relocated to the action bar (left of Reset);
+composer textarea fills the freed width.** After v10.124 unified the
+action-bar buttons at 44px with labels, the user wanted all workflow
+buttons in one horizontal pipeline. Send + Stop now sit as one paired
+slot at the head of `.action-group-left`, immediately left of Reset.
+
+**Changes.**
+- `src/components/panels/CoachPanel.vue` — `#footer` template stripped
+  of the `.coach-composer` flex wrapper, `.coach-composer-input` editor
+  class, and the `<button class="coach-send">` / `<button class=
+  "coach-stop">` pair. `<DescriptionEditor variant="composer" …/>` now
+  renders directly as the footer content, claiming the full footer
+  width. The Enter-to-send path (`@submit="onComposerSubmit"` →
+  `$emit('coach')`) is unchanged, so plain-Enter sending still works.
+  CSS for `.coach-composer`, `.coach-composer-input`, `.coach-send`,
+  `.coach-send:disabled`, and `.coach-stop` removed.
+- `src/components/form/TaskForm.vue` — added a paired Send/Stop button
+  as the FIRST child of `.action-group-left`. Idle: orange `.action-coach`
+  with paper-plane icon + `t('coach.exploreSend')`, disabled when
+  `!canCoachSubmit`, tooltip surfaces the existing `Ctrl+Enter`
+  hotkey. Streaming: red `.action-stop` with square icon + `t('coach.
+  exploreStop')`, emits `cancelCoach`. Added `coach: []` to defineEmits
+  and a new `.action-stop` style alongside the existing `.action-coach`.
+- `src/App.vue` — added `@coach="handleCoachRequest"` on `<TaskForm>`.
+  `handleCoachRequest` already exists (it's what `<CoachPanel @coach>`
+  has always been wired to).
+- `src/components/panels/__tests__/CoachPanel.composer.test.ts` — the
+  two button-targeted tests (`'Send emits coach'`, `'shows Stop while
+  loading'`) were replaced by a single relocation-locking test
+  asserting neither `.coach-send` nor `.coach-stop` exists in CoachPanel
+  in either state. The `.coach-composer` selector (used in two tests for
+  existence-in-footer / hidden-in-other-modes) is updated to
+  `.description-editor--composer`, which is now the footer's only content.
+
+**No new i18n** (reused `coach.exploreSend` / `coach.exploreStop` /
+`coach.requestBtnTask`). No `useLLM` changes; the
+`handleCoachRequest` / `cancelTaskCoach` wiring is untouched.
+
+**Verification.** `npm run build` clean; `CoachPanel.composer.test.ts`
+10/10 + `AgentInfo.test.ts` 4/4 → **14/14 pass**.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/panels/CoachPanel.vue` | drop Send/Stop buttons + `.coach-composer` flex wrapper; editor fills footer |
+| `src/components/form/TaskForm.vue` | new Send/Stop slot at head of `.action-group-left`; `coach` emit; `.action-stop` style |
+| `src/App.vue` | `@coach="handleCoachRequest"` on `<TaskForm>` |
+| `src/components/panels/__tests__/CoachPanel.composer.test.ts` | relocation-locking test + selector update |
+| `src/components/layout/AppHeader.vue` | v10.124 → v10.125 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.126
+
+**Coach composer — word/sentence counter removed.** Per user request,
+the "X words · Y sentences" line under the pinned coach composer
+textarea is gone; the textarea now owns the entire panel footer slot
+visually.
+
+**Change.** `src/components/form/DescriptionEditor.vue` template
+(lines 21–52): wrapped the whole `<div class="desc-footer">` block in
+`v-if="variant !== 'composer'"`. The block contained the attach
+button (explore-only), attach-chip, the counter span, and the hidden
+file input — none of which are needed in the composer variant
+(composer is task-only; Explore uses `ExploreChat.vue`, not
+DescriptionEditor). The form variant (full Task description in the
+center column) keeps the counter unchanged.
+
+**No `min-height` bump** on the textarea. A chat-style composer's
+single-line resting state matches modern conventions (ChatGPT/Claude);
+bumping to absorb the ~17px the footer occupied would have made the
+empty composer look oversized. The panel footer is naturally ~17px
+shorter, giving the coach message list slightly more room. `autoGrow()`
+still grows the textarea up to `max-height: 200px` on typing.
+
+**No script / CSS changes.** `wordCount` and `sentenceCount` computeds
+stay lazy and still serve the form variant.
+
+**Verification.** `npm run build` clean; `CoachPanel.composer.test.ts`
+10/10 + `AgentInfo.test.ts` 4/4 + `BasicInfoSection.parentReq.test.ts`
+2/2 → **16/16 pass**.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/form/DescriptionEditor.vue` | `.desc-footer` wrapped in `v-if="variant !== 'composer'"` |
+| `src/components/layout/AppHeader.vue` | v10.125 → v10.126 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |
+
+## v10.127
+
+**Small gap below the AppHeader.** User asked for breathing room
+between the top bar and the two sub-UIs in Task mode, implemented as
+an adjustment to the header itself (~2px).
+
+**Change.** `src/components/layout/AppHeader.vue` — added
+`margin-bottom: 2px` to the existing `.app-header` rule. The `.app`
+parent is locked at 100vh with `overflow: hidden` and is a vertical
+flex; the added 2px is consumed from the free space that `.app-main`
+(`flex: 1`) would have taken, yielding a transparent 2px strip below
+the header's coloured background before the content begins.
+
+**Scope.** The gap applies app-wide (Task / Explore / View) since it
+lives on the header. At 2px it's barely perceptible in Explore (above
+`.explore-head`) and View (above `QualityGridPanel`), and is the
+deliberate breathing room above the column grid in Task. Task-only
+scoping is documented in the plan as a one-line alternative if needed.
+
+**Verification.** `npm run build` clean; `AgentInfo.test.ts` 4/4 +
+`CoachPanel.composer.test.ts` 10/10 + `AppHeader.replyChip.test.ts`
+3/3 → **17/17 pass**.
+
+### File matrix
+
+| File | Change |
+|------|--------|
+| `src/components/layout/AppHeader.vue` | `.app-header { margin-bottom: 2px }`; v10.126 → v10.127 |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note |

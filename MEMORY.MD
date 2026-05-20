@@ -418,3 +418,81 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   rules mirror deleted DevTools (git show 10e61b3^:src/components/dev/DevTools.vue).
 - Custom Templates row intentionally NOT restored — no template-customization
   feature exists, flag would be meaningless.
+
+## v10.122 — Ticket History panel UX polish
+- Relative dates in `TicketHistoryPanel.vue` are live: a 60s setInterval
+  ticks a local `now` ref read inside `relativeDate(iso)`, registering a
+  reactive dep that re-renders the rows. Interval cleared in
+  `onBeforeUnmount`.
+- `<details>` disclosure: chevron SVG inside `.summary-title` rotates 90°
+  via the `details[open]` attribute selector — no JS toggle needed.
+- Long summaries clamped to 2 lines (`-webkit-line-clamp: 2`).
+- `useTicketHistory.ts` exports `removeTicket(key, date)` (filters by the
+  same tuple used as v-for key). Per-entry × button uses opacity-on-hover
+  to stay visually quiet at rest.
+- Project vs Issue-Type badges differentiated by accent color (blue vs
+  purple via color-mix) so the two metadata chips no longer look identical.
+
+## v10.123 — AGENT STATE collapse-expand
+- `AgentInfo.vue` now uses `<details open>` + `<summary class="agent-summary">`
+  with the same chevron SVG pattern as `TicketHistoryPanel.vue` (v10.122):
+  pure-CSS rotation via `details[open] > .agent-summary .summary-chevron
+  { transform: rotate(90deg) }`. Native keyboard semantics (Enter/Space).
+- Default open; no localStorage persistence; no reactive `:open` (would fight
+  user collapse on every streaming tick). User toggle persists across renders.
+- AgentInfo.test.ts unchanged — its assertions target DOM nodes that remain
+  rendered as `<details>` children regardless of open/closed state.
+
+## v10.124 — Task action-bar UX overhaul
+- All `.action-btn`s are now 44px tall to match the composer Send/Stop
+  (v10.118/v10.120). Icon-only variants (Reset) use `.action-btn--icon`
+  (fixed 44×44). Label+icon variants get `gap: 6px` and horizontal padding.
+- **Reset no longer doubles as Cancel during streaming.** The composer Stop
+  is the sole cancel surface; Reset is disabled while
+  `isSubmitting || isCoachLoading`. `.action-cancel`, `cancelPulse`,
+  `.icon-swap-*` removed as dead code.
+- **`:disabled` vs `.dimmed` are now visually distinct**: disabled adds
+  `filter: grayscale(0.55)` (not available yet); dimmed preserves color at
+  0.55 opacity (already used, still available).
+- **Create reserves its slot**: rendered with `v-show="appMode === 'task'"`
+  and `.invisible-slot { opacity: 0; pointer-events: none }` until
+  `hasAiResponse`. No layout jump.
+- Hotkeys (Ctrl+Shift+Enter → Analyze, Ctrl+Shift+C → Create) were already
+  wired in `App.vue handleKeyboard()`; tooltips now surface them.
+
+## v10.125 — Composer Send/Stop relocated to TaskForm action bar
+- The pinned composer footer (CoachPanel.vue `#footer`) is now
+  `<DescriptionEditor variant="composer">` directly — no `.coach-composer`
+  flex wrapper, no buttons. The editor spans the full footer width.
+- Send/Stop pair lives at the head of TaskForm's `.action-group-left`,
+  immediately left of Reset. Idle = orange `.action-coach` (emits
+  `coach`); streaming = red `.action-stop` (emits `cancelCoach`). Same
+  44px height as the rest of the action bar (v10.124).
+- App.vue wires `<TaskForm @coach="handleCoachRequest">` parallel to the
+  existing `<CoachPanel @coach="handleCoachRequest">` — Enter-to-send
+  inside the textarea still emits from CoachPanel via `onComposerSubmit`.
+- Old `.coach-send`/`.coach-stop`/`.coach-composer`/`.coach-composer-input`
+  styles removed; the action bar's `.action-coach`/`.action-stop` are the
+  canonical button styles now.
+
+## v10.126 — Coach composer counter removed
+- `DescriptionEditor.vue` `.desc-footer` is now gated by
+  `v-if="variant !== 'composer'"`. The composer variant (pinned coach
+  footer in CoachPanel) renders the textarea only — no counter, no
+  attach button (was explore-only and Explore doesn't use this component
+  anyway). The form variant (Task description, center column) keeps
+  the counter unchanged.
+- Did NOT bump `.desc-textarea--composer min-height: 44px` — keeping a
+  modern chat-style single-line resting state. The freed ~17px goes
+  back to the coach messages area. Auto-grow `autoGrow()` still expands
+  up to `max-height: 200px` on typing.
+
+## v10.127 — Small gap under the AppHeader
+- `.app-header` now has `margin-bottom: 2px` (AppHeader.vue scoped
+  styles). The `.app` flex-column with locked 100vh + overflow hidden
+  absorbs the 2px from `.app-main`'s flex-grow share, yielding a
+  transparent strip below the header in all modes.
+- Implementation choice: gap encapsulated in the header component
+  (user preference) rather than per-mode `.app-main--*` padding. If
+  Task-only scoping is ever needed, use `.app--task-lock :deep(.app-
+  header) { margin-bottom: 2px }` in App.vue.

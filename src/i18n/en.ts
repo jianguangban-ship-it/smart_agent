@@ -263,6 +263,7 @@ export default {
     title: 'Ticket History',
     empty: 'No tickets created yet',
     clear: 'Clear',
+    removeEntry: 'Remove from history',
     ticketKey: 'Ticket',
     justNow: 'just now',
     minsAgo: 'm ago',

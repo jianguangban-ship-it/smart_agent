@@ -8,7 +8,7 @@
       </div>
       <h1 v-if="currentLang === 'en'" class="header-title"><span class="logo-a">A</span><span class="logo-g">G</span><span class="logo-ec">ec</span></h1>
       <h1 v-else class="header-title">{{ t('header.title') }}</h1>
-      <span class="header-version">v10.121</span>
+      <span class="header-version">v10.127</span>
     </div>
     <div class="header-right">
       <!-- Cross-mode "reply ready" chip: a background-mode stream finished -->
@@ -138,6 +138,10 @@ function openHelp() {
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
   padding: var(--space-3) var(--space-6);
+  /* v10.127: small transparent gap between the header and the content
+     below (column grid in Task, .explore-head in Explore, QualityGridPanel
+     in View). 2px is barely perceptible except where useful. */
+  margin-bottom: 2px;
   display: flex;
   align-items: center;
   justify-content: space-between;

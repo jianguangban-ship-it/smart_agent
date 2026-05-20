@@ -54,48 +54,44 @@ describe('CoachPanel — pinned Task composer', () => {
     // Composer pinned in PanelShell's footer (outside the scrollable body).
     const footer = wrapper.find('.panel-footer')
     expect(footer.exists()).toBe(true)
-    expect(footer.find('.coach-composer').exists()).toBe(true)
+    // v10.125: footer is the DescriptionEditor only (Send/Stop relocated).
+    expect(footer.find('.description-editor--composer').exists()).toBe(true)
     // Guide text + template chips still render in the body empty-state.
     expect(wrapper.find('.empty-state').exists()).toBe(true)
     expect(wrapper.find('.empty-hint').text().length).toBeGreaterThan(0)
     expect(wrapper.find('.chips').exists()).toBe(true)
   })
 
-  it('Send emits coach; is disabled when !canCoachSubmit', async () => {
-    const wrapper = mountPanel({ canCoachSubmit: true })
-    const send = wrapper.get('.coach-send')
-    await send.trigger('click')
-    expect(wrapper.emitted('coach')).toBeTruthy()
+  // v10.125: Send/Stop buttons moved to TaskForm's action bar; CoachPanel's
+  // footer is the DescriptionEditor only. Lock in the relocation: neither
+  // button class should exist inside CoachPanel anymore, in either state.
+  it('no Send/Stop buttons remain inside CoachPanel (relocated to action bar)', () => {
+    const idle = mountPanel({ canCoachSubmit: true })
+    expect(idle.find('.coach-send').exists()).toBe(false)
+    expect(idle.find('.coach-stop').exists()).toBe(false)
 
-    const disabled = mountPanel({ canCoachSubmit: false })
-    expect((disabled.get('.coach-send').element as HTMLButtonElement).disabled).toBe(true)
-  })
-
-  it('shows Stop (not Send) while loading and emits cancel', async () => {
-    // Provide a streaming message so the typing-row avatar <img> isn't rendered
-    // (it's irrelevant here and trips jsdom's resource loader).
     const streaming: ChatMessage[] = [
       { id: 'u1', role: 'user', content: 'hi', timestamp: 1 },
       { id: 'a1', role: 'assistant', content: 'partial answer', timestamp: 2 },
     ]
-    const wrapper = mountPanel({ isLoading: true, messages: streaming })
-    expect(wrapper.find('.coach-send').exists()).toBe(false)
-    await wrapper.get('.coach-stop').trigger('click')
-    expect(wrapper.emitted('cancel')).toBeTruthy()
+    const loading = mountPanel({ isLoading: true, messages: streaming })
+    expect(loading.find('.coach-send').exists()).toBe(false)
+    expect(loading.find('.coach-stop').exists()).toBe(false)
   })
 
   it('composer is Task + chat-tab only (hidden in Explore mode and on History tab)', async () => {
     const wrapper = mountPanel()
-    expect(wrapper.find('.coach-composer').exists()).toBe(true)
+    // The DescriptionEditor (composer variant) IS the footer now.
+    expect(wrapper.find('.description-editor--composer').exists()).toBe(true)
 
     // Switch to History tab (task order: Chat | Analysis | History) → composer hidden.
     await wrapper.findAll('.coach-tab')[2].trigger('click')
-    expect(wrapper.find('.coach-composer').exists()).toBe(false)
+    expect(wrapper.find('.description-editor--composer').exists()).toBe(false)
 
     // Explore mode → no Task composer at all.
     appMode.value = 'explore'
     const explore = mountPanel()
-    expect(explore.find('.coach-composer').exists()).toBe(false)
+    expect(explore.find('.description-editor--composer').exists()).toBe(false)
   })
 })
 

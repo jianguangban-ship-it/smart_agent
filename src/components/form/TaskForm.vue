@@ -73,29 +73,55 @@
       <!-- Action Buttons (pinned at the bottom of the center column) -->
       <div class="form-actions">
         <div class="action-group-left">
+        <!-- Send / Stop — relocated from CoachPanel (v10.125). One slot,
+             two states: idle = orange Send (emits coach), streaming =
+             red Stop (emits cancelCoach). This is now the sole cancel
+             surface during streaming. -->
         <button
-          class="action-btn"
-          :class="isCoachLoading ? 'action-cancel' : 'action-reset'"
-          :disabled="isSubmitting && !isCoachLoading"
-          :title="isCoachLoading ? t('settings.cancel') : t('form.reset')"
-          @click="isCoachLoading ? $emit('cancelCoach') : $emit('reset')"
+          v-if="!isCoachLoading"
+          class="action-btn action-coach"
+          :disabled="!canCoachSubmit"
+          :title="t('coach.requestBtnTask') + ' (Ctrl+Enter)'"
+          @click="$emit('coach')"
         >
-          <Transition name="icon-swap" mode="out-in">
-            <!-- Cancel icon (stop square) when coach is streaming -->
-            <svg v-if="isCoachLoading" key="cancel" class="action-icon" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-            </svg>
-            <!-- Reset icon (circular arrow) when idle -->
-            <svg v-else key="reset" class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-          </Transition>
+          <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+          <span class="action-label">{{ t('coach.exploreSend') }}</span>
         </button>
-        <!-- Export dropdown -->
+        <button
+          v-else
+          class="action-btn action-stop"
+          :title="t('coach.exploreStop')"
+          @click="$emit('cancelCoach')"
+        >
+          <svg class="action-icon" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+          <span class="action-label">{{ t('coach.exploreStop') }}</span>
+        </button>
+        <!-- Reset — icon-only. Stays as Reset (disabled while streaming);
+             the Send/Stop button above is the sole cancel surface (v10.125). -->
+        <button
+          class="action-btn action-btn--icon action-reset"
+          :disabled="isSubmitting || isCoachLoading"
+          :title="t('form.reset')"
+          @click="$emit('reset')"
+        >
+          <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </button>
+        <!-- Export dropdown — label + chevron flag this as a menu. -->
         <div class="export-dropdown" v-if="canSubmit" ref="exportDropdownRef">
           <button class="action-btn action-export" @click="showExportMenu = !showExportMenu" :title="isZh ? '导出' : 'Export'">
             <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <span class="action-label">{{ isZh ? '导出' : 'Export' }}</span>
+            <svg class="action-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
           <Transition name="fade">
@@ -116,41 +142,48 @@
         <div class="action-group">
           <!-- Coach trigger moved to the pinned composer Send button in
                CoachPanel; this column keeps Analyze/Create/Reset/Export. -->
-          <!-- Analyze / Decompose (hidden in free-chat mode) -->
+          <!-- Analyze / Decompose (hidden in free-chat mode). Sparkles icon
+               reads as "AI" better than the previous flask. Hotkey hint
+               surfaces the existing Ctrl+Shift+Enter binding. -->
           <button
             v-show="appMode !== 'explore'"
             class="action-btn action-analyze"
             :class="{ dimmed: hasAiResponse }"
             :disabled="!canCoachSubmit || isSubmitting || isCoachLoading || (appMode === 'task' && !hasCoachResponse)"
-            :title="t('form.aiAnalyze')"
+            :title="t('form.aiAnalyze') + ' (Ctrl+Shift+Enter)'"
             @click="$emit('analyze')"
           >
             <svg v-if="isSubmitting && currentAction === 'analyze'" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
               <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
               <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
             </svg>
-            <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+            <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <!-- Sparkles: a big four-point star + a small one -->
+              <path d="M12 3 L13.6 8.4 L19 10 L13.6 11.6 L12 17 L10.4 11.6 L5 10 L10.4 8.4 Z" />
+              <path d="M18 16 L18.7 18.3 L21 19 L18.7 19.7 L18 22 L17.3 19.7 L15 19 L17.3 18.3 Z" />
             </svg>
+            <span class="action-label">{{ t('form.aiAnalyze') }}</span>
           </button>
-          <!-- Create JIRA — appears after analyze response -->
-          <Transition name="fade">
-            <button
-              v-if="appMode === 'task' && hasAiResponse"
-              class="action-btn action-create"
-              :disabled="isSubmitting || isCoachLoading || !canCoachSubmit"
-              :title="t('form.confirmCreate')"
-              @click="$emit('create')"
-            >
-              <svg v-if="isSubmitting && currentAction === 'create'" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
-                <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
-                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
-              </svg>
-              <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-              </svg>
-            </button>
-          </Transition>
+          <!-- Create JIRA — always rendered (in Task mode) and held in a
+               reserved slot via `.invisible-slot`; it fades in once an
+               analyze response exists, so the action bar never jumps. -->
+          <button
+            v-show="appMode === 'task'"
+            class="action-btn action-create"
+            :class="{ 'invisible-slot': !hasAiResponse }"
+            :disabled="!hasAiResponse || isSubmitting || isCoachLoading || !canCoachSubmit"
+            :title="t('form.confirmCreate') + ' (Ctrl+Shift+C)'"
+            @click="$emit('create')"
+          >
+            <svg v-if="isSubmitting && currentAction === 'create'" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
+              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+            </svg>
+            <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span class="action-label">{{ t('form.confirmCreate') }}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -206,6 +239,7 @@ defineProps<{
 }>()
 
 defineEmits<{
+  coach: []
   analyze: []
   create: []
   reset: []
@@ -307,25 +341,56 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 }
 
 /* Icon-only action buttons */
+/* All action buttons share the composer's 44px row height (matches the
+   .coach-send/.explore-send heights set in v10.118/v10.120) so the left
+   and right columns read as one horizontal band. Labels sit beside the
+   icon; icon-only variants use .action-btn--icon (fixed square). */
 .action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: clamp(28px, calc(4.28px + 1.651vw), 48px);
-  height: clamp(28px, calc(4.28px + 1.651vw), 48px);
+  gap: 6px;
+  height: 44px;
+  padding: 0 var(--space-4);
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.165, 0.85, 0.45, 1);
+  transition: opacity 0.2s ease, filter 0.2s ease, background-color 0.15s, box-shadow 0.15s;
   position: relative;
+  white-space: nowrap;
 }
+.action-btn--icon {
+  width: 44px;
+  padding: 0;
+}
+/* Disabled = "not available yet" → desaturate + fade (clearly different
+   from .dimmed below, which means "already used, still available"). */
 .action-btn:disabled {
   opacity: 0.4;
+  filter: grayscale(0.55);
   cursor: not-allowed;
 }
 .action-icon {
   width: var(--icon-sm);
   height: var(--icon-sm);
+  flex-shrink: 0;
+}
+.action-label {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: inherit;
+}
+.action-chevron {
+  width: 10px;
+  height: 10px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+/* Reserved-space placeholder — keeps the slot in layout so the bar never
+   jumps when Create fades in. */
+.invisible-slot {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Reset — red */
@@ -337,12 +402,21 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   filter: brightness(1.15);
 }
 
-/* Writing Guidance — yellow/orange */
+/* Send / Writing Guidance — orange */
 .action-coach {
   background-color: var(--accent-orange);
   color: white;
 }
 .action-coach:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+/* Stop — red, paired state of the Send slot during coach streaming. */
+.action-stop {
+  background-color: var(--accent-red);
+  color: white;
+}
+.action-stop:hover:not(:disabled) {
   filter: brightness(1.15);
 }
 
@@ -354,8 +428,10 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 .action-analyze:hover:not(:disabled) {
   filter: brightness(1.15);
 }
+/* "Already used, still available" — keep color, just fade. Color preserved
+   so it visually differs from :disabled (which adds grayscale). */
 .action-analyze.dimmed {
-  opacity: 0.65;
+  opacity: 0.55;
 }
 
 /* Deep Review — purple */
@@ -370,44 +446,19 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   opacity: 0.65;
 }
 
-/* Create JIRA — green */
+/* Create JIRA — green. Opacity is transitioned via .invisible-slot for the
+   reserved-space fade-in (no entrance animation here, no layout jump). */
 .action-create {
   background-color: var(--accent-green);
   color: white;
-  animation: fadeIn 0.3s ease-out;
 }
 .action-create:hover:not(:disabled) {
   filter: brightness(1.15);
 }
 
-/* Cancel (coach streaming) — pulsing red */
-.action-cancel {
-  background-color: var(--accent-red);
-  color: white;
-  animation: cancelPulse 1.5s ease-in-out infinite;
-}
-.action-cancel:hover:not(:disabled) {
-  filter: brightness(1.15);
-  animation: none;
-}
-@keyframes cancelPulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--red-border); }
-  50% { box-shadow: 0 0 0 4px transparent; }
-}
-
-/* Icon swap transition */
-.icon-swap-enter-active,
-.icon-swap-leave-active {
-  transition: all 0.15s ease;
-}
-.icon-swap-enter-from {
-  opacity: 0;
-  transform: scale(0.6) rotate(-90deg);
-}
-.icon-swap-leave-to {
-  opacity: 0;
-  transform: scale(0.6) rotate(90deg);
-}
+/* v10.124: removed .action-cancel + cancelPulse + .icon-swap-* — the
+   composer Stop button is now the sole cancel surface during streaming,
+   so the right-column Reset stays as Reset (disabled while streaming). */
 
 /* Disabled overrides for colored buttons */
 /* Action group left */

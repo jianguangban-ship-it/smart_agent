@@ -50,3 +50,13 @@ export function clearHistory(): void {
   localStorage.removeItem(lsKey(mode))
   ticketHistory.value = []
 }
+
+/** Remove a single entry (matched by `key` + `date`, the same tuple used as the
+ *  v-for key in TicketHistoryPanel) from the active-mode history. */
+export function removeTicket(key: string, date: string): void {
+  const mode = appMode.value === 'task' ? 'task' : 'design'
+  const lsK = lsKey(mode)
+  const list = loadFromStorage(lsK).filter(e => !(e.key === key && e.date === date))
+  localStorage.setItem(lsK, JSON.stringify(list))
+  ticketHistory.value = list
+}

@@ -18,7 +18,12 @@
       @blur="emit('blur')"
       @keydown="onKeydown"
     ></textarea>
-    <div class="desc-footer">
+    <!-- v10.126: the desc-footer (attach button, attach chip, word/sentence
+         counter, hidden file input) is intentionally hidden in the composer
+         variant — the pinned coach composer is a chat-style input and the
+         counter added visual noise without earning its keep. Form variant
+         (Task description in the center column) keeps the counter. -->
+    <div v-if="variant !== 'composer'" class="desc-footer">
       <div class="desc-footer-left">
         <button
           v-if="appMode === 'explore'"

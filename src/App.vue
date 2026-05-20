@@ -143,6 +143,7 @@
             :analyze-had-error="analyzeHadError"
             :analyze-was-cancelled="analyzeWasCancelled"
             :analyze-backoff-secs="analyzeBackoffSecs"
+            @coach="handleCoachRequest"
             @analyze="handleAnalyze"
             @create="handleCreateClick"
             @reset="handleReset"

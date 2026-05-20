@@ -189,36 +189,17 @@
 
     <!-- Pinned composer (Task mode, chat tab) — rendered in PanelShell's footer
          slot, OUTSIDE the scrollable .panel-body, so it never moves while coach
-         messages scroll and the smart autoscroll is unaffected. -->
+         messages scroll and the smart autoscroll is unaffected.
+         v10.125: Send/Stop button moved to TaskForm's action bar; the
+         DescriptionEditor now spans the full footer width. -->
     <template v-if="appMode === 'task' && activeTab === 'chat'" #footer>
-      <div class="coach-composer">
-        <DescriptionEditor
-          class="coach-composer-input"
-          variant="composer"
-          v-model="descriptionModel"
-          @focus="$emit('descFocus')"
-          @blur="$emit('descBlur')"
-          @submit="onComposerSubmit"
-        />
-        <button
-          v-if="isLoading"
-          type="button"
-          class="coach-stop"
-          @click="$emit('cancel')"
-        >
-          {{ t('coach.exploreStop') }}
-        </button>
-        <button
-          v-else
-          type="button"
-          class="coach-send"
-          :disabled="!canCoachSubmit"
-          :title="t('coach.requestBtnTask')"
-          @click="$emit('coach')"
-        >
-          {{ t('coach.exploreSend') }}
-        </button>
-      </div>
+      <DescriptionEditor
+        variant="composer"
+        v-model="descriptionModel"
+        @focus="$emit('descFocus')"
+        @blur="$emit('descBlur')"
+        @submit="onComposerSubmit"
+      />
     </template>
   </PanelShell>
 </template>
@@ -875,44 +856,7 @@ const chips = computed(() =>
   transform: translateY(-4px);
 }
 
-/* Pinned Task composer (lives in .panel-footer, which already supplies the
-   padding + top border) — mirrors Explore's .explore-composer. */
-.coach-composer {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-}
-.coach-composer-input {
-  flex: 1;
-  min-width: 0;
-}
-.coach-send,
-.coach-stop {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* Match the composer textarea's single-line height
-     (.desc-textarea--composer min-height: 44px in DescriptionEditor.vue) so
-     the button forms one aligned row with the input; combined with the
-     parent's align-items: flex-start the tops line up. */
-  height: 54px;
-  padding: 0 var(--space-4);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--font-base);
-  font-weight: 600;
-  color: white;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.coach-send {
-  background: var(--accent-orange);
-}
-.coach-send:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.coach-stop {
-  background: var(--accent-red);
-}
+/* v10.125: removed `.coach-composer`, `.coach-composer-input`,
+   `.coach-send`, `.coach-stop` — Send/Stop relocated to TaskForm's
+   action bar; the DescriptionEditor now spans the full panel footer. */
 </style>
