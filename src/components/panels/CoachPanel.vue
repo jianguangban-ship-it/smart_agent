@@ -199,9 +199,20 @@
         @focus="$emit('descFocus')"
         @blur="$emit('descBlur')"
         @submit="onComposerSubmit"
+        @expand="isPopoutOpen = true"
       />
     </template>
   </PanelShell>
+
+  <!-- Floating draggable popout — teleports to <body> so it's not clipped by
+       the panel column. Shares descriptionModel with the inline composer so
+       edits stay in sync; closing leaves the text intact in the inline one. -->
+  <ComposerPopout
+    v-if="appMode === 'task'"
+    v-model="descriptionModel"
+    v-model:open="isPopoutOpen"
+    @submit="onComposerSubmit"
+  />
 </template>
 
 <script setup lang="ts">
@@ -211,6 +222,7 @@ import { useScroll } from '@vueuse/core'
 import { useI18n } from '@/i18n'
 import { roleFilteredTemplates } from '@/config/templates/index'
 import { useToast } from '@/composables/useToast'
+import { copyText } from '@/utils/clipboard'
 import { activeSkill, ignoredSkillId } from '@/composables/useLLM'
 import { appMode } from '@/composables/useAppMode'
 import { currentModel } from '@/config/llm'
@@ -220,6 +232,7 @@ import QuickChip from '@/components/shared/QuickChip.vue'
 import ChatBubble from '@/components/chat/ChatBubble.vue'
 import CoachHistoryTab from '@/components/coach/CoachHistoryTab.vue'
 import DescriptionEditor from '@/components/form/DescriptionEditor.vue'
+import ComposerPopout from '@/components/form/ComposerPopout.vue'
 import { isNearCap, recordCount } from '@/composables/useCoachHistory'
 import { ICONS } from '@/config/icons'
 
@@ -238,6 +251,9 @@ const props = defineProps<{
 // Task-mode "TASK DESCRIPTION" composer (pinned in the panel footer). Bound to
 // App's form.description — the single source of truth for Coach/Analyze/Create.
 const descriptionModel = defineModel<string>('description', { default: '' })
+
+// v10.129: floating draggable popout window for long-prompt editing.
+const isPopoutOpen = ref(false)
 
 const emit = defineEmits<{
   cancel: []
@@ -383,12 +399,12 @@ watch(
 )
 
 // Copy last assistant response
-function copyLastResponse() {
+async function copyLastResponse() {
   const assistantMsgs = props.messages.filter(m => m.role === 'assistant' && m.content)
   const last = assistantMsgs[assistantMsgs.length - 1]
   if (!last) return
-  navigator.clipboard.writeText(last.content)
-  addToast('success', t('toast.copied'), 2000)
+  const ok = await copyText(last.content)
+  addToast(ok ? 'success' : 'error', t(ok ? 'toast.copied' : 'toast.copyFailed'), 2000)
 }
 
 const chips = computed(() =>

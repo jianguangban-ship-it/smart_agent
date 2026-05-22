@@ -168,6 +168,13 @@ export default {
     explorePlaceholder: 'Ask anything…  (Enter to send, Shift+Enter for newline)',
     exploreSend: 'Send',
     exploreStop: 'Stop',
+    composerExpand: 'Expand composer',
+    composerClose: 'Close composer',
+    composerMaximize: 'Maximize',
+    composerRestore: 'Restore',
+    composerTitle: 'Coach prompt',
+    composerTitleExplore: 'Explore prompt',
+    composerSend: 'Send',
     loadFile: 'Load file (.md, .html, .json)',
     loadFileLabel: 'File',
     exploreNewChat: 'New chat',
@@ -246,6 +253,7 @@ export default {
     draftRestored: 'Draft restored from previous session',
     draftCleared: 'Form reset and draft cleared',
     copied: 'Copied to clipboard',
+    copyFailed: 'Copy failed — please select and copy manually',
     downloaded: 'File downloaded',
     templatesImported: 'templates imported',
     invalidDropFile: 'Please drop a valid .json file',
@@ -255,7 +263,7 @@ export default {
     noDuplicateTemplates: 'No new templates to import (duplicates skipped)'
   },
   shortcuts: {
-    coach: 'Ctrl+Enter',
+    coach: 'Enter',
     analyze: 'Ctrl+Shift+Enter',
     create: 'Ctrl+Shift+C'
   },

@@ -8,7 +8,10 @@
 FROM node:20-bookworm-slim AS spa-builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci
+# Skip native module builds - SPA doesn't need better-sqlite3 (only server uses it)
+# Use GWM internal nexus registry
+RUN npm config set registry http://nexus.gwm.cn/repository/npm-group/ \
+    && npm ci --ignore-scripts
 COPY tsconfig.json vite.config.ts index.html env.d.ts ./
 COPY src/ ./src/
 COPY public/ ./public/
@@ -19,13 +22,18 @@ FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 
 # better-sqlite3 needs build tools at install time; remove afterwards to keep image lean
-RUN apt-get update \
+# Use China mirror (aliyun) to bypass corporate firewall blocking deb.debian.org
+RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json* ./
 ENV NODE_ENV=production
-RUN npm ci --omit=dev \
+# Use GWM internal nexus registry + node-gyp headers mirror
+# NODEJS_ORG_MIRROR tells node-gyp where to fetch Node.js headers (better-sqlite3 compilation)
+RUN npm config set registry http://nexus.gwm.cn/repository/npm-group/ \
+    && NODEJS_ORG_MIRROR=https://npmmirror.com/mirrors/node npm ci --omit=dev \
     && apt-get purge -y --auto-remove python3 make g++
 
 # Copy server source + migrations + built SPA

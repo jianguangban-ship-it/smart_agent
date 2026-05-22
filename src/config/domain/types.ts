@@ -41,3 +41,14 @@ export interface TraceabilityGap {
   messageZh: string
   severity: 'warning' | 'info'
 }
+
+/** Quality violation — returned by task quality checker */
+export interface QualityViolation {
+  ruleId: string
+  titleEn: string
+  titleZh: string
+  messageEn: string
+  messageZh: string
+  severity: 'warning' | 'error'
+  matches?: string[]
+}

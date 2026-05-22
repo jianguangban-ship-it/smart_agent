@@ -77,14 +77,14 @@
       <table v-else class="grid-table">
         <thead>
           <tr>
-            <th>{{ t('view.colStatus') }}</th>
-            <th>{{ t('view.colTeam') }}</th>
-            <th>{{ t('view.colKey') }}</th>
-            <th>{{ t('view.colType') }}</th>
-            <th>{{ t('view.colSummary') }}</th>
-            <th>{{ t('view.colAssignee') }}</th>
-            <th>{{ t('view.colPoints') }}</th>
-            <th>{{ t('view.colTime') }}</th>
+            <th class="col-status">{{ t('view.colStatus') }}</th>
+            <th class="col-team">{{ t('view.colTeam') }}</th>
+            <th class="col-key">{{ t('view.colKey') }}</th>
+            <th class="col-type">{{ t('view.colType') }}</th>
+            <th class="col-summary">{{ t('view.colSummary') }}</th>
+            <th class="col-assignee">{{ t('view.colAssignee') }}</th>
+            <th class="col-points">{{ t('view.colPoints') }}</th>
+            <th class="col-time">{{ t('view.colTime') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -244,7 +244,9 @@ function openTicket(ticket: QualityTicket) {
   position: sticky;
   top: 0;
   background-color: var(--bg-tertiary);
-  text-align: left;
+  /* v10.130: headers centered to match the body cells (except Summary,
+     which stays left-aligned to mirror its left-aligned ticket-title body). */
+  text-align: center;
   padding: var(--space-2) var(--space-3);
   border-bottom: 2px solid var(--border-color);
   font-size: var(--font-xs);
@@ -254,6 +256,20 @@ function openTicket(ticket: QualityTicket) {
   color: var(--text-muted);
   z-index: 1;
 }
+.grid-table thead th.col-summary {
+  text-align: left;
+}
+/* v10.130 refinement #2: under table-layout: fixed, column widths must be
+   declared on the first row (<thead><th>), not on body cells. Body .cell-*
+   widths in QualityRow.vue are inert under this layout mode. */
+.grid-table thead th.col-status   { width: 200px; }
+.grid-table thead th.col-team     { width: 200px; }
+.grid-table thead th.col-key      { width: 200px; }
+.grid-table thead th.col-type     { width: 200px; }
+.grid-table thead th.col-assignee { width: 200px; }
+.grid-table thead th.col-points   { width: 200px; }
+.grid-table thead th.col-time     { width: 200px; }
+/* .col-summary intentionally has no width — it flex-fills the remainder. */
 
 .state-error,
 .state-empty {

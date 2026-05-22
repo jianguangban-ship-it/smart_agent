@@ -71,15 +71,14 @@
             </svg>
             <span class="attach-label">{{ t('coach.loadFileLabel') }}</span>
           </button>
-          <textarea
-            ref="taEl"
-            v-model="draft"
-            class="explore-input"
-            :placeholder="t('coach.explorePlaceholder')"
-            rows="1"
-            @keydown="onKeydown"
-            @input="autosize"
-          />
+          <div class="explore-input-wrap">
+            <DescriptionEditor
+              variant="composer"
+              v-model="draft"
+              @submit="send"
+              @expand="isPopoutOpen = true"
+            />
+          </div>
           <button
             v-if="isLoading"
             type="button"
@@ -105,6 +104,19 @@
       />
     </div>
   </section>
+
+  <!-- v10.130: Explore-mode floating composer popout (mirrors Task-mode's
+       coach composer UX from v10.129). Teleports to <body>, so DOM position
+       here is purely conventional. Title / placeholder / send color are
+       overridden to Explore's wording and blue accent. -->
+  <ComposerPopout
+    v-model="draft"
+    v-model:open="isPopoutOpen"
+    title-key="coach.composerTitleExplore"
+    placeholder-key="coach.explorePlaceholder"
+    send-accent="var(--accent-blue)"
+    @submit="send"
+  />
 </template>
 
 <script setup lang="ts">
@@ -112,6 +124,8 @@ import { ref, watch, nextTick } from 'vue'
 import { useI18n } from '@/i18n'
 import ChatBubble from './ChatBubble.vue'
 import CoachHistoryTab from '@/components/coach/CoachHistoryTab.vue'
+import DescriptionEditor from '@/components/form/DescriptionEditor.vue'
+import ComposerPopout from '@/components/form/ComposerPopout.vue'
 import { useAttachment, type AttachError } from '@/composables/useAttachment'
 import { useToast } from '@/composables/useToast'
 import type { ChatMessage } from '@/types/api'
@@ -136,8 +150,10 @@ const emit = defineEmits<{
 
 const activeTab = ref<'chat' | 'history'>('chat')
 const draft = ref('')
-const taEl = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+// v10.130: matches Task-mode coach composer UX — clicking the ⤢ on the inline
+// composer opens a floating draggable popout sharing the same draft model.
+const isPopoutOpen = ref(false)
 
 function openFilePicker() {
   fileInputRef.value?.click()
@@ -161,13 +177,6 @@ const scrollEl = ref<HTMLElement | null>(null)
 // down while they've scrolled up to read earlier messages.
 const stick = ref(true)
 
-function autosize() {
-  const el = taEl.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 200) + 'px'
-}
-
 function onScroll() {
   const el = scrollEl.value
   if (!el) return
@@ -180,14 +189,6 @@ function send() {
   emit('send', text)
   draft.value = ''
   stick.value = true
-  nextTick(autosize)
-}
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    send()
-  }
 }
 
 function onNewChat() {
@@ -196,7 +197,6 @@ function onNewChat() {
   stick.value = true
   emit('new-chat')
   nextTick(() => {
-    autosize()                                  // textarea back to a single row
     if (scrollEl.value) scrollEl.value.scrollTop = 0
   })
 }
@@ -311,14 +311,23 @@ watch(
   padding: var(--space-3) var(--space-5) var(--space-4);
   border-top: 1px solid var(--border-color);
 }
-.explore-input {
+/* v10.130: the textarea itself now lives inside <DescriptionEditor> (composer
+   variant). This wrapper just gives it flex-fill behavior in the row. The
+   textarea's own border, focus ring, sizing, and font come from
+   DescriptionEditor.vue so the look matches Task mode's coach composer. */
+.explore-input-wrap {
   flex: 1;
-  resize: none;
-  /* Empty (rows=1) height matches the send button so the row is
-     center-aligned at rest; autosize() grows it up to max-height on input. */
-  min-height: 44px;
-  max-height: 200px;
+  min-width: 0;
+}
+/* Textarea inside DescriptionEditor needs the same border/background/focus
+   ring the old .explore-input had — DescriptionEditor's own `.desc-textarea`
+   doesn't carry those, they came from a global `.input-base` class. Apply
+   them through :deep() so the visual matches the previous Explore composer
+   while the auto-grow / expand-button / IME-safe-Enter all come from
+   DescriptionEditor. */
+.explore-input-wrap :deep(.desc-textarea--composer) {
   padding: var(--space-2) var(--space-3);
+  padding-right: 30px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-primary, var(--bg-secondary));
@@ -327,7 +336,7 @@ watch(
   font-family: inherit;
   line-height: 1.5;
 }
-.explore-input:focus {
+.explore-input-wrap :deep(.desc-textarea--composer:focus) {
   outline: none;
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.25);

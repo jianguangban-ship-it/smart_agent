@@ -28,6 +28,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from '@/i18n'
 import { useToast } from '@/composables/useToast'
+import { copyText } from '@/utils/clipboard'
 import JsonNode from './JsonNode.vue'
 
 const props = withDefaults(defineProps<{
@@ -61,11 +62,10 @@ function collapseAll() {
   generation.value++
 }
 
-function copyJson() {
+async function copyJson() {
   const text = typeof props.data === 'string' ? props.data : JSON.stringify(props.data, null, 2)
-  navigator.clipboard.writeText(text).then(() => {
-    addToast('success', t('toast.copied'))
-  })
+  const ok = await copyText(text)
+  addToast(ok ? 'success' : 'error', t(ok ? 'toast.copied' : 'toast.copyFailed'))
 }
 </script>
 

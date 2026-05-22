@@ -496,3 +496,172 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   (user preference) rather than per-mode `.app-main--*` padding. If
   Task-only scoping is ever needed, use `.app--task-lock :deep(.app-
   header) { margin-bottom: 2px }` in App.vue.
+
+## v10.128 — Clipboard works on the cloud HTTP deployment
+- `navigator.clipboard` is `undefined` on the GWM deployment
+  (`http://10.246.107.247:5181/`) because Chrome restricts the async
+  Clipboard API to **secure contexts** — HTTPS, or HTTP on `localhost`
+  / `127.0.0.1`. Every non-localhost colleague hit
+  `Cannot read properties of undefined (reading 'writeText')` and the
+  unconditional "copied" toast was a lie.
+- All copy paths now go through `src/utils/clipboard.ts` →
+  `copyText(text: string): Promise<boolean>`. It tries
+  `navigator.clipboard.writeText` when available, then falls back to a
+  transient off-screen `<textarea>` + `document.execCommand('copy')`
+  for plain-HTTP / LAN-IP contexts.
+- All 8 call sites updated (`ChatBubble`, `CoachPanel`, `AIReviewPanel`,
+  `SprintIndicator`, `SummaryBuilder`, `JsonViewer`, `DevTools`, plus
+  `ChatBubble.copyResponse`). Each now awaits the boolean and toasts
+  either `toast.copied` (new ✓) or `toast.copyFailed` (new — bilingual
+  string added to `src/i18n/en.ts` and `src/i18n/zh.ts`).
+- Rejected alternative: putting TLS in front of the container (would
+  fix the API natively but requires GWM IT and cert management).
+- Rejected alternative: `@vueuse/core`'s `useClipboard({ legacy: true })`
+  — same fallback, but composable-shaped API is over-engineered for 8
+  one-shot copy buttons; a 30-line util is simpler.
+- **Rule for future code:** never call `navigator.clipboard.writeText`
+  directly anywhere — always import `copyText` from
+  `@/utils/clipboard`. The deployment is plain HTTP and will stay
+  that way unless infra changes.
+
+## v10.129 — Floating draggable composer popout
+- The pinned coach composer in Task mode now has an `⤢` button at the
+  top-right of the textarea (composer variant only). Click → opens a
+  floating window (`src/components/form/ComposerPopout.vue`) for
+  drafting long prompts with room to breathe.
+- **Not a modal.** No backdrop; chat history behind stays visible.
+  The window can be dragged by the title bar, resized from the
+  bottom-right corner, maximized/restored on double-click of the title
+  bar, and remembers position + size in `localStorage` under
+  `smart_agent.composer_popout_state` (`{x, y, width, height,
+  maximized}`).
+- **v-model sync.** Both the inline composer textarea and the popout
+  textarea bind to the same `descriptionModel` (CoachPanel ⇄ App's
+  `form.description`). Edits flow live in both directions; closing the
+  popout leaves the text intact. Ctrl+Enter inside the popout fires
+  the existing `onComposerSubmit` handler in `CoachPanel`, so the send
+  path (TaskForm's action bar `.action-coach` + `canCoachSubmit`
+  guard in App.vue) is unchanged.
+- **First floating-window pattern in this codebase** (existing modals
+  HotkeyModal/ConfirmDialog/LLMSettings/DownloadModal/AgentCheckModal
+  are all centered+backdrop). If we ever need a draggable Explore-mode
+  composer, reuse `ComposerPopout.vue` rather than rolling another
+  drag implementation.
+- **Why floating, not modal:** user explicitly asked for click-and-drag
+  to move; modal blocks the chat panel which defeats the purpose
+  (reading messages while writing a long prompt).
+- **Why not `@vueuse/core` `useDraggable`:** it's already a dep but
+  doesn't cover Teleport-to-body, resize, maximize, or localStorage —
+  end-to-end ownership of the popout is simpler than splicing
+  useDraggable into a custom container.
+- **i18n keys added** under `coach.*` in both locales:
+  `composerExpand`, `composerClose`, `composerMaximize`,
+  `composerRestore`, `composerTitle`, `composerSend`.
+
+## v10.130 — Dashboard column widths + center alignment
+- `QualityRow.vue`: the 7 fixed-width cells (`.cell-status` / `-team`
+  / `-key` / `-type` / `-assignee` / `-points` / `-time`) all retuned
+  for their actual content and now all use `text-align: center`. After
+  the post-review width rebalance (Refinement #2), total fixed-column
+  allocation 750 → **674px**; freed ~76px goes to `.cell-summary`
+  (flex), so long ticket titles get a lot more room before the
+  ellipsis cutoff. Final sizes: **64 / 104 / 88 / 72 / [flex] / 150 /
+  56 / 140 px**.
+- `.cell-team` ended up as a plain centered `<td>` — first pass tried
+  `display: flex; flex-direction: column; align-items: center` on the
+  cell itself, but flex on a `<td>` breaks `display: table-cell`, so
+  under `table-layout: fixed` the flex content box no longer matched
+  the column track the `<th>` sat in and the TEAM header visibly
+  drifted from its body data. Final shape: `.cell-team` is plain
+  centered (no flex), and the two `<span>` children get `display:
+  block` (with `margin-top: 2px` on `.team-name` to replace the lost
+  flex `gap`). Rule of thumb: **never put `display: flex` directly on
+  a `<td>` inside a `table-layout: fixed` grid — wrap with an inner
+  div, or use block-level children, so the cell stays a true
+  table-cell.**
+- `<StatusBadge>` was already `display: inline-flex` (see
+  `StatusBadge.vue:48`), so `text-align: center` on the parent td
+  centers the badge automatically — no badge change needed.
+- `QualityGridPanel.vue` headers: `<th>` elements now have
+  `col-status`/`col-team`/`col-key`/`col-type`/`col-summary`/
+  `col-assignee`/`col-points`/`col-time` classes. The `thead th`
+  baseline `text-align` flipped `left` → `center`, with a single
+  `.col-summary { text-align: left }` exemption so the Summary header
+  matches its left-aligned body cell.
+- **Rule for future grid columns:** the Summary column is the only
+  left-aligned, flex-fill column. Any new column added to the grid
+  should follow the centered + fixed-px pattern unless it carries
+  long-form prose (in which case mirror Summary's setup, not the
+  others).
+- **Refinement #7 — Task-mode split is tuned via CSS variables.** The
+  two Task-mode grid columns (Coach left | Task form center) read
+  their widths from `--task-col-left` and `--task-col-center`,
+  declared in the `:root, [data-theme="dark"]` block of
+  `src/styles/variables.css`. Defaults: `1fr` / `1fr` (50/50). To
+  retune, edit those two values — any valid CSS grid track works
+  (`2fr`/`3fr`, `380px`/`1fr`, `30%`/`70%`, `minmax(...)`, etc.).
+  Live-preview from DevTools:
+  `document.documentElement.style.setProperty('--task-col-left', '2fr')`.
+  **Project rule:** layout-level dimensions in this codebase belong
+  in `variables.css` alongside the other design tokens (colors,
+  spacing, radii, fonts, `color-scheme`), not buried in scoped
+  component CSS.
+- **Refinement #6 — Task-mode column-resize subsystem fully removed.**
+  Task mode's grid is now a fixed **50/50** two-column layout
+  (`grid-template-columns: 1fr 1fr;` in `App.vue`), with no gutter,
+  no `col-resize` cursor on hover, and no draggable border. Deleted
+  the `col-drag-handle` markup, the `gridRef` / `gridStyle` bindings
+  on `.grid-layout`, the entire `startDrag`/`onDrag`/`stopDrag` script
+  section, the `colFractions` state, and the `.col-drag-handle` /
+  `.drag-grip` CSS. Legacy `grid-col-sizes` localStorage key left in
+  place — harmless dead data. **Project rule:** don't re-introduce
+  resizable panels in this layout without a fresh design discussion;
+  the previous 3-column resizable layout was explicitly retired.
+- **Refinement #5 — native form chrome themed via `color-scheme:` on
+  `variables.css`.** Added `color-scheme: dark;` to the
+  `:root, [data-theme="dark"]` block and `color-scheme: light;` to
+  the `[data-theme="light"]` block. Fixes the user-reported dark
+  calendar picker icon in View mode → Custom range date inputs, and
+  any other native chrome (scrollbars, file picker buttons, native
+  select dropdowns) that previously rendered in light-mode defaults
+  on the dark page. **Project rule for future native-control theming
+  issues: override via the central `color-scheme:` block in
+  `variables.css`, not per-component `filter: invert()` hacks.**
+- **Refinement #4 — composer hotkey label is "Enter", not "Ctrl+Enter".**
+  Both the inline DescriptionEditor composer variant and the floating
+  ComposerPopout submit on plain Enter (Shift+Enter = newline, IME-safe
+  via `!e.isComposing`). All three user-facing labels updated to match:
+  `shortcuts.coach` i18n value, TaskForm Send button tooltip, and the
+  Hotkey cheatsheet row in HotkeyModal. The global Ctrl+Enter handler
+  in `App.vue` still works as an undocumented fallback for muscle
+  memory; we just no longer advertise it. **Rule for new composer
+  surfaces:** label the hotkey as `Enter`, not `Ctrl+Enter`.
+- **Refinement #3 — Explore composer now shares Task's expand-to-popout
+  UX.** Ported v10.129's coach composer pattern (`DescriptionEditor`
+  composer variant + floating `ComposerPopout`) to Explore mode.
+  `ComposerPopout.vue` is now generic — three new optional props
+  (`titleKey`, `placeholderKey`, `sendAccent`) default to the original
+  Task values so existing `CoachPanel.vue` is unchanged; Explore passes
+  `coach.composerTitleExplore` / `coach.explorePlaceholder` /
+  `var(--accent-blue)`. `ExploreChat.vue` swaps its raw `<textarea>`
+  for `<DescriptionEditor variant="composer">` (auto-grow, ⤢ button,
+  IME-safe Enter all come for free) and mounts `<ComposerPopout>` as a
+  sibling. Bonus: Explore now has the IME guard (`!e.isComposing`) for
+  Chinese pinyin candidate selection — a latent bug fixed for free.
+  Project rule for future modes that gain a composer: reuse this same
+  pair (`DescriptionEditor[variant=composer]` + `ComposerPopout` with
+  mode-specific i18n keys + accent prop) rather than rolling another
+  raw textarea + manual auto-grow.
+- **Refinement #2b — the widths must live on `<th>`, not `<td>`.**
+  First attempt at width rebalance put `width:` on the body
+  `.cell-*` selectors in `QualityRow.vue`. None of them rendered —
+  even shrinking `.cell-team` to 60px did nothing visually. Reason:
+  under `.grid-table { table-layout: fixed }`, browsers take column
+  widths from the **first row** (`<thead><th>` or `<col>`); body
+  `<td>` widths are inert. Fix: add `.grid-table thead th.col-status
+  { width: 64px }` (and friends) in `QualityGridPanel.vue`; keep
+  `.col-summary` unsized so it flex-fills. The body `.cell-*` widths
+  in `QualityRow.vue` stay as documentation but no longer drive
+  layout. **Project rule for any future `table-layout: fixed` grid
+  in this repo: declare column widths on the header row, not on
+  body cells.**

@@ -50,8 +50,6 @@
       <div
         v-show="appMode === 'task'"
         class="grid-layout"
-        ref="gridRef"
-        :style="gridStyle"
       >
         <!-- LEFT: AI Coach -->
         <div class="col-left">
@@ -97,14 +95,6 @@
               />
             </template>
           </CoachPanel>
-        </div>
-
-        <!-- Drag handle: left | center -->
-        <div
-          class="col-drag-handle"
-          @mousedown="startDrag('left', $event)"
-        >
-          <div class="drag-grip"></div>
         </div>
 
         <!-- CENTER: Task Form -->
@@ -227,69 +217,6 @@ import ExploreChat from '@/components/chat/ExploreChat.vue'
 
 const { t, isZh } = useI18n()
 const { addToast } = useToast()
-
-// ─── Column drag-resize ─────────────────────────────────────────────────────
-const gridRef = ref<HTMLElement>()
-const LS_COL_SIZES = 'grid-col-sizes'
-
-// Default fractions: left (Coach) | center (Task form) — equal split.
-const colFractions = ref<[number, number]>([1, 1])
-
-// Restore saved sizes (ignore the legacy 3-tuple from the old 3-col layout)
-try {
-  const saved = localStorage.getItem(LS_COL_SIZES)
-  if (saved) {
-    const parsed = JSON.parse(saved)
-    if (Array.isArray(parsed) && parsed.length === 2) colFractions.value = parsed as [number, number]
-  }
-} catch { /* ignore */ }
-
-const gridStyle = computed(() => {
-  const [l, c] = colFractions.value
-  return {
-    gridTemplateColumns: `${l}fr 6px ${c}fr`
-  }
-})
-
-let dragSide: 'left' | null = null
-let dragStartX = 0
-let dragStartFractions: [number, number] = [1, 1]
-
-function startDrag(side: 'left', e: MouseEvent) {
-  e.preventDefault()
-  dragSide = side
-  dragStartX = e.clientX
-  dragStartFractions = [...colFractions.value] as [number, number]
-  document.addEventListener('mousemove', onDrag)
-  document.addEventListener('mouseup', stopDrag)
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
-}
-
-function onDrag(e: MouseEvent) {
-  if (!gridRef.value || !dragSide) return
-  const gridWidth = gridRef.value.offsetWidth - 6 // subtract the single 6px handle
-  const totalFr = dragStartFractions[0] + dragStartFractions[1]
-  const dx = e.clientX - dragStartX
-  const dFr = (dx / gridWidth) * totalFr
-  const minFr = 1 // minimum column fraction
-
-  const [l, c] = dragStartFractions
-  let newL = l + dFr
-  let newC = c - dFr
-  if (newL < minFr) { newC += newL - minFr; newL = minFr }
-  if (newC < minFr) { newL += newC - minFr; newC = minFr }
-  colFractions.value = [+newL.toFixed(3), +newC.toFixed(3)]
-}
-
-function stopDrag() {
-  dragSide = null
-  document.removeEventListener('mousemove', onDrag)
-  document.removeEventListener('mouseup', stopDrag)
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
-  localStorage.setItem(LS_COL_SIZES, JSON.stringify(colFractions.value))
-}
 
 const {
   form, summary, componentHistory, computedSummary,
@@ -1020,9 +947,10 @@ onUnmounted(() => {
 }
 .grid-layout {
   display: grid;
-  grid-template-columns: 1fr 6px 1fr;
+  /* Ratio lives in src/styles/variables.css as --task-col-left /
+     --task-col-center (defaults to 1fr 1fr = 50/50). Edit there to tune. */
+  grid-template-columns: var(--task-col-left) var(--task-col-center);
   gap: 0;
-  transition: grid-template-columns 250ms ease-in-out;
   /* Fill the locked .app-main--task so columns get a definite height and
      scroll internally (Task-only via v-show, so unconditional is safe). */
   height: 100%;
@@ -1055,33 +983,6 @@ onUnmounted(() => {
   min-width: clamp(150px, 12vw, 350px);
   gap: var(--space-4);
 }
-/* Drag handles between columns */
-.col-drag-handle {
-  width: 6px;
-  cursor: col-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  z-index: 10;
-  /* Wider hit area via padding without affecting layout */
-  margin: 0 -4px;
-  padding: 0 4px;
-}
-.col-drag-handle:hover .drag-grip,
-.col-drag-handle:active .drag-grip {
-  background-color: var(--accent-blue);
-  opacity: 1;
-}
-.drag-grip {
-  width: 3px;
-  height: 48px;
-  border-radius: 2px;
-  background-color: var(--border-color);
-  opacity: 0.5;
-  transition: background-color 0.2s, opacity 0.2s;
-}
-
 /* Confirmation Modal */
 .modal-overlay {
   position: fixed;
@@ -1165,9 +1066,6 @@ onUnmounted(() => {
 @media (max-width: 1024px) {
   .grid-layout {
     grid-template-columns: 1fr !important;
-  }
-  .col-drag-handle {
-    display: none;
   }
 }
 </style>

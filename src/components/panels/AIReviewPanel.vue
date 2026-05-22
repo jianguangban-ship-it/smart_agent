@@ -133,6 +133,7 @@ import { useI18n } from '@/i18n'
 import { formatCoachResponse } from '@/utils/formatCoach'
 import { diffWords } from '@/utils/diffText'
 import { useToast } from '@/composables/useToast'
+import { copyText } from '@/utils/clipboard'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
 
 const props = defineProps<{
@@ -289,8 +290,8 @@ const diffHtml = computed(() => {
 async function copyResponse() {
   const text = rawText.value || JSON.stringify(props.response, null, 2)
   if (!text) return
-  await navigator.clipboard.writeText(text)
-  addToast('success', t('toast.copied'), 2000)
+  const ok = await copyText(text)
+  addToast(ok ? 'success' : 'error', t(ok ? 'toast.copied' : 'toast.copyFailed'), 2000)
 }
 </script>
 

@@ -95,6 +95,7 @@ import type { SummaryState } from '@/types/form'
 import { runtimeSummaryOptions } from '@/composables/useRuntimeConfig'
 import { useI18n } from '@/i18n'
 import { useToast } from '@/composables/useToast'
+import { copyText } from '@/utils/clipboard'
 import QualityMeter from './QualityMeter.vue'
 
 const props = defineProps<{
@@ -122,8 +123,8 @@ function counterColor(len: number, max: number): string {
 
 async function copySummary() {
   if (!props.computedSummary) return
-  await navigator.clipboard.writeText(props.computedSummary)
-  addToast('success', t('toast.copied'), 2000)
+  const ok = await copyText(props.computedSummary)
+  addToast(ok ? 'success' : 'error', t(ok ? 'toast.copied' : 'toast.copyFailed'), 2000)
 }
 </script>
 

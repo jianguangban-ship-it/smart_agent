@@ -70,6 +70,7 @@ import { useI18n } from '@/i18n'
 import { formatCoachResponse } from '@/utils/formatCoach'
 import { useToast } from '@/composables/useToast'
 import { downloadFile } from '@/utils/exportFormats'
+import { copyText } from '@/utils/clipboard'
 import {
   enhanceCodeBlocks,
   setArtifactLabels,
@@ -130,9 +131,9 @@ watch(
   }
 )
 
-function onCopy(text: string) {
-  navigator.clipboard.writeText(text)
-  addToast('success', t('toast.copied'), 2000)
+async function onCopy(text: string) {
+  const ok = await copyText(text)
+  addToast(ok ? 'success' : 'error', t(ok ? 'toast.copied' : 'toast.copyFailed'), 2000)
 }
 function onDownload(text: string, meta: ArtifactMeta) {
   downloadFile(text, meta.filename, meta.mime)
@@ -147,9 +148,9 @@ const showMsgActions = computed(() =>
   !props.message.isStreaming &&
   !!props.message.content
 )
-function copyResponse() {
-  navigator.clipboard.writeText(props.message.content)
-  addToast('success', t('toast.copied'), 2000)
+async function copyResponse() {
+  const ok = await copyText(props.message.content)
+  addToast(ok ? 'success' : 'error', t(ok ? 'toast.copied' : 'toast.copyFailed'), 2000)
 }
 function downloadMd() {
   const id = props.hashId || props.message.hashId || String(props.message.timestamp)

@@ -8,16 +8,33 @@
       {{ appMode === 'explore' ? t('form.exploreDescription') : t('form.taskDescription') }}
       <span class="required-tag">* {{ t('form.required') }}</span>
     </h2>
-    <textarea
-      ref="textareaRef"
-      v-model="model"
-      class="input-base desc-textarea"
-      :class="{ 'desc-textarea--composer': variant === 'composer' }"
-      :placeholder="appMode === 'explore' ? t('form.exploreDescriptionPlaceholder') : t('form.taskDescriptionPlaceholder')"
-      @focus="emit('focus')"
-      @blur="emit('blur')"
-      @keydown="onKeydown"
-    ></textarea>
+    <div :class="{ 'composer-wrap': variant === 'composer' }">
+      <textarea
+        ref="textareaRef"
+        v-model="model"
+        class="input-base desc-textarea"
+        :class="{ 'desc-textarea--composer': variant === 'composer' }"
+        :placeholder="appMode === 'explore' ? t('form.exploreDescriptionPlaceholder') : t('form.taskDescriptionPlaceholder')"
+        @focus="emit('focus')"
+        @blur="emit('blur')"
+        @keydown="onKeydown"
+      ></textarea>
+      <button
+        v-if="variant === 'composer'"
+        type="button"
+        class="composer-expand-btn"
+        :title="t('coach.composerExpand')"
+        :aria-label="t('coach.composerExpand')"
+        @click="emit('expand')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 3 21 3 21 9"/>
+          <polyline points="9 21 3 21 3 15"/>
+          <line x1="21" y1="3" x2="14" y2="10"/>
+          <line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
+      </button>
+    </div>
     <!-- v10.126: the desc-footer (attach button, attach chip, word/sentence
          counter, hidden file input) is intentionally hidden in the composer
          variant — the pinned coach composer is a chat-style input and the
@@ -70,7 +87,7 @@ const props = withDefaults(defineProps<{
   variant?: 'form' | 'composer'
 }>(), { variant: 'form' })
 
-const emit = defineEmits<{ focus: [], blur: [], submit: [] }>()
+const emit = defineEmits<{ focus: [], blur: [], submit: [], expand: [] }>()
 const model = defineModel<string>({ required: true })
 const { t } = useI18n()
 const { attachedFile, attach, detach, hasAttachment } = useAttachment()
@@ -159,6 +176,42 @@ const sentenceCount = computed(() =>
   min-height: 44px;
   max-height: 200px;
   overflow-y: auto;
+  padding-right: 30px;
+}
+
+/* Composer wrap: hosts the textarea + the absolutely-positioned expand button
+   so the button hugs the top-right corner of the textarea without affecting
+   the form variant. */
+.composer-wrap {
+  position: relative;
+  width: 100%;
+}
+.composer-expand-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.composer-expand-btn:hover {
+  opacity: 1;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.composer-expand-btn svg {
+  width: 13px;
+  height: 13px;
 }
 .desc-footer {
   display: flex;

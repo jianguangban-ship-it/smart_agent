@@ -168,6 +168,13 @@ export default {
     explorePlaceholder: '问我任何问题…（回车发送，Shift+回车换行）',
     exploreSend: '发送',
     exploreStop: '停止',
+    composerExpand: '展开输入框',
+    composerClose: '关闭输入框',
+    composerMaximize: '最大化',
+    composerRestore: '还原',
+    composerTitle: 'Coach 提示',
+    composerTitleExplore: 'Explore 提示',
+    composerSend: '发送',
     loadFile: '加载文件（.md、.html、.json）',
     loadFileLabel: '文件',
     exploreNewChat: '新对话',
@@ -246,6 +253,7 @@ export default {
     draftRestored: '已恢复上次未完成的草稿',
     draftCleared: '表单已重置，草稿已清除',
     copied: '已复制到剪贴板',
+    copyFailed: '复制失败 — 请手动选择并复制',
     downloaded: '文件已下载',
     templatesImported: '个模板已导入',
     invalidDropFile: '请拖入有效的 .json 文件',
@@ -255,7 +263,7 @@ export default {
     noDuplicateTemplates: '无新模板可导入（重复项已跳过）'
   },
   shortcuts: {
-    coach: 'Ctrl+Enter',
+    coach: 'Enter',
     analyze: 'Ctrl+Shift+Enter',
     create: 'Ctrl+Shift+C'
   },

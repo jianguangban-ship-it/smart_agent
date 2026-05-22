@@ -49,12 +49,23 @@ td {
   color: var(--text-primary);
   vertical-align: middle;
 }
-.cell-status { width: 60px; }
+/* v10.130: widths rebalanced to fit content with uniform breathing room;
+   centered alignment for every column except Summary (which stays flex-fill
+   + left-aligned because long ticket titles read better that way). */
+.cell-status {
+  width: 64px;
+  text-align: center;
+}
 .cell-team {
-  width: 160px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  width: 104px;
+  text-align: center;
+}
+/* v10.130 refinement: stack the two spans as blocks instead of a flex column
+   on the <td> itself. Flex on a table cell breaks display:table-cell and the
+   resulting content box no longer aligns with the centered <th> above. */
+.team-key,
+.team-name {
+  display: block;
 }
 .team-key {
   font-weight: 600;
@@ -62,11 +73,13 @@ td {
   color: var(--text-primary);
 }
 .team-name {
+  margin-top: 2px;
   font-size: var(--font-xs);
   color: var(--text-muted);
 }
 .cell-key {
-  width: 110px;
+  width: 88px;
+  text-align: center;
   font-family: var(--font-mono, monospace);
 }
 .cell-key a {
@@ -76,7 +89,8 @@ td {
 }
 .cell-key a:hover { text-decoration: underline; }
 .cell-type {
-  width: 70px;
+  width: 72px;
+  text-align: center;
   color: var(--text-secondary);
   font-size: var(--font-sm);
 }
@@ -89,17 +103,19 @@ td {
 }
 .cell-assignee {
   width: 150px;
+  text-align: center;
   color: var(--text-secondary);
   font-size: var(--font-sm);
 }
 .cell-points {
-  width: 50px;
+  width: 56px;
   text-align: center;
   font-weight: 600;
   color: var(--text-primary);
 }
 .cell-time {
-  width: 150px;
+  width: 140px;
+  text-align: center;
   color: var(--text-muted);
   font-size: var(--font-sm);
   white-space: nowrap;
