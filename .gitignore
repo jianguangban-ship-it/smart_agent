@@ -21,4 +21,4 @@ deploy/.env.*
 *-api-settings-*.json
 # Local tooling / crash dumps
 .antigravitycli/
-bash.exe.stackdump
+*.stackdump
