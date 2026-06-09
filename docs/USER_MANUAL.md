@@ -1,7 +1,7 @@
 # AGec — User Manual
 # 智能工程平台 — 用户手册
 
-> Version / 版本: v10.73 | Language / 语言: English · 中文
+> Version / 版本: v10.136 | Language / 语言: English · 中文
 
 ---
 
@@ -27,7 +27,10 @@
 18. [Ticket History / 工单历史](#18-ticket-history--工单历史)
 19. [Settings / 设置](#19-settings--设置)
 20. [Keyboard Shortcuts / 键盘快捷键](#20-keyboard-shortcuts--键盘快捷键)
-21. [Tips & Troubleshooting / 使用技巧与常见问题](#21-tips--troubleshooting--使用技巧与常见问题)
+21. [Modes / 工作模式](#21-modes--工作模式)
+22. [Explore Mode / Explore 模式](#22-explore-mode--explore-模式)
+23. [View Mode (JIRA Quality Grid) / View 模式（JIRA 质量看板）](#23-view-mode-jira-quality-grid--view-模式jira-质量看板)
+24. [Tips & Troubleshooting / 使用技巧与常见问题](#24-tips--troubleshooting--使用技巧与常见问题)
 
 ---
 
@@ -36,6 +39,20 @@
 The **Agentic Engineering Platform (AGec)** is a browser-based workstation for automotive software engineers. It combines AI-powered writing guidance, multi-perspective review, domain knowledge enforcement, and full JIRA integration into a single tool — from requirement elicitation through to ticket creation.
 
 **智能工程平台 (AGec)** 是面向汽车软件工程师的浏览器工作站。集 AI 写作指导、多视角评审、领域知识执行和完整 JIRA 集成于一体，覆盖从需求引出到工单创建的全流程。
+
+**Three workspaces / 三个工作模式：** AGec is organized into three top-level modes — switch between them from the mode toggle in the header.
+
+AGec 顶部头栏有三个并列工作模式切换按钮，分别用于不同的任务：
+
+| Mode / 模式 | Purpose / 用途 |
+|-----|---|
+| **Task / 任务** | The structured JIRA-ticket workflow this manual mostly covers (Sections 4–20). Most of your work happens here. |
+| **Explore / 探索** | Free-form AI chat for ad-hoc questions, brainstorming, and live information retrieval — the agent can invoke external tools (e.g. web search via the GWM MCP service) to get real-time data outside its training knowledge. See Section 22. |
+| **View / 查看** | Read-only dashboard showing recent JIRA quality-check verdicts across all R&D teams. See Section 23. |
+
+Switching modes preserves your in-progress work in each — a Task draft survives a trip into Explore and back.
+
+切换模式不会丢失当前工作 —— Task 草稿、Explore 对话、View 筛选条件均独立保存。
 
 **Key capabilities / 核心功能：**
 
@@ -58,35 +75,36 @@ The **Agentic Engineering Platform (AGec)** is a browser-based workstation for a
 
 ## 2. Interface Layout / 界面布局
 
-The app uses a resizable three-column layout with a top header bar. Drag the handles between columns to resize.
+The layout depends on which mode is active. The diagram below shows **Task mode**, where most work happens — a two-column layout (AI Coach Panel on the left, Task Form on the right) under a shared top header. **Explore** uses a single full-width conversation panel (see Section 22), and **View** is a full-width dashboard (see Section 23).
 
-应用采用可调节的三列布局加顶部标题栏，拖动列间手柄可调节宽度。
+布局取决于当前所处模式。下图为 **Task 模式** —— 左侧为 AI 设计教练面板、右侧为任务表单，顶部为通用头栏。**Explore 模式**为单列全宽对话界面（见第 22 节），**View 模式**为全宽数据看板（见第 23 节）。
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ Header: AGec | EN/中文 | Role (SYS/SWE/HWE/ME/V&V) | TEST/PROD | ☀ │
-├──────────────────┬──────────────────┬────────────────────────────────┤
-│                  │                  │                                │
-│  LEFT COLUMN     │  CENTER COLUMN   │  RIGHT COLUMN                  │
-│  AI Coach Panel  │  Review Status   │  Task Analysis / Deep Review   │
-│  · Chat / History│  Task Form       │  Task Analysis / Deep Review   │
-│  · Templates     │  · Basic Info    │  Ticket History                │
-│  · Elicitation   │  · Traceability  │  Processing Summary            │
-│                  │  · Summary       │  Dev Tools                     │
-│                  │  · Description   │  JIRA Search                   │
-│                  │  · Actions       │  Batch Operations              │
-│                  │  · Export        │  Review Dashboard              │
-│                  │                  │                                │
-└──────────────────┴──────────────────┴────────────────────────────────┘
+│ Header: AGec | Mode (Explore/Task/View) | EN/中文 | TEST/PROD | ☀ ? ⚙ │
+├───────────────────────────────────┬──────────────────────────────────┤
+│                                   │                                  │
+│  LEFT COLUMN (Task mode)          │  CENTER COLUMN (Task mode)       │
+│  AI Coach Panel                   │  Task Form                       │
+│  · Chat / History                 │  · Review Status Bar             │
+│  · Templates                      │  · Basic Info                    │
+│  · Elicitation                    │  · Traceability                  │
+│                                   │  · Summary                       │
+│                                   │  · Description                   │
+│                                   │  · Actions / Export              │
+│                                   │  · Analyze / Deep Review         │
+│                                   │                                  │
+└───────────────────────────────────┴──────────────────────────────────┘
 ```
 
-| Column | Purpose |
+| Column (Task mode) | Purpose |
 |--------|---------|
 | **Left / 左列** | AI Design Coach — writing guidance, elicitation, conflict checking |
-| **Center / 中列** | Main task form with review status bar, traceability, and action buttons |
-| **Right / 右列** | AI review, ticket history (with creation status), search, batch ops, review dashboard |
+| **Right / 右列** | Main task form with review status bar, traceability, action buttons, analyze + deep review, ticket history, search, batch ops |
 
-**Column Resizing / 列宽调节：** Drag the thin vertical handles between columns to adjust widths. Your layout preference is saved to localStorage.
+**Mode switching / 模式切换：** Click **Explore**, **Task**, or **View** in the header. Layout changes accordingly — your work in each mode is preserved.
+
+点击头栏中的 **Explore**、**Task**、**View** 切换模式。布局会随之变化，但每个模式中的工作进度均独立保存。
 
 ---
 
@@ -161,6 +179,16 @@ The recommended workflow from requirement to JIRA ticket:
 
 The header bar sits at the top of every page and contains global controls.
 顶栏位于页面顶部，包含全局控制选项。
+
+### Mode Switcher / 模式切换
+
+Three buttons in the header — **Explore**, **Task**, **View** — toggle between the workstation's three workspaces. The active mode is highlighted (orange for Task, purple for Explore, blue for View). See Section 21 for what each mode is for.
+
+头栏中的三个按钮 **Explore**、**Task**、**View** 用于切换工作模式。当前模式按按钮颜色高亮（Task 橙色、Explore 紫色、View 蓝色）。模式用途详见第 21 节。
+
+**Reply-ready chip / 回复就绪提示：** if you send a Coach or Explore prompt and then switch to another mode before the AI finishes streaming, a colored chip appears in the header (next to the mode switcher) once the response is ready. Click it to jump back to the mode where the reply landed.
+
+如果在 AI 回复完成前切换到其他模式，回复完成时头栏会出现一个彩色提示标签，点击即可跳回对应模式查看完整回复。
 
 ### Language Toggle / 语言切换
 
@@ -901,7 +929,203 @@ Press **`?`** anywhere (outside a text input) to open the shortcuts reference mo
 
 ---
 
-## 21. Tips & Troubleshooting / 使用技巧与常见问题
+## 21. Modes / 工作模式
+
+AGec is organized into three top-level workspaces. Switch between them via the mode toggle in the header (Explore / Task / View). All three share the same user identity, settings, and JIRA backend, but each presents a different interface and serves a different purpose.
+
+AGec 由三个并列的顶级工作模式组成，通过头栏的 Explore / Task / View 切换。三者共享用户身份、设置和 JIRA 后端，但界面与用途各有不同。
+
+| Mode | When to use | What you see |
+|------|-------------|--------------|
+| **Task / 任务** | Structured JIRA ticket authoring — the core flow this manual mostly covers (Sections 4–20). | Two-column layout: AI Design Coach (left) + Task Form (right). |
+| **Explore / 探索** | Ad-hoc questions, brainstorming, looking up current information (latest news, technical references, real-time data). Free chat — no skill, no task form, no structured workflow. The AI can also invoke external tools via the MCP service (e.g. web search) for queries that need information outside its training knowledge. | Single full-width chat panel with a composer at the bottom. |
+| **View / 查看** | Read-only inspection of the AI quality-check verdicts the platform has issued against JIRA tickets across all R&D teams. Useful for managers, leads, and anyone tracking team-wide quality trends. | Full-width dashboard: PERIOD QUALITY summary bar with A/B/C/D ratio chips, filter row, scrollable ticket table. |
+
+| 模式 | 使用场景 | 界面外观 |
+|------|---------|---------|
+| **Task / 任务** | 结构化 JIRA 工单创作 —— 本手册大部分章节（4–20）描述的核心流程。 | 两列布局：左侧 AI 设计教练面板 + 右侧任务表单。 |
+| **Explore / 探索** | 临时提问、头脑风暴、获取实时信息（最新新闻、技术资料、动态数据）。无技能加持、无表单、自由对话。代理可通过 MCP 服务调用外部工具（如网页搜索）获取训练知识以外的信息。 | 单列全宽对话面板，底部为输入区。 |
+| **View / 查看** | 只读查看平台对各研发团队 JIRA 工单的 AI 质量检查结果。适合主管、组长和需关注团队整体质量趋势的人员。 | 全宽看板：PERIOD QUALITY 顶部摘要栏（含 A/B/C/D 比例徽章）、筛选行、可滚动的工单表格。 |
+
+### Switching modes / 模式切换
+
+Click any of the three mode buttons in the header. The active mode is highlighted in its own color (Task = orange, Explore = purple, View = blue). Each mode preserves its own state — switching away from Task does not lose your draft; switching away from Explore does not lose the conversation; switching away from View does not lose your filter selections.
+
+点击头栏中的任一模式按钮即可切换。当前模式按颜色高亮（Task 橙色、Explore 紫色、View 蓝色）。模式间互相独立 —— 离开 Task 不会丢失草稿，离开 Explore 不会丢失对话，离开 View 不会丢失筛选条件。
+
+### Cross-mode reply notification / 跨模式回复提示
+
+If you send a prompt in Task or Explore and switch to another mode before the AI finishes streaming, a colored "reply ready" chip appears in the header when the response completes. Click the chip to jump back to the mode where the answer landed. This lets you start a long question in one mode and continue working elsewhere without losing track.
+
+如果在 Task 或 Explore 中发送提问后切换到其他模式，AI 流式输出完成时头栏会出现彩色"回复就绪"提示标签。点击标签可跳回对应模式查看回复。该机制让你能在提问后继续做其他事情而不会错过回复。
+
+---
+
+## 22. Explore Mode / Explore 模式
+
+Explore is AGec's free-form conversational workspace. There is no task form, no skill prompt, no structured workflow — you ask, the agent answers. The defining capability vs. Task mode is that **Explore can use MCP-provided external tools**: the agent can decide to invoke a tool (e.g. a web search) when your question needs information beyond its training data, then weave the tool's result into the reply.
+
+Explore 是 AGec 的自由对话工作模式。无表单、无技能提示、无结构化流程 —— 提问即可获得回答。与 Task 模式的核心区别在于：**Explore 可使用 MCP 提供的外部工具**。当问题需要训练数据以外的信息时，代理可自主决定调用工具（如网页搜索）并将结果融入回复。
+
+### Asking a question / 发起提问
+
+The composer sits at the bottom of the panel. Type your question and press **Enter** to send (use **Shift+Enter** for a newline within the composer). The agent's response streams in token-by-token above the composer. Light-blue typing dots and a breathing halo around the agent avatar indicate streaming is active.
+
+输入区位于面板底部。输入问题后按 **Enter** 发送（**Shift+Enter** 换行）。代理回复以流式逐字输出。回复期间会显示浅蓝色打字指示点以及代理头像周围的脉冲光晕。
+
+### Tool-event chips / 工具调用徽章
+
+When the agent decides to use an external tool, one or more **tool-event chips** appear above the response text:
+
+代理调用外部工具时，对话气泡上方会出现一个或多个**工具调用徽章**：
+
+| State / 状态 | Appearance / 外观 | Meaning / 含义 |
+|---|---|---|
+| **Calling** | `[spinner]  Calling <tool>…` | Tool invocation is in progress. The agent is waiting for the tool to return. |
+| **Done** | `[✓]  Used <tool>  ·  1.2 KB  ·  +` | Tool returned. Byte size shown. Click the `+` to expand the first 200 chars of the tool's response. |
+
+| 状态 | 外观 | 含义 |
+|---|---|---|
+| **调用中** | `[转圈]  Calling <工具名>…` | 工具调用中，代理正等待工具返回。 |
+| **完成** | `[✓]  Used <工具名>  ·  1.2 KB  ·  +` | 工具已返回。显示字节数。点击 `+` 展开返回结果前 200 个字符的预览。 |
+
+The chips have distinct monospace styling so they don't compete visually with the AI's text response. The full tool result is fed to the agent for the next reasoning step but only a 200-char preview is rendered in the chip — keeping the chat clean.
+
+徽章采用等宽字体样式，避免与 AI 文本回复抢视觉焦点。工具完整结果会传递给代理用于下一轮推理，但徽章中只展示前 200 字符预览，保持对话整洁。
+
+### When tools fire / 何时调用工具
+
+The agent decides autonomously based on the prompt. Prompts that mention **"latest"**, **"current"**, **"today"**, **"recent news"**, or anything requiring real-time / post-training-cutoff information will typically invoke the search tool. Prompts about general concepts, definitions, or historical knowledge usually do not — the agent answers directly from its training data without tool use.
+
+代理基于提问内容自主决定是否调用工具。包含**"最新"、"当前"、"今天"、"近期新闻"**等关键词，或需要实时／训练截止日期之后的信息，通常会触发搜索工具。关于通用概念、定义或历史知识的问题一般无需调用工具，代理直接基于训练数据回答。
+
+If you want to encourage tool use, phrase the question explicitly: *"Search for the latest news on …"* / *"查一下最新的 …"*. If you want to discourage it (e.g., your network is slow and you just want the model's knowledge), avoid time-sensitive framing.
+
+如希望代理调用工具，明确措辞，例如：*"Search for the latest news on …"* 或 *"查一下最新的 …"*。如不希望调用工具（如网络较慢仅需模型知识），避免使用时效相关词汇。
+
+### History persistence / 历史持久化
+
+Explore conversations are saved automatically to coach history. Tool-event chips persist with the conversation — reloading the page or navigating to a saved session restores the chips with the same status, byte size, and preview content as when they were first generated. Click any historical chip's `+` to re-expand its preview.
+
+Explore 对话自动保存到教练历史。工具调用徽章随对话一起持久化 —— 刷新页面或切换到历史会话时，徽章状态、字节数和预览内容均完整恢复。点击历史徽章的 `+` 可重新展开预览。
+
+### Stopping a long reply / 中止长回复
+
+If a streaming response is taking too long, click the **Stop** button (replaces Send during streaming). The partial reply already on screen is kept; the agent's upstream call is canceled. Any tool calls already started will run to completion server-side but won't appear in the chat.
+
+如果流式回复过长，可点击 **Stop** 按钮（流式输出期间会取代 Send 按钮）。已显示的部分回复保留，代理的上游调用被取消。已经发起的工具调用会在服务端继续完成但不会显示在对话中。
+
+### Limitations / 限制
+
+- **No structured prompts.** Unlike Task mode, Explore does not apply the coach skill prompt, role context, or domain checklists. It's free chat.
+- **Tools depend on the MCP service availability.** If the GWM MCP service is unreachable at boot, Explore still works but without tool use — the agent answers from training data only. Check with ops if you expect tools to be available and aren't seeing chips fire for clearly time-sensitive questions.
+- **Tool results are not editable.** You cannot rerun a tool with different parameters from the UI. Phrase a follow-up question and let the agent decide whether to invoke the tool again.
+
+- **无结构化提示**。与 Task 模式不同，Explore 不应用教练技能提示词、角色上下文或领域检查清单 —— 完全自由对话。
+- **工具依赖 MCP 服务**。若 GWM MCP 服务在启动时不可达，Explore 仍可使用但无工具调用 —— 代理仅基于训练数据回答。如时效相关问题未触发徽章，请联系运维确认 MCP 服务状态。
+- **工具结果不可编辑**。无法从界面用不同参数重新触发工具。需要不同结果时，调整提问让代理决定是否再次调用。
+
+---
+
+## 23. View Mode (JIRA Quality Grid) / View 模式（JIRA 质量看板）
+
+View Mode is a read-only dashboard showing the AI quality-check verdicts the platform has assigned to JIRA tickets across all R&D teams. It's the operational view for managers, team leads, and anyone tracking quality trends — no editing, no AI invocation, just inspection.
+
+View 模式是只读看板，展示平台对各研发团队 JIRA 工单的 AI 质量检查结果。适合主管、组长以及关注质量趋势的人员 —— 无编辑、无 AI 调用，仅供查看。
+
+### Layout / 布局
+
+The View page is a single full-width panel with three stacked regions:
+
+1. **PERIOD QUALITY summary row** — header text, total ticket count, A/B/C/D distribution chips, Refresh button.
+2. **Filter bar** — period selector, team filter, status filter, search input.
+3. **Ticket table** — scrollable list of tickets with status, team, key, type, summary, assignee, points, timestamp.
+
+View 页面为单列全宽面板，自上而下分为三个区块：
+
+1. **PERIOD QUALITY 摘要行** —— 标题、总工单数、A/B/C/D 分布徽章、Refresh 按钮。
+2. **筛选条** —— 周期选择器、团队筛选、状态筛选、搜索框。
+3. **工单表格** —— 可滚动的工单列表，包含状态、团队、Key、类型、摘要、经办人、故事点、时间戳。
+
+### PERIOD QUALITY summary row / 摘要行
+
+The top row consolidates the period overview into a single horizontal strip:
+
+- **PERIOD QUALITY** label, **the active period range** (e.g. *Last 7 days*, *Sprint S5*, *Calendar 2026-W22*), and **total tickets in that period** (bold accent-blue, e.g. `**11**`). When a filter is applied below, the count switches to `**X** of **Y**` format (filtered / total).
+- **Status chips** — one per status value present in the period, in canonical order **A / B / C / D / 格式异常 / 未知**. Each chip shows `[color dot] [letter] [count] · [percentage]`. Counts are bold accent-blue; percentages are muted gray and adapt format (1 decimal under 10%, rounded above).
+- **Refresh button** anchored far right. Triggers a re-fetch of the ticket list and re-computation of the chips.
+
+顶部行将周期概览整合为一条水平条：
+
+- **PERIOD QUALITY** 标签、**当前周期范围**（如 *Last 7 days*、*Sprint S5*、*Calendar 2026-W22*）、**周期内总工单数**（粗体蓝色，如 `**11**`）。当下方启用筛选时，数字切换为 `**X** of **Y**` 格式（已筛选 / 总数）。
+- **状态徽章** —— 按 **A / B / C / D / 格式异常 / 未知** 顺序展示当前周期内出现的状态。每个徽章包含 `[彩色圆点] [字母] [数量] · [百分比]`。数量为粗体蓝色，百分比为浅灰（小于 10% 显示 1 位小数，大于则四舍五入到整数）。
+- **Refresh 按钮**靠右固定。触发重新拉取工单列表并刷新徽章统计。
+
+### Filter bar / 筛选条
+
+Four filters narrow the table without re-fetching:
+
+| Filter | Effect |
+|--------|--------|
+| **Period** — Sprint / Calendar toggle + range dropdown | Choose between PI sprint cadence (e.g. `26 PI2 S5`) and calendar weeks/days (e.g. `Last 7 days`). The total-count and chips at the top recalculate; the table is re-scoped to the selected range. |
+| **Team** — dropdown of R&D teams | Show only tickets owned by the selected team. Empty selection = all teams. |
+| **Status** — dropdown of A / B / C / D / 格式异常 / 未知 | Show only tickets with the selected verdict. Empty selection = all statuses. |
+| **Search** — free-text input | Substring match against ticket summary, assignee name, and issue key. Updates live as you type. |
+
+| 筛选项 | 作用 |
+|--------|------|
+| **Period** —— Sprint / Calendar 切换 + 范围下拉 | PI 迭代节奏（如 `26 PI2 S5`）或日历周/天（如 `Last 7 days`）。顶部总数与徽章随之重新统计，表格按选定范围筛选。 |
+| **Team** —— 研发团队下拉 | 仅显示所选团队的工单。留空 = 所有团队。 |
+| **Status** —— A / B / C / D / 格式异常 / 未知 下拉 | 仅显示对应 AI 评判结果的工单。留空 = 所有状态。 |
+| **Search** —— 自由文本输入 | 模糊匹配工单摘要、经办人姓名、Issue Key。输入时实时刷新。 |
+
+### Ticket table / 工单表格
+
+Each row represents one JIRA ticket the platform has checked:
+
+每行表示一条已经过平台检查的 JIRA 工单：
+
+| Column | Meaning |
+|--------|---------|
+| **Status** | A / B / C / D verdict pill with color (green/yellow/orange/red), or `格式异常` / `未知` for off-taxonomy values. |
+| **Team** | Team code (top) + display name (bottom). |
+| **Key** | JIRA ticket key. Clicking the link opens the JIRA web UI in a new tab (without expanding the row). |
+| **Type** | Issue type (Story, Task, Bug, etc.). |
+| **Summary** | The ticket's summary text, truncated with ellipsis if long. Hover for the full text. |
+| **Assignee** | Display name of the ticket's current assignee. |
+| **Points** | Story points (numeric). |
+| **Time** | Timestamp of the most recent AI quality check. |
+
+| 列 | 含义 |
+|----|------|
+| **Status** | A / B / C / D 评判徽标（绿/黄/橙/红），或 `格式异常` / `未知` 表示非标准取值。 |
+| **Team** | 团队代号（上方）+ 显示名（下方）。 |
+| **Key** | JIRA Issue Key。点击链接在新标签打开 JIRA 网页（不展开行）。 |
+| **Type** | 工单类型（Story / Task / Bug 等）。 |
+| **Summary** | 工单摘要文本，过长时省略号截断。悬停查看完整文本。 |
+| **Assignee** | 工单当前经办人。 |
+| **Points** | 故事点（数字）。 |
+| **Time** | 最近一次 AI 质量检查的时间戳。 |
+
+**Click a row** to open the **AI Quality Check** modal, which shows the platform's full verdict reasoning for that ticket — including extracted sections, flagged issues, and the original LLM response.
+
+**点击行**打开 **AI Quality Check** 弹窗，展示该工单的完整评判依据 —— 包括提取的字段、标记的问题以及原始 LLM 回复。
+
+### Large datasets / 大数据集
+
+For periods with hundreds or thousands of tickets, the table uses virtual scrolling: only the rows currently visible in the viewport are mounted in the DOM. You can scroll, filter, and search through a 2000-row period without lag. The Period summary chips at the top always reflect the full period (not just the visible window).
+
+对于包含数百甚至数千条工单的周期，表格采用虚拟滚动 —— DOM 中仅渲染当前视窗内的行。即使在 2000 行数据中滚动、筛选、搜索也不会卡顿。顶部 Period 摘要徽章始终基于完整周期统计（而非当前可见窗口）。
+
+### When the period is empty / 空周期处理
+
+If no tickets fall in the selected period and filter combination, the panel shows a centered empty-state message. Try widening the period, clearing filters, or pressing Refresh if tickets should have arrived since you opened the page.
+
+如当前周期与筛选条件下无工单，面板中心显示空状态提示。可尝试扩大周期、清除筛选条件，或点击 Refresh（如自打开页面后应有新工单到达）。
+
+---
+
+## 24. Tips & Troubleshooting / 使用技巧与常见问题
 
 ### Tips for better results / 获得更好结果的技巧
 

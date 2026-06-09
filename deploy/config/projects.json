@@ -1,0 +1,14 @@
+[
+  { "name": "IDC_PDHW", "key": "HW", "teamName": "Hardware Team" },
+  { "name": "IDC_PDSW", "key": "DKKF", "teamName": "Software Dev Team" },
+  { "name": "IDC_PDSY", "key": "DKKG", "teamName": "System Team" },
+  { "name": "IDC_PDVV", "key": "DKKFT", "teamName": "V&V Team" },
+  { "name": "IDC_SWSS", "key": "SWSS", "teamName": "EPS Feature Team" },
+  { "name": "IDC_SWBS", "key": "SWBS", "teamName": "IBC Feature Team" },
+  { "name": "IDC_SWVV", "key": "SWVV", "teamName": "V&V Feature Team" },
+  { "name": "IDC_SWCD", "key": "SWCD", "teamName": "Com&Diag Team" },
+  { "name": "IDC_SWSU", "key": "SWSU", "teamName": "Suspension Feature Team" },
+  { "name": "IDC_PMVSS", "key": "PMVSS", "teamName": "Steering Testing and Validation" },
+  { "name": "IDC_PMVBS", "key": "PMVBS", "teamName": "Braking Testing and Validation" },
+  { "name": "IDC_PMVSU", "key": "PMVSU", "teamName": "Suspension Testing and Validation" }
+]

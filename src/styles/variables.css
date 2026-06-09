@@ -31,6 +31,15 @@
 
 :root,
 [data-theme="dark"] {
+  /* Tells the browser to use dark-mode chrome for native controls
+     (date picker indicator, scrollbars, select dropdowns, file pickers)
+     so they don't render dark-on-dark in our dark theme. */
+  color-scheme: dark;
+  /* Task-mode grid ratio (Coach left | Task form center). Defaults to
+     50/50; change either value here to tune the split — e.g. `2fr`/`3fr`
+     for a wider center. Any valid CSS grid track value works. */
+  --task-col-left: 60%;
+  --task-col-center: 40%;
   /* Warm dark palette inspired by Claude.ai dark theme */
   --bg-primary: #252523;       /* main page bg — warm near-black (Claude bg-100) */
   --bg-secondary: #2F2E2B;     /* panels, cards — warm elevated (Claude bg-000) */
@@ -69,9 +78,21 @@
 
   --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  /* Serif reading face for coach/assistant prose — mirrors Claude.ai's
+     "Anthropic Serif" fallback chain (proprietary first entry dropped). Keeps
+     the full CJK fallback list so Chinese coach replies render cleanly. */
+  --font-serif: Georgia, 'Noto Serif', 'Times New Roman', Times, 'Hiragino Sans', 'Yu Gothic', Meiryo, 'Noto Sans CJK JP', 'PingFang TC', 'Microsoft JhengHei', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Apple SD Gothic Neo', 'Malgun Gothic', serif;
+  /* Centered reading-column width for Explore-mode conversation + composer.
+     48rem (768px) matches Claude.ai's prose column exactly (Tailwind max-w-3xl).
+     Tuned for English measure (~70–90 Latin chars/line); for Chinese this is
+     ~48 full-width Hanzi/line, which is acceptable for a bilingual column. */
+  --explore-read-width: 48rem;
 }
 
 [data-theme="light"] {
+  /* Light-mode chrome for native controls — paired with [data-theme="dark"]
+     above so the browser tracks the page's theme. */
+  color-scheme: light;
   /* Warm cream/beige palette inspired by Claude.ai light theme */
   --bg-primary: #FAF9F6;       /* warm white */
   --bg-secondary: #F3F1EC;     /* warm off-white */

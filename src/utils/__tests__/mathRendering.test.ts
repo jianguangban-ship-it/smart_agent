@@ -440,6 +440,18 @@ $$`
       expect(html).toContain('42')
     })
 
+    it('wraps tables in a horizontal-scroll container', () => {
+      const input = `| Name | Value |
+|------|-------|
+| foo  | 42    |`
+      const html = renderMarkdown(input)
+      expect(html).toContain('class="table-scroll"')
+      expect(html).toContain('<table')
+      expect(html).toContain('<td')
+      // Exactly one wrapper per table (open/close balanced)
+      expect((html.match(/class="table-scroll"/g) || []).length).toBe(1)
+    })
+
     it('handles pipe in display math outside tables', () => {
       const input = `$$|x| + |y| = |x + y|$$`
       const html = renderMarkdown(input)
@@ -722,8 +734,11 @@ class LateralEstimator:
       expect(html).toContain('<pre>')
       expect(html).toContain('LateralEstimator')
       expect(html).toContain('整车质量')
-      // Code block content should not be math-rendered
-      expect(html).toContain('self.m = m')
+      // Code block content should not be math-rendered. Syntax highlighting wraps
+      // `self` in a token span, but the `.m = m` assignment stays literal text —
+      // if the `m`s had been turned into KaTeX, this contiguous string would be
+      // broken up by katex markup.
+      expect(html).toContain('.m = m')
     })
 
     it('handles mixed English/Chinese with math in same paragraph', () => {
@@ -817,6 +832,67 @@ $$c_{ij} = \\sum_{k=1}^{n} a_{ik} \\cdot b_{kj}$$`
       expect(noAnnot).not.toContain('$\\mathbf')
       expect(noAnnot).not.toContain('\\left[')
       expect(noAnnot).not.toContain('\\right]')
+    })
+  })
+  describe('Bare / un-delimited LaTeX (model ignored the $ instruction)', () => {
+    // Helper: KaTeX keeps the source in <annotation>; strip that to assert the
+    // raw LaTeX isn't leaking as visible text.
+    const stripKatex = (html: string) =>
+      html
+        .replace(/<span class="katex-mathml">[\s\S]*?<\/span><span class="katex-html"/g, '<span class="katex-html"')
+        .replace(/<annotation[\s\S]*?<\/annotation>/g, '')
+
+    it('renders the exact reported MPC cost function (bare, double-escaped)', () => {
+      const input = 'J = \\sum_{i=1}^{N} \\left\\vert i(k+i\\vert k) - i^*(k+i) \\right\\vert _Q^2 + \\sum_{i=0}^{N-1} \\left\\vert u(k+i\\vert k) \\right\\vert _R^2'
+      const html = renderMarkdown(input)
+      expect(html).toContain('katex')
+      const visible = stripKatex(html)
+      expect(visible).not.toContain('\\sum')
+      expect(visible).not.toContain('\\vert')
+      expect(visible).not.toContain('\\left')
+    })
+
+    it('wraps a bare equation line with \\frac', () => {
+      const html = renderMarkdown('a_y = \\frac{F_{yf} + F_{yr}}{m}')
+      expect(html).toContain('katex')
+      expect(stripKatex(html)).not.toContain('\\frac')
+    })
+
+    it('repairs double-escaped commands on a bare line', () => {
+      const html = renderMarkdown('S = \\\\sum_{i}^{N} \\\\frac{a}{b}')
+      expect(html).toContain('katex')
+      expect(stripKatex(html)).not.toContain('\\frac')
+    })
+
+    // ── Guard cases: these must NOT be wrapped/mangled ──────────────────────
+    it('does NOT wrap a prose line that merely mentions one \\frac', () => {
+      const html = renderMarkdown('The fraction \\frac{a}{b} represents the ratio of a to b here.')
+      expect(html).not.toContain('katex')
+    })
+
+    it('does NOT wrap a Windows path', () => {
+      const html = renderMarkdown('Open C:\\Users\\name\\file.txt to continue.')
+      expect(html).not.toContain('katex')
+    })
+
+    it('does NOT break a GFM table row', () => {
+      const input = `| Symbol | Meaning |
+|--------|---------|
+| \\alpha | angle |`
+      const html = renderMarkdown(input)
+      expect(html).toContain('<table')
+    })
+
+    it('does NOT wrap LaTeX-looking content inside a code fence', () => {
+      const input = '```\nJ = \\sum_{i=1}^{N} x_i\n```'
+      const html = renderMarkdown(input)
+      expect(html).toContain('<pre>')
+      expect(html).not.toContain('katex')
+    })
+
+    it('does NOT wrap a Chinese prose line ending in a command', () => {
+      const html = renderMarkdown('请参考求和符号 \\sum 的定义说明。')
+      expect(html).not.toContain('katex')
     })
   })
 })

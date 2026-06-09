@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
-import type { LLMRequestBody, LLMStreamChunk, LLMChatMessage, WebhookPayload, ChatMessage } from '@/types/api'
-import { getProviderUrl, getApiKey, getModel } from '@/config/llm'
+import type { LLMRequestBody, LLMStreamChunk, LLMChatMessage, LLMContentPart, WebhookPayload, ChatMessage, ToolEvent, SmartAgentEvent } from '@/types/api'
+import { getProviderUrl, getApiKey, getTaskModel, getExploreModel, isVisionModel } from '@/config/llm'
 import { ICONS } from '@/config/icons'
 import { getCoachSkillTaskRaw, getAnalyzeSkill, getResponseFormat } from '@/config/skills/index'
 import { SKILL_REGISTRY } from '@/config/skills/registry'
@@ -13,7 +13,8 @@ import { useReviewHistory } from '@/composables/useReviewHistory'
 import type { TaskLevel } from '@/config/domain/traceability.task'
 import { useI18n } from '@/i18n'
 import { addRecord, setSessionId } from '@/composables/useCoachHistory'
-import type { CoachHistoryRecord, CoachChannel } from '@/types/api'
+import { inlineAttachments, buildMultimodalContent, stripImageContent } from '@/composables/useAttachment'
+import type { CoachHistoryRecord, CoachChannel, Attachment } from '@/types/api'
 
 // Hoisted function (no TDZ) so the localStorage key is reachable from
 // getCoachSkillRef() even when called during the circular-import cycle below.
@@ -69,10 +70,52 @@ const MAX_429_RETRIES = 3
 interface StreamFlowOptions {
   getSystemPrompt: (lang: 'en' | 'zh', payload: WebhookPayload) => string
   getUserMessage: (payload: WebhookPayload, isZh: boolean) => string
+  /** Composer files for this turn (Explore). Kept off the displayed message; re-inlined into apiMessages. */
+  getAttachments?: (payload: WebhookPayload) => Attachment[]
+  /** When true (Explore), image attachments are sent as multi-modal content parts. */
+  multimodal?: boolean
   onBeforeRequest?: (currentResponse: unknown) => void
   /** When true, uses chat message array model instead of single response */
   chatMode?: boolean
   channel?: CoachChannel  // 'task' | 'explore'
+}
+
+/**
+ * L3 (v10.134): merge an incoming SmartAgentEvent into an assistant message's
+ * toolEvents array. tool_call appends a new 'requested' event; tool_result
+ * matches the most-recent 'requested' event by tool name and flips its
+ * status to 'received' + fills in the content preview. Orphan tool_results
+ * (no matching prior call — shouldn't happen but be defensive) get pushed
+ * as standalone 'received' entries.
+ */
+function applyToolEvent(events: ToolEvent[], event: SmartAgentEvent, now: number): void {
+  if (event.kind === 'tool_call') {
+    events.push({
+      id: nextMsgId(),
+      tool: event.tool,
+      args: event.args,
+      status: 'requested',
+      timestamp: now
+    })
+    return
+  }
+  // event.kind === 'tool_result'
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].tool === event.tool && events[i].status === 'requested') {
+      events[i].status = 'received'
+      events[i].contentLen = event.contentLen
+      events[i].contentPreview = event.preview
+      return
+    }
+  }
+  events.push({
+    id: nextMsgId(),
+    tool: event.tool,
+    contentLen: event.contentLen,
+    contentPreview: event.preview,
+    status: 'received',
+    timestamp: now
+  })
 }
 
 function createStreamFlow(
@@ -80,7 +123,8 @@ function createStreamFlow(
   callStream: (
     messages: LLMChatMessage[],
     onChunk: (text: string) => void,
-    signal: AbortSignal
+    signal: AbortSignal,
+    onToolEvent?: (event: SmartAgentEvent) => void
   ) => Promise<void>,
   t: (key: string) => string,
   isZh: { value: boolean }
@@ -120,6 +164,10 @@ function createStreamFlow(
     const lang: 'en' | 'zh' = isZh.value ? 'zh' : 'en'
     const systemPrompt = opts.getSystemPrompt(lang, payload)
     const userMessage = opts.getUserMessage(payload, isZh.value)
+    // Composer files for this turn. Kept OFF the displayed/persisted `content`
+    // (so the bubble renders file cards, not inlined text) and re-inlined into
+    // the API payload below. Empty for non-Explore flows.
+    const attachments = opts.getAttachments?.(payload) ?? []
 
     if (opts.chatMode) {
       // Chat mode: push user message, then stream assistant reply
@@ -128,11 +176,15 @@ function createStreamFlow(
           id: nextMsgId(),
           role: 'user',
           content: userMessage,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          ...(attachments.length > 0 ? { attachments } : {})
         })
         // Save user message to global coach history
         if (opts.chatMode) {
-          const record = addRecord('user', userMessage, opts.channel ?? 'task')
+          // Persist with image base64 stripped (session-only) to avoid bloating
+          // localStorage; the in-memory message keeps the full data URL for the
+          // live thumbnail + this turn's send.
+          const record = addRecord('user', userMessage, opts.channel ?? 'task', undefined, stripImageContent(attachments))
           messages.value[messages.value.length - 1].hashId = record.id
         }
       }
@@ -167,17 +219,36 @@ function createStreamFlow(
       }
 
       if (opts.chatMode) {
-        // Send full conversation history (excluding the current empty assistant placeholder)
-        for (const msg of messages.value) {
-          if (msg === messages.value[messages.value.length - 1]) break // skip the empty assistant placeholder
-          apiMessages.push({ role: msg.role, content: msg.content })
+        // Build a CLEAN history for the upstream request:
+        //  • skip empty turns (e.g. failed/cancelled assistant placeholders) —
+        //    proxies reject a request containing empty assistant messages, which
+        //    silently dropped every Explore turn once one failed.
+        //  • image (image_url) parts are sent ONLY for the current turn AND only
+        //    to a vision model; history messages and text models get a
+        //    `[Image: name]` placeholder (never base64), so stale images aren't
+        //    re-shipped and text models never receive image content.
+        const lastIdx = messages.value.length - 1            // empty assistant placeholder
+        const curUserIdx = lastIdx - 1                        // the turn being sent
+        const visionOk = !!opts.multimodal && isVisionModel(getExploreModel())
+        for (let i = 0; i < messages.value.length; i++) {
+          const msg = messages.value[i]
+          if (i === lastIdx) break // skip the current empty assistant placeholder
+          if (!msg.content?.trim() && !msg.attachments?.length) continue // drop empty/failed turns
+          let content: string | LLMContentPart[] = msg.content
+          if (msg.attachments?.length) {
+            content = (visionOk && i === curUserIdx)
+              ? buildMultimodalContent(msg.content, msg.attachments)
+              : inlineAttachments(msg.content, msg.attachments)
+          }
+          apiMessages.push({ role: msg.role, content })
         }
       } else {
         apiMessages.push({ role: 'user', content: userMessage })
       }
 
       await callStream(apiMessages, (chunk) => {
-        if (tokenCount === 0) streamStart = Date.now()
+        const firstToken = tokenCount === 0
+        if (firstToken) streamStart = Date.now()
         tokenCount++
         accumulated += chunk
 
@@ -186,6 +257,10 @@ function createStreamFlow(
           const lastMsg = messages.value[messages.value.length - 1]
           if (lastMsg && lastMsg.role === 'assistant') {
             lastMsg.content = accumulated
+            // Time-to-first-token for the "Thought for Xs" header. The assistant
+            // placeholder's timestamp is the request-start moment, so the wait
+            // before the first chunk landed is streamStart − timestamp.
+            if (firstToken) lastMsg.firstTokenMs = streamStart - lastMsg.timestamp
           }
           // Also update response ref for backward compat
           response.value = { markdown_msg: accumulated, message: accumulated }
@@ -195,16 +270,29 @@ function createStreamFlow(
 
         const elapsed = (Date.now() - streamStart) / 1000
         if (elapsed > 0) streamSpeed.value = Math.round(tokenCount / elapsed)
-      }, _ac.signal)
+      }, _ac.signal, (event) => {
+        // L3 (v10.134): tool-event arrived from the brokered stream. Only
+        // chat-mode flows have a parent assistant message to anchor it to;
+        // analyze and direct-path flows pass this callback through but
+        // their callStream impls never invoke it (no MCP on those paths).
+        if (!opts.chatMode) return
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (!lastMsg || lastMsg.role !== 'assistant') return
+        if (!lastMsg.toolEvents) lastMsg.toolEvents = []
+        applyToolEvent(lastMsg.toolEvents, event, Date.now())
+      })
 
       // Mark streaming complete
       if (opts.chatMode) {
         const lastMsg = messages.value[messages.value.length - 1]
         if (lastMsg && lastMsg.role === 'assistant') {
           lastMsg.isStreaming = false
-          // Save completed coach response to global history
+          // Save completed coach response to global history. L3 (v10.134):
+          // Explore-mode messages that invoked MCP tools pass their toolEvents
+          // through so the chips survive page reload; Task-mode messages have
+          // no toolEvents so addRecord skips the field for those.
           if (lastMsg.content) {
-            const record = addRecord('assistant', lastMsg.content, opts.channel ?? 'task')
+            const record = addRecord('assistant', lastMsg.content, opts.channel ?? 'task', lastMsg.toolEvents)
             lastMsg.hashId = record.id
           }
         }
@@ -215,12 +303,13 @@ function createStreamFlow(
       if (error instanceof Error && error.name === 'AbortError') {
         wasCancelled.value = true
         streamSpeed.value = 0
-        // Mark streaming stopped on cancel
+        // Drop the empty assistant placeholder on cancel — leaving an
+        // `assistant:""` in history poisons every later request (proxies reject
+        // empty assistant messages). Keep it only if partial text streamed.
         if (opts.chatMode) {
           const lastMsg = messages.value[messages.value.length - 1]
-          if (lastMsg && lastMsg.role === 'assistant') {
-            lastMsg.isStreaming = false
-          }
+          if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) messages.value.pop()
+          else if (lastMsg && lastMsg.role === 'assistant') lastMsg.isStreaming = false
         }
         return 'cancelled'
       }
@@ -251,12 +340,13 @@ function createStreamFlow(
       }
       streamSpeed.value = 0
       hadError.value = true
-      // Mark streaming stopped on error
+      // Drop the empty assistant placeholder on error so a failed turn doesn't
+      // persist in history and get re-sent (empty assistant messages make the
+      // proxy reject — and drop — every subsequent request).
       if (opts.chatMode) {
         const lastMsg = messages.value[messages.value.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.isStreaming = false
-        }
+        if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) messages.value.pop()
+        else if (lastMsg && lastMsg.role === 'assistant') lastMsg.isStreaming = false
       }
       return error instanceof Error ? error.message : t('error.requestFailed')
     } finally {
@@ -279,6 +369,19 @@ function createStreamFlow(
     return request(_lastPayload)
   }
 
+  // Regenerate the reply for the CURRENT tail of `messages` without re-pushing a
+  // user turn. The caller is responsible for trimming `messages` so the last
+  // entry is the user message to answer; `_isAutoRetry=true` then rebuilds the
+  // API history from `messages` and streams a fresh assistant message. A fresh
+  // `payload` may be supplied so regenerate works even after a page reload (when
+  // `_lastPayload` is null) — its body is unused in auto-retry mode beyond
+  // system-prompt/multimodal config.
+  async function regenerate(payload?: WebhookPayload): Promise<string | null> {
+    const p = payload ?? _lastPayload
+    if (!p) return null
+    return request(p, true)
+  }
+
   function clear() {
     messages.value = []
     response.value = null
@@ -289,7 +392,7 @@ function createStreamFlow(
   }
 
   return { isLoading, response, messages, wasCancelled, hadError, streamSpeed, backoffSecs,
-           request, cancel, retry, clear, _config: opts }
+           request, cancel, retry, regenerate, clear, _config: opts }
 }
 
 // ─── Main composable ──────────────────────────────────────────────────────────
@@ -345,6 +448,14 @@ export function useLLM() {
       flow.messages.value.push({
         id: nextMsgId(), role: r.role, content: r.content,
         timestamp: r.timestamp, hashId: r.id,
+        // L3 (v10.134): restore persisted tool events so the chips reappear
+        // on page reload / history navigation. Empty/absent for non-Explore
+        // and pre-v10.134 records, which is fine — the chip block in
+        // ChatBubble.vue is v-if'd on toolEvents.length > 0.
+        ...(r.toolEvents && r.toolEvents.length > 0 ? { toolEvents: r.toolEvents } : {}),
+        // Restore attachments so the user-message file cards reappear on reload
+        // / history navigation. Absent for non-attachment and pre-v10.152 records.
+        ...(r.attachments && r.attachments.length > 0 ? { attachments: r.attachments } : {})
       })
     }
     if (records.length && records[0].sessionId) {
@@ -352,10 +463,17 @@ export function useLLM() {
     }
   }
 
+  /**
+   * Direct browser-to-provider call (v10.132 — restored from v10.130).
+   * Used by Task-mode coach and Analyze per the project rule that MCP /
+   * gateway work must not touch Task mode. Reads the user-configured
+   * Provider URL + API Key from localStorage (Settings panel).
+   */
   async function _callGLMStream(
     apiMessages: LLMChatMessage[],
     onChunk: (text: string) => void,
-    signal: AbortSignal
+    signal: AbortSignal,
+    _onToolEvent?: (event: SmartAgentEvent) => void  // ignored — direct path doesn't carry MCP
   ): Promise<void> {
     const apiKey = getApiKey()
     if (!apiKey) {
@@ -367,7 +485,7 @@ export function useLLM() {
     }
 
     const body: LLMRequestBody & { stream: true } = {
-      model: getModel(),
+      model: getTaskModel(),
       stream: true,
       messages: apiMessages
     }
@@ -429,6 +547,94 @@ export function useLLM() {
     }
   }
 
+  /**
+   * Brokered Fastify → GWM `llmproxy.gwm.cn` path (v10.131, Phase L1).
+   * Used by Explore mode only — this is where MCP plugs in later. The SPA
+   * no longer holds an API key or knows the provider URL on this path;
+   * `server/routes/llm.ts` owns those. Bytes on the wire are
+   * OpenAI-compatible SSE, so the consumer loop below is unchanged from
+   * the direct version.
+   */
+  async function _callBrokeredLLM(
+    apiMessages: LLMChatMessage[],
+    onChunk: (text: string) => void,
+    signal: AbortSignal,
+    onToolEvent?: (event: SmartAgentEvent) => void
+  ): Promise<void> {
+    const body: LLMRequestBody = {
+      model: getExploreModel(),
+      messages: apiMessages
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const internalToken = import.meta.env.VITE_INTERNAL_API_TOKEN
+    if (typeof internalToken === 'string' && internalToken.length > 0) {
+      headers['X-Internal-Token'] = internalToken
+    }
+
+    const response = await fetch('/api/llm/chat', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal
+    })
+
+    if (!response.ok) {
+      if (response.status === 401) throw new Error(t('error.glm401'))
+      if (response.status === 429) throw new GLM429Error(t('error.glm429'))
+      if (response.status >= 500) throw new Error(t('error.glm5xx'))
+      const errText = await response.text().catch(() => '')
+      throw new Error(`LLM proxy ${response.status}: ${errText || response.statusText}`)
+    }
+
+    if (!response.body) throw new Error('Response body is not readable')
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    try {
+      while (true) {
+        if (signal.aborted) break
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data: ')) continue
+          const data = trimmed.slice(6)
+          if (data === '[DONE]') return
+          // Guard ONLY the JSON.parse so a thrown upstream error below isn't
+          // swallowed as a "malformed line".
+          let chunk: LLMStreamChunk & { error?: { message?: string } }
+          try {
+            chunk = JSON.parse(data)
+          } catch {
+            continue // ignore malformed SSE lines
+          }
+          // The server emits upstream failures as `data: {"error":{...}}` once
+          // SSE headers are already sent. Surface them instead of ending silent.
+          if (chunk.error) throw new Error(chunk.error.message || t('error.glm5xx'))
+          const delta = chunk.choices?.[0]?.delta
+          if (!delta) continue
+          // L3 (v10.134): brokered stream carries tool-use lifecycle events
+          // alongside the OpenAI-compatible content deltas. They're in a
+          // namespaced field so unknown to vanilla OpenAI consumers.
+          if (delta.smart_agent_event && onToolEvent) {
+            onToolEvent(delta.smart_agent_event)
+          }
+          if (delta.content) onChunk(delta.content)
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+  }
+
   // ─── Coach flows (chat mode) — independent task & explore channels ─────────
 
   // Task channel — task-requirement coaching (skill + trace logic, unchanged).
@@ -462,12 +668,17 @@ export function useLLM() {
   }, _callGLMStream, t, isZh)
 
   // Explore channel — free chat on any topic (Response Format only).
+  // This is the ONE client surface that uses the brokered Fastify path; MCP
+  // and any future gateway-backed tool calls land here. Task and Analyze stay
+  // on the direct path (project rule: MCP must not touch Task mode).
   const exploreCoach = createStreamFlow({
     chatMode: true,
     channel: 'explore',
     getSystemPrompt: () => getResponseFormat(),
     getUserMessage: (payload) => payload.data.description || '',
-  }, _callGLMStream, t, isZh)
+    getAttachments: (payload) => payload.data.attachments ?? [],
+    multimodal: true,
+  }, _callBrokeredLLM, t, isZh)
 
   // Active-channel alias for read-only shared consumers (DevTools/TaskForm).
   const activeCoach = computed(() =>
@@ -524,6 +735,7 @@ export function useLLM() {
     requestExploreCoach: (p: WebhookPayload) => exploreCoach.request(p),
     cancelExploreCoach: exploreCoach.cancel,
     retryExploreCoach: exploreCoach.retry,
+    regenerateExploreCoach: exploreCoach.regenerate,
     clearExploreCoach: () => exploreCoach.clear(),
 
     // Per-channel restore from history

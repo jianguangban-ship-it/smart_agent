@@ -17,3 +17,8 @@ data/
 deploy/.env
 deploy/.env.*
 !deploy/.env.example
+# Exported LLM API settings — contain provider keys, must never be committed
+*-api-settings-*.json
+# Local tooling / crash dumps
+.antigravitycli/
+*.stackdump

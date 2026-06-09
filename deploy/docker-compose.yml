@@ -7,11 +7,18 @@ services:
     container_name: smart-agent
     ports:
       - "5181:5181"
+    env_file:
+      - .env
     environment:
-      # n8n authenticates writes with this key (spec §2.2). Set it in a sibling .env file.
+      # n8n authenticates writes with this key (spec §2.2).
       QUALITY_API_KEY: ${QUALITY_API_KEY:?QUALITY_API_KEY must be set in deploy/.env}
       PORT: "5181"
       QUALITY_DB_PATH: /app/data/quality.db
+      # LLM proxy (GWM internal). env_file injects deploy/.env into the container;
+      # these provide explicit defaults at interpolation time. EXPLORE_DISABLE_MCP and
+      # INTERNAL_API_TOKEN, when set in deploy/.env, are injected via env_file above.
+      LLMPROXY_API_KEY: ${LLMPROXY_API_KEY:-}
+      LLMPROXY_BASE_URL: ${LLMPROXY_BASE_URL:-https://llmproxy.gwm.cn/v1}
     volumes:
       # Editable runtime configs (projects, team-members, etc.) override the baked-in defaults.
       - /usr/local/smart_agent/data:/app/dist/config

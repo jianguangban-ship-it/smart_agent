@@ -54,6 +54,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from '@/i18n'
 import { useToast } from '@/composables/useToast'
+import { copyText } from '@/utils/clipboard'
 import {
   currentSprint,
   dayOfSprint,
@@ -114,12 +115,9 @@ function pad2(n: number): string {
 
 async function copyCadence() {
   if (!cadenceString.value) return
-  try {
-    await navigator.clipboard.writeText(cadenceString.value)
-    addToast('success', t('toast.copied'))
-  } catch {
-    // Silent — clipboard API blocked. Popover stays open so user can copy manually.
-  }
+  const ok = await copyText(cadenceString.value)
+  if (ok) addToast('success', t('toast.copied'))
+  else addToast('error', t('toast.copyFailed'))
 }
 </script>
 

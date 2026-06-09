@@ -1,26 +1,17 @@
 <template>
   <section class="quality-panel" :aria-label="t('view.title')">
-    <header class="panel-header">
-      <div class="panel-title">
-        <h2>{{ t('view.title') }}</h2>
-        <p class="panel-subtitle">{{ t('view.subtitle') }}</p>
-      </div>
-      <div class="panel-actions">
-        <span class="count-label">
-          {{ tickets.length === filteredTickets.length
-              ? t('view.countLabel').replace('{n}', String(tickets.length))
-              : t('view.countFiltered')
-                  .replace('{filtered}', String(filteredTickets.length))
-                  .replace('{total}', String(tickets.length)) }}
-        </span>
-        <button class="btn" :disabled="loading" @click="refresh">
-          <span v-if="loading">{{ t('view.refreshing') }}</span>
-          <span v-else>{{ t('view.refresh') }}</span>
-        </button>
-      </div>
-    </header>
-
-    <QualitySummaryBar :summary="summary" />
+    <!-- v10.136: panel-header (title + subtitle) removed per UX request.
+         The section still carries an aria-label using view.title so screen
+         readers continue to announce the panel; the visible title block is
+         gone. The PERIOD QUALITY summary row is now the first thing inside
+         the panel, sitting directly under the app header. -->
+    <QualitySummaryBar
+      :summary="summary"
+      :filtered-count="filteredTickets.length"
+      :total-count="tickets.length"
+      :loading="loading"
+      @refresh="refresh"
+    />
 
     <div class="filter-bar">
       <PeriodSelector />
@@ -74,28 +65,41 @@
         <div class="empty-title">{{ t('view.empty') }}</div>
       </div>
 
-      <table v-else class="grid-table">
-        <thead>
-          <tr>
-            <th>{{ t('view.colStatus') }}</th>
-            <th>{{ t('view.colTeam') }}</th>
-            <th>{{ t('view.colKey') }}</th>
-            <th>{{ t('view.colType') }}</th>
-            <th>{{ t('view.colSummary') }}</th>
-            <th>{{ t('view.colAssignee') }}</th>
-            <th>{{ t('view.colPoints') }}</th>
-            <th>{{ t('view.colTime') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <QualityRow
-            v-for="t in filteredTickets"
-            :key="t.issueKey"
-            :ticket="t"
-            @expand="openTicket"
-          />
-        </tbody>
-      </table>
+      <div v-else class="grid" role="table" :aria-rowcount="filteredTickets.length + 1">
+        <!-- Sticky header row — kept as a real grid row above the virtualized
+             body so its layout matches the row template byte-for-byte. -->
+        <div class="grid-header" role="row">
+          <div class="grid-th" role="columnheader">{{ t('view.colStatus') }}</div>
+          <div class="grid-th" role="columnheader">{{ t('view.colTeam') }}</div>
+          <div class="grid-th" role="columnheader">{{ t('view.colKey') }}</div>
+          <div class="grid-th" role="columnheader">{{ t('view.colType') }}</div>
+          <div class="grid-th grid-th--summary" role="columnheader">{{ t('view.colSummary') }}</div>
+          <div class="grid-th" role="columnheader">{{ t('view.colAssignee') }}</div>
+          <div class="grid-th" role="columnheader">{{ t('view.colPoints') }}</div>
+          <div class="grid-th" role="columnheader">{{ t('view.colTime') }}</div>
+        </div>
+
+        <!-- v10.135: virtualized body. DynamicScroller only mounts the rows
+             whose computed scroll position is inside the viewport + buffer,
+             keeping DOM mount count constant regardless of dataset size. -->
+        <DynamicScroller
+          class="grid-body"
+          :items="filteredTickets"
+          :min-item-size="42"
+          key-field="issueKey"
+        >
+          <template #default="{ item, index, active }">
+            <DynamicScrollerItem
+              :item="item"
+              :active="active"
+              :data-index="index"
+              :size-dependencies="[item.summary]"
+            >
+              <QualityRow :ticket="item" @expand="openTicket" />
+            </DynamicScrollerItem>
+          </template>
+        </DynamicScroller>
+      </div>
     </div>
 
     <AgentCheckModal :ticket="selectedTicket" @close="selectedTicket = null" />
@@ -111,6 +115,7 @@ import AgentCheckModal from './AgentCheckModal.vue'
 import PeriodSelector from './PeriodSelector.vue'
 import QualitySummaryBar from './QualitySummaryBar.vue'
 import TrendMatrix from './TrendMatrix.vue'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import type { QualityTicket } from '@/types/quality'
 
 const { t } = useI18n()
@@ -147,48 +152,9 @@ function openTicket(ticket: QualityTicket) {
   min-height: calc(100vh - 200px);
 }
 
-.panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-tertiary);
-}
-.panel-title h2 {
-  margin: 0;
-  font-size: var(--font-xl);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.panel-subtitle {
-  margin: var(--space-1) 0 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-.panel-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-.count-label {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-.btn {
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  background-color: var(--accent-blue);
-  color: white;
-  font-size: var(--font-base);
-  font-weight: 500;
-  border: none;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.btn:hover:not(:disabled) { opacity: 0.9; }
-.btn:disabled { opacity: 0.5; cursor: wait; }
+/* v10.136: .panel-header / .panel-title / .panel-subtitle CSS removed
+   along with the markup. The section now opens directly with the
+   QualitySummaryBar row. */
 
 .filter-bar {
   display: flex;
@@ -232,27 +198,47 @@ function openTicket(ticket: QualityTicket) {
 
 .table-wrap {
   flex: 1;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;          /* DynamicScroller owns its own scrollbar */
   padding: 0 var(--space-5) var(--space-5);
+  min-height: 0;             /* let the inner DynamicScroller flex to fill */
 }
-.grid-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
+/* v10.135: switched from <table>/<tbody> to a div-based grid so the body
+   can be virtualized. The header is a single grid row above the
+   DynamicScroller; both share the same `grid-template-columns` track so
+   they line up visually. */
+.grid {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
-.grid-table thead th {
+.grid-header {
+  display: grid;
+  grid-template-columns: 200px 200px 200px 200px 1fr 200px 200px 200px;
+  background-color: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-color);
   position: sticky;
   top: 0;
-  background-color: var(--bg-tertiary);
-  text-align: left;
+  z-index: 1;
+}
+.grid-th {
   padding: var(--space-2) var(--space-3);
-  border-bottom: 2px solid var(--border-color);
   font-size: var(--font-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-muted);
-  z-index: 1;
+  text-align: center;
+}
+.grid-th--summary {
+  text-align: left;
+}
+.grid-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .state-error,

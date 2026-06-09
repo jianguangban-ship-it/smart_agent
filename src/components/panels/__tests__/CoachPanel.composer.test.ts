@@ -19,6 +19,12 @@ const ChatBubbleStub = { template: '<div class="bubble" />', props: ['message', 
 const HistoryStub = { template: '<div class="hist" />', props: ['channel'], emits: ['replay', 'continue-session'] }
 const QuickChipStub = { template: '<button class="qchip" />', props: ['icon', 'label'] }
 const GlobeStub = { template: '<div />', props: ['dimmed'] }
+// Mark the popout's "open" prop on a real DOM node so we can assert it from outside.
+const PopoutStub = {
+  template: '<div class="popout-stub" :data-open="String(open)" />',
+  props: ['open', 'modelValue'],
+  emits: ['update:open', 'update:modelValue', 'submit'],
+}
 
 function mountPanel(props: Record<string, unknown> = {}) {
   return mount(CoachPanel, {
@@ -40,6 +46,7 @@ function mountPanel(props: Record<string, unknown> = {}) {
         CoachHistoryTab: HistoryStub,
         QuickChip: QuickChipStub,
         AsciiGlobe: GlobeStub,
+        ComposerPopout: PopoutStub,
       },
     },
   })
@@ -79,6 +86,22 @@ describe('CoachPanel — pinned Task composer', () => {
     expect(loading.find('.coach-stop').exists()).toBe(false)
   })
 
+  it('emitting expand from the composer opens the floating popout window', async () => {
+    appMode.value = 'task'
+    const wrapper = mountPanel({ messages: [] })
+    // Stub renders the popout with data-open="false" initially in Task mode.
+    let stub = wrapper.find('.popout-stub')
+    expect(stub.exists()).toBe(true)
+    expect(stub.attributes('data-open')).toBe('false')
+
+    // Fire `expand` from the DescriptionEditor (composer variant).
+    const composer = wrapper.findComponent(DescriptionEditor)
+    composer.vm.$emit('expand')
+    await wrapper.vm.$nextTick()
+    stub = wrapper.find('.popout-stub')
+    expect(stub.attributes('data-open')).toBe('true')
+  })
+
   it('composer is Task + chat-tab only (hidden in Explore mode and on History tab)', async () => {
     const wrapper = mountPanel()
     // The DescriptionEditor (composer variant) IS the footer now.
@@ -105,7 +128,7 @@ describe('CoachPanel — Analysis tab', () => {
         canCoachSubmit: true, description: '', ...props,
       },
       slots: { analysis: '<div class="analysis-slot">ANALYSIS</div>' },
-      global: { stubs: { ChatBubble: ChatBubbleStub, CoachHistoryTab: HistoryStub, QuickChip: QuickChipStub, AsciiGlobe: GlobeStub } },
+      global: { stubs: { ChatBubble: ChatBubbleStub, CoachHistoryTab: HistoryStub, QuickChip: QuickChipStub, AsciiGlobe: GlobeStub, ComposerPopout: PopoutStub } },
     })
 
   it('shows a task-only Analysis tab that renders the #analysis slot', async () => {

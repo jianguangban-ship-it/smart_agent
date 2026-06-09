@@ -15,7 +15,7 @@
       <!-- L1 -->
       <div class="config-row">
         <span class="config-label">{{ t('dev.model') }}:</span>
-        <code class="config-url">{{ currentModel }}</code>
+        <code class="config-url">{{ taskModel }}</code>
       </div>
       <!-- R1 -->
       <div class="config-row">
@@ -112,7 +112,7 @@
 import { computed } from 'vue'
 import { useI18n } from '@/i18n'
 import { ICONS } from '@/config/icons'
-import { currentModel } from '@/config/llm'
+import { taskModel } from '@/config/llm'
 import { currentRoleDefinition } from '@/composables/useRole'
 import { activeSkill } from '@/composables/useLLM'
 import { activeTaskSkillName, activeTaskSkillFile, coachSkillTaskModified, analyzeSkillModified } from '@/config/skills'

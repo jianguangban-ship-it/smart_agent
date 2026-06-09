@@ -8,16 +8,33 @@
       {{ appMode === 'explore' ? t('form.exploreDescription') : t('form.taskDescription') }}
       <span class="required-tag">* {{ t('form.required') }}</span>
     </h2>
-    <textarea
-      ref="textareaRef"
-      v-model="model"
-      class="input-base desc-textarea"
-      :class="{ 'desc-textarea--composer': variant === 'composer' }"
-      :placeholder="appMode === 'explore' ? t('form.exploreDescriptionPlaceholder') : t('form.taskDescriptionPlaceholder')"
-      @focus="emit('focus')"
-      @blur="emit('blur')"
-      @keydown="onKeydown"
-    ></textarea>
+    <div :class="{ 'composer-wrap': variant === 'composer' }">
+      <textarea
+        ref="textareaRef"
+        v-model="model"
+        class="input-base desc-textarea"
+        :class="{ 'desc-textarea--composer': variant === 'composer' }"
+        :placeholder="appMode === 'explore' ? t('form.exploreDescriptionPlaceholder') : t('form.taskDescriptionPlaceholder')"
+        @focus="emit('focus')"
+        @blur="emit('blur')"
+        @keydown="onKeydown"
+      ></textarea>
+      <button
+        v-if="variant === 'composer'"
+        type="button"
+        class="composer-expand-btn"
+        :title="t('coach.composerExpand')"
+        :aria-label="t('coach.composerExpand')"
+        @click="emit('expand')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 3 21 3 21 9"/>
+          <polyline points="9 21 3 21 3 15"/>
+          <line x1="21" y1="3" x2="14" y2="10"/>
+          <line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
+      </button>
+    </div>
     <!-- v10.126: the desc-footer (attach button, attach chip, word/sentence
          counter, hidden file input) is intentionally hidden in the composer
          variant — the pinned coach composer is a chat-style input and the
@@ -36,20 +53,21 @@
           </svg>
           <span class="attach-label">.md</span>
         </button>
-        <Transition name="chip-fade">
-          <span v-if="hasAttachment && attachedFile" class="attach-chip">
+        <TransitionGroup v-if="hasAttachment" name="chip-fade" tag="div" class="attach-chip-row">
+          <span v-for="f in attachedFiles" :key="f.name" class="attach-chip">
             <svg class="attach-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
             </svg>
-            {{ attachedFile.name }}
-            <button class="attach-remove" @click="detach" :title="t('form.removeAttachment')">×</button>
+            <span class="attach-chip-name" :title="f.name">{{ f.name }}</span>
+            <button class="attach-remove" @click="detach(f.name)" :title="t('form.removeAttachment')">×</button>
           </span>
-        </Transition>
+        </TransitionGroup>
       </div>
       <span class="desc-counter">{{ wordCount }} {{ t('form.descWords') }} · {{ sentenceCount }} {{ t('form.descSentences') }}</span>
       <input
         ref="fileInputRef"
         type="file"
+        multiple
         accept=".md,.markdown,.txt"
         class="hidden-file-input"
         @change="handleFileSelect"
@@ -70,10 +88,10 @@ const props = withDefaults(defineProps<{
   variant?: 'form' | 'composer'
 }>(), { variant: 'form' })
 
-const emit = defineEmits<{ focus: [], blur: [], submit: [] }>()
+const emit = defineEmits<{ focus: [], blur: [], submit: [], expand: [] }>()
 const model = defineModel<string>({ required: true })
 const { t } = useI18n()
-const { attachedFile, attach, detach, hasAttachment } = useAttachment()
+const { attachedFiles, attach, detach, hasAttachment } = useAttachment()
 
 const textareaRef = ref<HTMLTextAreaElement>()
 const fileInputRef = ref<HTMLInputElement>()
@@ -84,9 +102,11 @@ function openFilePicker() {
 
 async function handleFileSelect(e: Event) {
   const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  await attach(file)
+  const files = input.files
+  if (!files || files.length === 0) return
+  for (const file of Array.from(files)) {
+    await attach(file)
+  }
   // Reset so the same file can be re-selected
   input.value = ''
 }
@@ -159,6 +179,42 @@ const sentenceCount = computed(() =>
   min-height: 44px;
   max-height: 200px;
   overflow-y: auto;
+  padding-right: 30px;
+}
+
+/* Composer wrap: hosts the textarea + the absolutely-positioned expand button
+   so the button hugs the top-right corner of the textarea without affecting
+   the form variant. */
+.composer-wrap {
+  position: relative;
+  width: 100%;
+}
+.composer-expand-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.composer-expand-btn:hover {
+  opacity: 1;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.composer-expand-btn svg {
+  width: 13px;
+  height: 13px;
 }
 .desc-footer {
   display: flex;
@@ -211,6 +267,13 @@ const sentenceCount = computed(() =>
   font-weight: 600;
 }
 
+/* Multi-file chip row: wraps as files accumulate. */
+.attach-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
 /* Attached file chip */
 .attach-chip {
   display: inline-flex;
@@ -224,6 +287,11 @@ const sentenceCount = computed(() =>
   font-size: 11px;
   font-family: var(--font-mono);
   max-width: 200px;
+}
+/* Only the filename truncates — the icon and × stay pinned and clickable. */
+.attach-chip-name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

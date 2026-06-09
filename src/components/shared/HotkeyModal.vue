@@ -40,7 +40,7 @@ watch(() => props.modelValue, (open) => {
 })
 
 const hotkeys = computed(() => [
-  { key: 'Ctrl+Enter',       desc: t('hotkeys.coach') },
+  { key: 'Enter',            desc: t('hotkeys.coach') },
   { key: 'Ctrl+Shift+Enter', desc: t('hotkeys.analyze') },
   { key: 'Ctrl+Shift+C',     desc: t('hotkeys.create') },
   { key: 'Ctrl+,',           desc: t('hotkeys.settings') },

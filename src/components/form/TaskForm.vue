@@ -81,7 +81,7 @@
           v-if="!isCoachLoading"
           class="action-btn action-coach"
           :disabled="!canCoachSubmit"
-          :title="t('coach.requestBtnTask') + ' (Ctrl+Enter)'"
+          :title="t('coach.requestBtnTask') + ' (Enter)'"
           @click="$emit('coach')"
         >
           <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

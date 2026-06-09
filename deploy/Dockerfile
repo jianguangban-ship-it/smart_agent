@@ -7,8 +7,11 @@
 # ─── Stage 1: SPA build ───────────────────────────────────────────────────────
 FROM node:20-bookworm-slim AS spa-builder
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json ./
+# Skip native module builds - SPA doesn't need better-sqlite3 (only server uses it)
+# Use GWM internal nexus registry (no lockfile - resolve fresh to pick up Nexus-available versions)
+RUN npm config set registry http://nexus.gwm.cn/repository/npm-group/ \
+    && npm install --ignore-scripts
 COPY tsconfig.json vite.config.ts index.html env.d.ts ./
 COPY src/ ./src/
 COPY public/ ./public/
@@ -19,17 +22,23 @@ FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 
 # better-sqlite3 needs build tools at install time; remove afterwards to keep image lean
-RUN apt-get update \
+# Use China mirror (aliyun) to bypass corporate firewall blocking deb.debian.org
+RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json* ./
+COPY package.json ./
 ENV NODE_ENV=production
-RUN npm ci --omit=dev \
+# Use GWM internal nexus registry + node-gyp headers mirror (no lockfile - resolve fresh)
+# NODEJS_ORG_MIRROR tells node-gyp where to fetch Node.js headers (better-sqlite3 compilation)
+RUN npm config set registry http://nexus.gwm.cn/repository/npm-group/ \
+    && NODEJS_ORG_MIRROR=https://npmmirror.com/mirrors/node npm install --omit=dev \
     && apt-get purge -y --auto-remove python3 make g++
 
-# Copy server source + migrations + built SPA
+# Copy server source + migrations + built SPA + MCP config
 COPY server/ ./server/
+COPY deploy/mcp-servers.json ./deploy/mcp-servers.json
 COPY --from=spa-builder /app/dist ./dist
 
 # SQLite DB lives in /app/data (mount a volume here in docker-compose)

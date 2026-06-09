@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "4e732ced": {
+      "transport": "http",
+      "url": "https://llmproxy.gwm.cn/mcp/4e732ced/streamablehttp?api_key=${LLMPROXY_API_KEY}"
+    }
+  }
+}
