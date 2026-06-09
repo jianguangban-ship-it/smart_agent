@@ -2,13 +2,14 @@
   <header class="app-header" :class="{ 'is-ai-busy': isAiBusy }">
     <div class="header-left">
       <div class="traffic-lights">
-        <span class="dot red"></span>
-        <span class="dot orange"></span>
-        <span class="dot blue"></span>
+        <span class="dot dot-e"></span>
+        <span class="dot dot-a"></span>
+        <span class="dot dot-x"></span>
       </div>
-      <h1 v-if="currentLang === 'en'" class="header-title"><span class="logo-a">A</span><span class="logo-g">G</span><span class="logo-ec">ec</span></h1>
-      <h1 v-else class="header-title">{{ t('header.title') }}</h1>
-      <span class="header-version">v10.130</span>
+      <h1 class="header-title brand-eax" aria-label="EAX">
+        <span class="brand-e">E</span><span class="brand-a">A</span><span class="brand-x">X</span>
+      </h1>
+      <span class="header-version">v10.179</span>
     </div>
     <div class="header-right">
       <!-- Cross-mode "reply ready" chip: a background-mode stream finished -->
@@ -194,17 +195,32 @@ function openHelp() {
   height: var(--space-3);
   border-radius: 50%;
 }
-.dot.red { background-color: #f85149; }
-.dot.orange { background-color: #d29922; }
-.dot.blue { background-color: #58a6ff; }
+/* Header dots echo the EAX letter colors (left→right: E purple, A blue, X cyan). */
+.dot-e { background-color: var(--accent-purple); }
+.dot-a { background-color: var(--accent-blue); }
+.dot-x { background-color: #22d3ee; }
 .header-title {
   font-size: var(--font-lg);
   font-weight: 700;
   letter-spacing: 0.5px;
 }
-.logo-a { color: #f85149; }
-.logo-g { color: #d29922; }
-.logo-ec { color: #58a6ff; }
+/* EAX brand wordmark — three per-letter brand colors (purple→blue→cyan) that the
+   header dots mirror. The X is the hero glyph: cyan, larger, heavier, glowing —
+   evoking the "infinite boundaries (X)" of the name. */
+.brand-eax {
+  display: inline-flex;
+  align-items: baseline;
+  letter-spacing: 2px;
+  font-weight: 800;
+}
+.brand-e { color: var(--accent-purple); filter: drop-shadow(0 0 6px rgba(155, 125, 245, 0.35)); }
+.brand-a { color: var(--accent-blue); filter: drop-shadow(0 0 6px rgba(88, 166, 255, 0.35)); }
+.brand-x {
+  color: #22d3ee;
+  font-size: 1.18em;
+  font-weight: 900;
+  filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.55));
+}
 .header-version {
   font-size: var(--font-base);
   color: var(--text-muted);

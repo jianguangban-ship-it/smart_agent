@@ -7,7 +7,7 @@
     max-height="2500px"
   >
     <template #header-actions>
-      <span class="mode-badge badge-llm" :title="currentModel">{{ currentModel }}</span>
+      <span class="mode-badge badge-llm" :title="taskModel">{{ taskModel }}</span>
       <button v-if="messages.length > 0 && !isLoading" class="copy-btn" @click="copyLastResponse" :title="t('toast.copied')" :aria-label="t('toast.copied')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="9" y="2" width="13" height="13" rx="2"/>
@@ -225,7 +225,7 @@ import { useToast } from '@/composables/useToast'
 import { copyText } from '@/utils/clipboard'
 import { activeSkill, ignoredSkillId } from '@/composables/useLLM'
 import { appMode } from '@/composables/useAppMode'
-import { currentModel } from '@/config/llm'
+import { taskModel } from '@/config/llm'
 import AsciiGlobe from '@/components/effects/AsciiGlobe.vue'
 import PanelShell from '@/components/layout/PanelShell.vue'
 import QuickChip from '@/components/shared/QuickChip.vue'

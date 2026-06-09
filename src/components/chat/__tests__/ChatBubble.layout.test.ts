@@ -24,10 +24,13 @@ describe('ChatBubble layout prop', () => {
     expect(wrapper.find('.msg-avatar-inline').exists()).toBe(false)
   })
 
-  it('stacked layout drops the side column and uses an inline avatar', () => {
+  it('stacked layout drops the avatar entirely and uses an sr-only role label', () => {
     const wrapper = mount(ChatBubble, { props: { message: userMsg, layout: 'stacked' } })
     expect(wrapper.find('.chat-msg.layout-stacked').exists()).toBe(true)
+    // Explore (stacked) goes pure-Claude: no avatar column, no inline avatar —
+    // alignment + bubble convey the speaker, and the role label is sr-only.
     expect(wrapper.find('.msg-avatar-col').exists()).toBe(false)
-    expect(wrapper.find('.msg-avatar-inline').exists()).toBe(true)
+    expect(wrapper.find('.msg-avatar-inline').exists()).toBe(false)
+    expect(wrapper.find('.msg-role-label.sr-only').exists()).toBe(true)
   })
 })

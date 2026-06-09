@@ -4,6 +4,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 import { ticketRoutes } from './routes/tickets.js'
+import { llmRoutes } from './routes/llm.js'
+import { initMCP } from './mcp/client.js'
 import { db } from './db.js'
 import type { TicketBody } from './schemas.js'
 
@@ -12,15 +14,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT ?? 8080)
 const HOST = process.env.HOST ?? '0.0.0.0'
 
+// Body cap. Default 8 MB (not 1 MB) so multi-modal Explore turns — base64 image
+// data URLs (~1.33× of up to 4 MB) plus history — aren't 413'd before the
+// handler. Tunable via LLM_BODY_LIMIT_MB.
+const BODY_LIMIT_MB = Number(process.env.LLM_BODY_LIMIT_MB ?? 8)
 const app = Fastify({
   logger: { level: process.env.LOG_LEVEL ?? 'info' },
-  bodyLimit: 1024 * 1024  // spec §2.5: 1 MB cap → 413
+  bodyLimit: BODY_LIMIT_MB * 1024 * 1024
 })
 
 // Trip the DB schema migration on boot so first request is fast.
 db()
 
 app.register(ticketRoutes, { prefix: '/api' })
+app.register(llmRoutes, { prefix: '/api' })
 
 // In production the same container serves the SPA build. In dev, Vite owns the
 // UI and proxies /api here — so this block is a no-op when dist/ is absent.
@@ -81,6 +88,11 @@ app.addHook('onResponse', (req, reply, done) => {
   }
   done()
 })
+
+// MCP boot — load tool servers configured in deploy/mcp-servers.json (or
+// MCP_CONFIG_PATH). Never rejects: failures degrade to no-tools, and Explore
+// mode falls back to plain chat. See server/mcp/client.ts.
+await initMCP({ log: app.log })
 
 app.listen({ port: PORT, host: HOST })
   .then(() => app.log.info(`quality-grid listening on http://${HOST}:${PORT}`))

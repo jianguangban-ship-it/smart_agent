@@ -33,19 +33,24 @@
       <!-- View mode: full-width JIRA Quality Grid (n8n-fed) -->
       <QualityGridPanel v-if="appMode === 'view'" />
 
-      <!-- Explore mode: full-width chat -->
-      <ExploreChat
-        v-else-if="appMode === 'explore'"
-        :messages="exploreCoachMessages"
-        :is-loading="isExploreCoachLoading"
-        :had-error="exploreCoachHadError"
-        :backoff-secs="exploreCoachBackoffSecs"
-        @send="handleExploreSend"
-        @cancel="cancelExploreCoach"
-        @new-chat="handleExploreNewChat"
-        @replay="handleExploreReplay"
-        @continue-session="handleExploreContinueSession"
-      />
+      <!-- Explore mode: chat (shrinks left when the artifact viewer opens) -->
+      <div v-else-if="appMode === 'explore'" class="explore-layout">
+        <ExploreChat
+          :messages="exploreCoachMessages"
+          :is-loading="isExploreCoachLoading"
+          :had-error="exploreCoachHadError"
+          :backoff-secs="exploreCoachBackoffSecs"
+          @send="handleExploreSend"
+          @cancel="cancelExploreCoach"
+          @new-chat="handleExploreNewChat"
+          @replay="handleExploreReplay"
+          @continue-session="handleExploreContinueSession"
+          @regenerate="handleExploreRegenerate"
+          @edit-message="handleExploreEditMessage"
+        />
+        <!-- Right-side artifact viewer (renders only when a card is opened). -->
+        <ArtifactPanel />
+      </div>
 
       <div
         v-show="appMode === 'task'"
@@ -196,10 +201,14 @@ import { useBatchOps } from '@/composables/useBatchOps'
 import { getModeElicitationPrompt, buildConflictCheckPrompt, buildTraceSuggestPrompt, buildImpactAnalysisPrompt } from '@/config/domain'
 import type { TaskLevel } from '@/config/domain/traceability.task'
 import { currentRole } from '@/composables/useRole'
-import { useAttachment, applyAttachment } from '@/composables/useAttachment'
+import { useAttachment, inlineAttachments, stripImageContent } from '@/composables/useAttachment'
+import { getContextLimitTokens } from '@/config/llm'
+import { getResponseFormat } from '@/config/skills'
+import { contextUsage, formatTokens } from '@/utils/contextCalculator'
+import type { LLMChatMessage } from '@/types/api'
 import { getTemplateContent, effectiveTemplates, setCustomTemplates } from '@/config/templates/index'
 import type { TemplateDefinition } from '@/types/template'
-import { getSessionRecords, startNewSession } from '@/composables/useCoachHistory'
+import { getSessionRecords, startNewSession, deleteRecords, updateRecordContent } from '@/composables/useCoachHistory'
 
 import AppHeader from '@/components/layout/AppHeader.vue'
 import LLMSettings from '@/components/settings/LLMSettings.vue'
@@ -214,6 +223,7 @@ import ToastContainer from '@/components/shared/ToastContainer.vue'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
 import QualityGridPanel from '@/components/quality/QualityGridPanel.vue'
 import ExploreChat from '@/components/chat/ExploreChat.vue'
+import ArtifactPanel from '@/components/chat/ArtifactPanel.vue'
 
 const { t, isZh } = useI18n()
 const { addToast } = useToast()
@@ -238,7 +248,7 @@ watch(
   { immediate: true }
 )
 
-const { attachedFile, detach: detachAttachment } = useAttachment()
+const { attachedFiles, detachAll } = useAttachment()
 
 const {
   isSubmitting, currentAction,
@@ -254,7 +264,7 @@ const {
   // explore channel
   isExploreCoachLoading, exploreCoachMessages, exploreCoachWasCancelled, exploreCoachHadError,
   exploreCoachStreamSpeed, exploreCoachBackoffSecs,
-  requestExploreCoach, cancelExploreCoach, clearExploreCoach, restoreExploreCoachMessages,
+  requestExploreCoach, cancelExploreCoach, regenerateExploreCoach, clearExploreCoach, restoreExploreCoachMessages,
   // back-compat (read-only, active mode)
   isCoachLoading, coachResponse, coachMessages, coachWasCancelled, coachHadError,
   coachStreamSpeed, coachBackoffSecs,
@@ -333,7 +343,7 @@ watch(appMode, (m) => { if (m === bgReady.value) bgReady.value = null })
 const canCoachSubmit = computed(() => {
   switch (appMode.value) {
     case 'explore':
-      return !!form.description.trim() || !!attachedFile.value
+      return !!form.description.trim() || attachedFiles.value.length > 0
     case 'task':
       // All task fields required: project + assignee + type + points + 5-part summary + description
       return canSubmit.value && !!form.assignee && !!form.estimatedPoints && !!form.description.trim()
@@ -383,8 +393,9 @@ function buildPayload(action: 'analyze' | 'create' | 'coach' | 'preview' | 'deep
 
   switch (appMode.value) {
     case 'explore': {
-      // Prepend attached file content (centralized in useAttachment)
-      return { meta, data: { description: applyAttachment(desc) } }
+      // Carry files separately (clean description) — they're rendered as file
+      // cards in the bubble and re-inlined into the API payload in useLLM.
+      return { meta, data: { description: desc, attachments: attachedFiles.value.slice() } }
     }
 
     case 'task':
@@ -450,8 +461,13 @@ function saveResponsesToStorage() {
   localStorage.setItem(LS_RESPONSE_SNAPSHOT, buildFormSnapshot())
   if (taskCoachMessages.value.length > 0)
     localStorage.setItem(LS_TASK_RESPONSE, JSON.stringify(taskCoachMessages.value))
-  if (exploreCoachMessages.value.length > 0)
-    localStorage.setItem(LS_EXPLORE_RESPONSE, JSON.stringify(exploreCoachMessages.value))
+  if (exploreCoachMessages.value.length > 0) {
+    // Strip image base64 (session-only) so localStorage doesn't blow its quota.
+    const exploreToSave = exploreCoachMessages.value.map(m =>
+      m.attachments?.length ? { ...m, attachments: stripImageContent(m.attachments) } : m
+    )
+    localStorage.setItem(LS_EXPLORE_RESPONSE, JSON.stringify(exploreToSave))
+  }
   if (analyzeResponse.value !== null)
     localStorage.setItem(LS_ANALYZE_RESPONSE, JSON.stringify(analyzeResponse.value))
 }
@@ -681,11 +697,34 @@ async function handleCoachRequest(force = false) {
 async function handleExploreSend(text: string) {
   if (!text.trim() || isExploreCoachLoading.value) return
   errorMessage.value = ''
+  // Authoritative context-size guard (Explore only): refuse to send when the
+  // projected payload — system prompt + full history + this turn — exceeds the
+  // active model's limit. Mirrors useLLM's apiMessages shape. Composer also
+  // blocks via the same calculator, but this covers replay/continue paths too.
+  const projected: LLMChatMessage[] = [
+    { role: 'system', content: getResponseFormat() },
+    ...exploreCoachMessages.value.map(m => ({
+      role: m.role,
+      content: m.attachments?.length ? inlineAttachments(m.content, m.attachments) : m.content,
+    })),
+    { role: 'user', content: inlineAttachments(text, attachedFiles.value) },
+  ]
+  const usage = contextUsage(projected, getContextLimitTokens())
+  if (usage.over) {
+    const msg = t('coach.contextOverLimit')
+      .replace('{used}', formatTokens(usage.tokens))
+      .replace('{limit}', formatTokens(usage.limit))
+    errorMessage.value = msg
+    addToast('error', msg)
+    return
+  }
   const payload = buildPayload('coach')
-  payload.data.description = applyAttachment(text)
+  // Clean text for display/persistence; files travel in payload.data.attachments
+  // (set by buildPayload) and are re-inlined for the API in useLLM.
+  payload.data.description = text
   const err = await requestExploreCoach(payload)
   if (!err) {
-    detachAttachment()
+    detachAll()
     saveResponsesToStorage()
   } else if (err !== 'cancelled') {
     errorMessage.value = err
@@ -694,6 +733,7 @@ async function handleExploreSend(text: string) {
 }
 function handleExploreNewChat() {
   clearExploreCoach()
+  detachAll()  // drop any pending composer attachment so it isn't carried into the new chat
   localStorage.removeItem(LS_EXPLORE_RESPONSE)
   startNewSession('explore')
 }
@@ -705,6 +745,74 @@ function handleExploreContinueSession(sessionId: string) {
   const records = getSessionRecords(sessionId)
   if (records.length === 0) return
   restoreExploreCoachMessages(records)
+}
+
+// Drop every message after `index` (its assistant reply + any later turns) and
+// delete the matching persisted history records, then trim the in-memory array.
+function truncateExploreAfter(index: number) {
+  const removed = exploreCoachMessages.value.slice(index + 1)
+  const ids = new Set(removed.map(m => m.hashId).filter(Boolean) as string[])
+  if (ids.size) deleteRecords(ids)
+  exploreCoachMessages.value.splice(index + 1)
+}
+
+// Context-size guard shared by regenerate/edit (no new composer turn): project
+// system prompt + the current (already-truncated) history. Toasts + returns true
+// when over the active model's limit.
+function exploreContextOver(): boolean {
+  const projected: LLMChatMessage[] = [
+    { role: 'system', content: getResponseFormat() },
+    ...exploreCoachMessages.value.map(m => ({
+      role: m.role,
+      content: m.attachments?.length ? inlineAttachments(m.content, m.attachments) : m.content,
+    })),
+  ]
+  const usage = contextUsage(projected, getContextLimitTokens())
+  if (usage.over) {
+    const msg = t('coach.contextOverLimit')
+      .replace('{used}', formatTokens(usage.tokens))
+      .replace('{limit}', formatTokens(usage.limit))
+    errorMessage.value = msg
+    addToast('error', msg)
+  }
+  return usage.over
+}
+
+async function runExploreRegenerate() {
+  errorMessage.value = ''
+  if (exploreContextOver()) return
+  // Pass a fresh payload so regenerate works even after a reload (_lastPayload
+  // null); the body is unused in auto-retry mode — history is rebuilt from the
+  // message array.
+  const err = await regenerateExploreCoach(buildPayload('coach'))
+  if (!err) {
+    saveResponsesToStorage()
+  } else if (err !== 'cancelled') {
+    errorMessage.value = err
+    addToast('error', err)
+  }
+}
+
+// Retry (↻) on a user message: drop its reply + later turns, regenerate from it.
+async function handleExploreRegenerate(id: string) {
+  if (isExploreCoachLoading.value) return
+  const idx = exploreCoachMessages.value.findIndex(m => m.id === id)
+  if (idx < 0 || exploreCoachMessages.value[idx].role !== 'user') return
+  truncateExploreAfter(idx)
+  await runExploreRegenerate()
+}
+
+// Edit (✎) on a user message: replace its text (+ persisted record), drop later
+// turns, regenerate from the edited message.
+async function handleExploreEditMessage(payload: { id: string; content: string }) {
+  if (isExploreCoachLoading.value) return
+  const idx = exploreCoachMessages.value.findIndex(m => m.id === payload.id)
+  if (idx < 0 || exploreCoachMessages.value[idx].role !== 'user') return
+  const msg = exploreCoachMessages.value[idx]
+  msg.content = payload.content
+  if (msg.hashId) updateRecordContent(msg.hashId, payload.content)
+  truncateExploreAfter(idx)
+  await runExploreRegenerate()
 }
 
 function handleElicitation() {
@@ -931,7 +1039,7 @@ onUnmounted(() => {
 .app-main {
   max-width: clamp(1200px, 98vw, 3600px);
   margin: 0 auto;
-  padding: var(--space-6) var(--space-1);
+  padding: var(--space-2) var(--space-1);
   flex: 1;
   width: 100%;
 }
@@ -944,6 +1052,22 @@ onUnmounted(() => {
   padding-bottom: 0;
   min-height: 0;
   overflow: hidden;
+}
+/* Explore is full-bleed (Claude-style): the rail reaches the left page border
+   and the artifact viewer reaches the right. Task/View stay centered. */
+.app-main--explore {
+  max-width: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* Explore split: chat (flex) + optional right-side artifact viewer. The chat
+   shrinks when the viewer pushes in. (ExploreChat sets its own flex:1 — it's a
+   multi-root component, so a scoped rule here can't target its root.) */
+.explore-layout {
+  display: flex;
+  height: 100%;
+  min-height: 0;
 }
 .grid-layout {
   display: grid;

@@ -78,6 +78,15 @@
 
   --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  /* Serif reading face for coach/assistant prose — mirrors Claude.ai's
+     "Anthropic Serif" fallback chain (proprietary first entry dropped). Keeps
+     the full CJK fallback list so Chinese coach replies render cleanly. */
+  --font-serif: Georgia, 'Noto Serif', 'Times New Roman', Times, 'Hiragino Sans', 'Yu Gothic', Meiryo, 'Noto Sans CJK JP', 'PingFang TC', 'Microsoft JhengHei', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Apple SD Gothic Neo', 'Malgun Gothic', serif;
+  /* Centered reading-column width for Explore-mode conversation + composer.
+     48rem (768px) matches Claude.ai's prose column exactly (Tailwind max-w-3xl).
+     Tuned for English measure (~70–90 Latin chars/line); for Chinese this is
+     ~48 full-width Hanzi/line, which is acceptable for a bilingual column. */
+  --explore-read-width: 48rem;
 }
 
 [data-theme="light"] {

@@ -115,7 +115,11 @@
       "Bash(ping *)",
       "Bash(powershell *)",
       "Bash(curl -v --max-time 15 https://gitlab.gwm.cn)",
-      "Bash(HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= git push *)"
+      "Bash(HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= git push *)",
+      "PowerShell(npm install *)",
+      "PowerShell(Push-Location \"E:\\\\agentic_ept\\\\smart_agent\"; npx vitest run src/utils/__tests__/formatCoach.test.ts src/components/chat/__tests__/ChatBubble.layout.test.ts 2>&1 | Select-Object -Last 25; \"ExitCode: $LASTEXITCODE\"; Pop-Location)",
+      "Read(//c/Users/GW00336650/.claude/**)",
+      "Bash(echo \"exit $?\")"
     ]
   }
 }

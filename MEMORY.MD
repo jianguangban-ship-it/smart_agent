@@ -665,3 +665,839 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   layout. **Project rule for any future `table-layout: fixed` grid
   in this repo: declare column widths on the header row, not on
   body cells.**
+
+## v10.131 — Brokered LLM through Fastify (Phase L1 of MCP rollout)
+- The SPA no longer calls LLM providers directly. Every chat request now
+  goes `browser → POST /api/llm/chat → LangChain ChatOpenAI →
+  llmproxy.gwm.cn/v1`. API keys live in `deploy/.env`
+  (`LLMPROXY_API_KEY`), never in browser localStorage.
+- New server modules: `server/llm/openai-client.ts` (the `ChatOpenAI`
+  factory) and `server/routes/llm.ts` (the SSE streaming route). Route
+  re-emits LangChain `AIMessageChunk`s as OpenAI-compatible
+  `data: {choices: [{delta: {content: ...}}]}\n\n` events so the SPA's
+  existing SSE parser in `useLLM.ts` is unchanged.
+- The route's auth hook has an optional `INTERNAL_API_TOKEN` header
+  guard. Async hook signature is required (`Promise<void>` return type)
+  — a sync hook returning `boolean` hangs Fastify silently. **Project
+  trap: Fastify hooks must be async or use `done()`, never a sync
+  boolean return.**
+- `src/config/llm.ts` `getProviderUrl` / `setProviderUrl` / `getApiKey`
+  / `setApiKey` are now `@deprecated`. Bodies kept for one release;
+  scheduled for full removal in v10.132. localStorage entries become
+  no-ops for the LLM call path.
+- `LLMSettings.vue` no longer shows Provider URL or API key fields —
+  replaced with an info panel pointing at ops. Model picker stays.
+- **Project rule for all future LLM work in this codebase:** every LLM
+  request goes through `POST /api/llm/chat`. Never call providers
+  directly from the browser. The brokered path is the only path.
+- Unblocks Phases L2 (MCP client via `@langchain/mcp-adapters`), L3
+  (LangGraph agent harness), L4 (tool-event UI), L5 (polish) without
+  any further refactor of the call path.
+
+
+## v10.132 — Narrow L1 (Task mode reverts; only Explore stays brokered)
+
+- Phase L1 (v10.131) over-reached: it rerouted Task + Analyze + Explore
+  through the new Fastify `/api/llm/chat` broker. Task + Analyze must
+  not be touched by MCP/gateway work per the standing deal. v10.132
+  rolls Task + Analyze back to the v10.130 direct-browser-to-provider
+  path; only Explore stays brokered (that's where MCP will plug in).
+- **Project rule (re-affirmed):** MCP / gateway / tool-loop work must
+  not touch Task mode or Analyze. Explore is the only client surface
+  for brokered LLM calls. Server-side `server/routes/llm.ts` + its 8
+  tests stay in place; they're used by Explore only.
+- `src/composables/useLLM.ts` now has BOTH helpers side-by-side:
+  `_callGLMStream` (direct, Task + Analyze) and `_callBrokeredLLM`
+  (brokered, Explore only). Don't collapse them — they're intentionally
+  separate so future MCP work in `_callBrokeredLLM` is impossible to
+  accidentally leak into Task mode.
+- Settings panel is restored to v10.130 exactly: Provider URL input,
+  API Key input + Test Key button, Model picker. No "LLM Gateway" info
+  panel. Brokered path is configured only via `deploy/.env`
+  (`LLMPROXY_BASE_URL`, `LLMPROXY_API_KEY`) and is invisible to the
+  user. Don't reintroduce gateway UI in Settings.
+- Explore-mode brokered path still fails silently in v10.132. Diagnosis
+  parked under Phase L1.5 — needs the Fastify green-terminal log from a
+  real failed Explore send. Most-likely cause: model-name mismatch
+  (`glm-4.7-flash` not served by GWM proxy).
+
+
+## L1.5 — req.raw.close abort trap + GWM proxy 403 finding
+
+- `server/routes/llm.ts` originally listened on `req.raw.on('close', ...)`
+  to drive an `AbortController` for the upstream LangChain call. Trap:
+  `req.raw.close` fires on **normal POST body consumption**, not just
+  client disconnect. For small JSON bodies, the body is drained before
+  the handler runs, so the listener fires on the next tick, aborts the
+  signal, and `llm.stream()` rejects with `AbortError` before any chunk
+  arrives. The catch block treated `AbortError` as "client gone" and
+  silently 200'd with empty SSE — no error log, no SPA toast, no
+  typing dots. **Fix:** listen on `reply.raw.on('close', ...)` instead.
+  Permanent fix in v10.132 hotfix. **Don't reintroduce the req.raw
+  listener.** L1 unit tests can't catch this because
+  `light-my-request`'s `inject()` skips the real socket lifecycle.
+- With the abort bug gone, GWM `llmproxy.gwm.cn/v1` returns 403 (no
+  body) for model `glm-4.7-flash`. That's a `PermissionDeniedError`
+  from the OpenAI SDK — auth is fine (otherwise 401), but the model
+  isn't in this account's allowlist. The Task-mode direct path uses
+  ZhipuAI directly so `glm-4.7-flash` works there; only the brokered
+  Explore path needs a GWM-served model name (e.g. `default/deepseek-v3-2`,
+  `openai/gpt-4o` — pending confirmation from GWM ops). Park work for
+  L1.5 part 2 until we know which model id to target.
+
+
+## v10.133 — Phase L2: MCP client + tool registry (Explore only)
+
+- `server/mcp/client.ts` is the singleton MCP loader. Reads
+  `deploy/mcp-servers.json` (or `MCP_CONFIG_PATH`), substitutes
+  `${LLMPROXY_API_KEY}` (and any `${ENV_VAR}`) inside string values,
+  instantiates `MultiServerMCPClient` from `@langchain/mcp-adapters`,
+  caches the resulting `DynamicTool[]`. Two exports: `initMCP()`
+  (idempotent, never rejects) and `getMCPTools()` (sync, returns cached
+  list). Called once from `server/index.ts` before `app.listen()`.
+- `server/routes/llm.ts` wraps the per-request `makeChatModel(model)` in
+  `createReactAgent({ llm, tools: getMCPTools() })` from
+  `@langchain/langgraph/prebuilt`. Streams the agent with
+  `streamMode: 'messages'` and filters to final assistant text deltas
+  only. Tool calls + results run silently server-side (L3 will surface
+  them in the SPA). Abort handler still listens on `reply.raw.close`
+  (L1.5 hotfix).
+- **Graceful degradation is the law**: every MCP failure (missing config,
+  malformed JSON, network, getTools rejection) ends with empty tools +
+  warn log. `createReactAgent` with `tools: []` is a transparent LLM
+  passthrough, behaviorally identical to v10.132.
+- Config substitution rule: any `${ENV_VAR}` reference inside string
+  values in `deploy/mcp-servers.json` is replaced at boot from
+  `process.env`. Keeps the secret in `.env`, JSON committable.
+- **Project rule still in force**: MCP work touches only the Explore
+  client surface. Task mode + Analyze stay on the v10.130 direct path.
+  See `feedback_task_mode_no_mcp.md`.
+- **vitest gotcha**: `vi.fn().mockImplementation(() => ({...}))` does
+  NOT reliably return its impl when called with `new`. Use a real class
+  for constructor mocks plus a separate `vi.fn()` ctorSpy for
+  assertions. Pattern lives in
+  `server/mcp/__tests__/client.test.ts` and persistent memory
+  `feedback_vi_fn_constructor_mock.md`.
+
+
+## L2.1 hotfix — MCP boot must have a timeout, not just an error handler
+
+- `server/mcp/client.ts`'s `await client.getTools()` originally had no
+  timeout. When the GWM MCP service is slow/unresponsive, getTools()
+  never resolves, `await initMCP(...)` blocks `app.listen()`, and
+  Fastify never boots. No error log because nothing throws — pure
+  silent hang. dev.log shows Vite up + ECONNREFUSED on proxy attempts
+  but NO "Server listening" line.
+- Fix: `Promise.race` against `setTimeout` rejection. Default 5000ms,
+  configurable via `MCP_INIT_TIMEOUT_MS` env var. The timeout error
+  flows through the existing catch → empty tools → Fastify proceeds
+  to listen. `finally` block clears the timer to avoid keeping the
+  process alive when getTools() resolves first.
+- **General rule** (persisted in `feedback_async_init_needs_timeout.md`):
+  any async boot init that talks to a network service needs BOTH an
+  error path and a timeout path. Hangs and errors are distinct
+  failure modes; handling only errors is half a job.
+
+
+## L2.2 — Streamable HTTP transport is the working one, plus tool observability
+
+- The GWM MCP endpoint `https://llmproxy.gwm.cn/mcp/<tool-id>/sse` registers
+  a tool stub but the tool doesn't actually invoke. Use the Streamable HTTP
+  variant instead: URL `.../streamablehttp` with config `"transport": "http"`.
+  Colleagues using open-code over Streamable HTTP successfully drive live
+  web-search via this exact tool ID. Our config now matches.
+- `server/mcp/client.ts` now logs one info line per discovered tool
+  (`{name, description}`) right after `getTools()` resolves, above the
+  existing rollup. So the operator can see what the agent has access to.
+- `server/routes/llm.ts` now logs `agent: tool_call requested` and
+  `agent: tool_result received` via `req.log.info` (so they inherit
+  `reqId`). Both lines firing for the same `reqId` is end-to-end proof
+  that MCP is actually invoked, not just loaded. Tool-result content is
+  sliced to 200 chars for log readability.
+
+
+## v10.134 — Phase L3: tool-event chips visible in ChatBubble
+
+- Brokered SSE format now carries TWO sibling delta types: the
+  existing OpenAI-compatible `content` deltas AND a namespaced
+  `smart_agent_event` delta for tool-use lifecycle. Outside the
+  OpenAI spec so non-Smart-Agent consumers ignore it harmlessly.
+  Same /api/llm/chat endpoint, no headers change.
+- `ChatMessage.toolEvents?: ToolEvent[]` (src/types/api.ts) is the
+  client-side anchor — tool invocations belong to the assistant
+  message that produced them, not standalone history entries. Empty
+  / absent for Task-mode and Analyze.
+- `applyToolEvent` in useLLM.ts is the merge logic: tool_call pushes
+  a 'requested' entry, tool_result matches the most-recent
+  'requested' by tool name and flips to 'received' + fills preview
+  and length.
+- ChatBubble.vue renders chips above the markdown response. Distinct
+  visual: monospace, smaller, tertiary bg, border turns green on
+  receipt and blue when expanded. Click chip body to toggle 200-char
+  preview. Per-component expanded state; collapsed default on reload
+  is intentional.
+- **i18n interpolation gap:** local `t()` is plain key lookup, no
+  `{param}` substitution. For now we do `.replace('{tool}', ...)` at
+  the call site for the two new strings. If we need more later,
+  extend `t()` to take a params object.
+
+
+## L3.9 — tool events persist to coach history
+
+- `CoachHistoryRecord.toolEvents?: ToolEvent[]` (same shape as the
+  in-message field) carries MCP tool invocations across page reloads
+  and session-history navigation. Lives in `src/types/api.ts`.
+- `addRecord(role, content, channel, toolEvents?)` in
+  `useCoachHistory.ts` writes the field only when non-empty — keeps
+  the localStorage payload byte-identical to v10.133 for user
+  messages and Task-mode assistant records, no migration needed for
+  pre-v10.134 records (their absent field restores as empty, chip
+  block stays hidden via the existing v-if).
+- `createStreamFlow` in `useLLM.ts` passes `lastMsg.toolEvents` to
+  addRecord on save. `_restoreInto` copies `r.toolEvents` back onto
+  the rebuilt `ChatMessage` so `ChatBubble.vue` re-renders the chips.
+
+
+## v10.135 — View-mode polish: ratio chips + virtualized ticket table
+
+- `QualitySummaryBar.vue` shows each A/B/C/D chip with `count · pct%`.
+  Format adapts: 1 decimal under 10%, rounded above. `%` is bilingual,
+  no new i18n keys.
+- The View-mode ticket table is now virtualized via
+  `vue-virtual-scroller@^3.0.4` (`DynamicScroller` + `DynamicScrollerItem`).
+  Adopted because the prior `<table><tbody>` + `v-for` would mount ~20k
+  DOM nodes for a 2000-ticket dataset, causing 1–2s render lag and
+  noticeable scroll/filter jank. After v10.135 only ~30 rows are mounted
+  at any time regardless of list length.
+- `QualityRow.vue` root changed from `<tr><td>` to
+  `<div role="row"><div role="cell">` with `display: grid` and an explicit
+  8-track template (`200px 200px 200px 200px 1fr 200px 200px 200px`)
+  matching the sticky header's column widths declared in
+  `QualityGridPanel.vue`. **Don't reintroduce `<tr>/<td>` for the row root
+  — vue-virtual-scroller can't virtualize inside a `<tbody>` cleanly;
+  table-layout fights the absolute positioning the scroller needs.** ARIA
+  roles preserve screen-reader semantics for the body.
+- The header in `QualityGridPanel.vue` IS still a semantic table header
+  (`role="table"` on the container, `role="columnheader"` on each `<div>`)
+  so column-header announcements continue to work for keyboard users.
+- vue-virtual-scroller's CSS is imported once at the top of
+  `src/main.ts`. Don't import it per-component.
+
+
+## v10.136 — Drop panel-header; consolidate Refresh + count into PERIOD QUALITY bar
+
+- QualityGridPanel's entire `<header class="panel-header">` block is
+  GONE — the visible "JIRA Quality Grid" `<h2>`, the
+  "AI quality-check verdicts..." subtitle, the count-label, and the
+  Refresh button all came out. The View panel now opens directly with
+  the QualitySummaryBar row.
+- Don't reintroduce a visible title above the summary bar without
+  asking — the user explicitly wanted this stripped for tightness.
+- The section's `aria-label` still uses `t('view.title')` for screen
+  readers, so the i18n string is alive (don't delete it from en.ts /
+  zh.ts). `view.subtitle` is unused but kept in case it's wanted back.
+- Refresh button + filter-aware count now live on the right side of
+  QualitySummaryBar's `.summary-head` row, alongside the period chips.
+- QualitySummaryBar takes 3 optional props (`filteredCount`,
+  `totalCount`, `loading`) and emits `refresh`. Falls back to
+  `summary.total` when props are absent so the component is still
+  usable in isolation. The "X of Y filtered" string still uses
+  `view.countFiltered`; "N tickets" uses `view.countLabel`. Same i18n
+  keys the panel-header used to use, no new strings.
+- Layout: `.summary-head` is `flex-wrap: nowrap` with the Refresh
+  button pinned right; `.summary-head-left` inside it is
+  `flex-wrap: wrap` so the chips wrap below the head text on narrow
+  viewports while the Refresh button stays anchored.
+
+## v10.137 — Explore mode: Claude-style serif reading flow
+- Goal: make Explore's conversation read like the Claude website (serif
+  coach replies, sans user messages + composer, centered reading column).
+  Reference sample saved at `claude-samples/`.
+- Two new tokens in `src/styles/variables.css`: `--font-serif` (Claude's
+  Anthropic-Serif fallback chain, proprietary entry dropped, full CJK list
+  kept for Chinese) and `--explore-read-width: 46rem` (centered column).
+- Serif prose lives in `src/styles/coach-response.css` under
+  `.layout-stacked .coach-response` ONLY. This is critical: `.coach-response`
+  is shared with Task-mode CoachPanel (`layout="bubble"`); scoping to
+  `.layout-stacked` keeps Task mode in sans. Never make the serif rules
+  unscoped or Task mode regresses.
+- Code/`pre`/tables/KaTeX stay monospace/unchanged — Claude keeps code mono.
+- ChatBubble `.chat-msg.layout-stacked` centers in `var(--explore-read-width)`;
+  `.layout-stacked .msg-user-text` is explicit `--font-sans` 1rem/1.6.
+- ExploreChat composer (`.desc-textarea--composer` deep override) is
+  `--font-sans` 1rem/1.5; `.explore-composer-wrap` centered to the same
+  column so input aligns under the conversation.
+- Web-safe fallback fonts only (no woff2 shipped) — bilingual-safe + no
+  licensing concern on the GWM intranet.
+
+## v10.138 — Explore mode: AI-left / user-right alignment (Claude bubble)
+- Continues the Explore Claude-styling pass (after v10.137 serif). Adopts
+  Claude.ai's conversational layout: assistant left/full-width/serif; user
+  messages = right-aligned tinted rounded bubble. Verified against the saved
+  sample (`data-user-message-bubble` = `bg-bg-300 rounded-xl px-4 py-2.5
+  max-w-[85%]`).
+- Decision: role-label + avatar headers KEPT on both sides (minimal change);
+  only the user side flips right.
+- All in `src/components/chat/ChatBubble.vue`, gated on
+  `.chat-user.layout-stacked` so Task-mode `bubble` layout is untouched:
+  - `.layout-stacked .msg-user-text` → Claude bubble: `inline-block`,
+    `max-width: 85%`, `background: var(--bg-tertiary)` (≈ Claude bg-bg-300),
+    `border-radius: var(--radius-lg)` (12px = rounded-xl), padding. `text-align:
+    left` keeps wrapped text readable.
+  - `.chat-user.layout-stacked .msg-role-label { flex-direction: row-reverse }`
+    → header `… time USER 👤` packed right.
+  - `.chat-user.layout-stacked .msg-bubble { text-align: right }` → bubble
+    pushed to the right edge of the centered `--explore-read-width` column.
+- Net: user-right / AI-left both inside the shared ~768px reading column,
+  matching Claude's `max-w-3xl`.
+
+## v10.139 — Explore mode: dynamic AI "thinking" avatar (pulsing gradient orb)
+- Explore had no "generating" feedback before the first token (empty assistant
+  placeholder bubble only). Added a pulsing purple→blue gradient orb +
+  "Thinking…" shown while the AI reply generates, replaced by the streaming
+  serif response on first token.
+- All in `src/components/chat/ChatBubble.vue`. Orb row sits just above the
+  always-present `.coach-response` div (keeps `responseEl` ref stable), wrapped
+  in `<Transition name="orb-fade">`, gated on
+  `layout === 'stacked' && message.isStreaming && !message.content`.
+- Gating on `layout === 'stacked'` keeps Task mode untouched — Task's
+  CoachPanel.vue keeps its own bouncing-dots typing-row (`isWaitingFirstToken`).
+  Do NOT add the orb to the bubble layout.
+- Decisions: orb is ADDITIVE (existing inline role-label avatars kept);
+  lifecycle = wait-for-first-token then text.
+- Reuses existing `coach.typing` i18n ("Thinking…/思考中…") + `--accent-purple`/
+  `--accent-blue`. No new i18n keys, no new assets.
+- `.thinking-orb` 18px, `orbBreathe` 1.6s (scale + glow + opacity pulse);
+  `@media (prefers-reduced-motion: reduce)` disables the pulse (static orb).
+
+## v10.140 — Explore mode: pure-Claude headers (remove avatars + role labels)
+- User decided (after seeing them) to go pure Claude in Explore: no avatars, no
+  visible role-label/timestamp headers. Identity conveyed by alignment + serif
+  prose (AI) / right tinted bubble (user); the v10.139 orb is the AI's only
+  visible "avatar."
+- `src/components/chat/ChatBubble.vue`: removed the two stacked-only inline
+  avatar elements from `.msg-role-label`; label row now visually hidden in
+  Explore via conditional global `.sr-only` (`{ 'sr-only': layout === 'stacked' }`)
+  — KEPT for screen readers (don't fully delete; speaker must still be
+  announced, like Claude's sr-only headers). Removed dead `.msg-avatar-inline*`
+  CSS + the v10.138 `row-reverse` header rule.
+- Scope: all Explore-only — inline avatars were `layout === 'stacked'`-gated,
+  sr-only toggle gated on stacked. Task-mode `bubble` keeps avatars + labels.
+- `agentAvatar` const stays (bubble layout `.msg-avatar` still uses it). Removing
+  the inline `<img>` also stops the per-message agent_avy.png fetch in Explore.
+
+## v10.141 — Explore mode: Claude-style composer (+ add-file, model label, reminder)
+- Rebuilt the Explore composer to match Claude (sample sample-2.jpg): rounded
+  `.composer-box` with textarea on top + bottom bar (`+` add-file left | static
+  model label + Send right) + centered muted reminder below. No mic/voice; the
+  ⤢ expand/ComposerPopout feature is KEPT.
+- Model = STATIC read-only label bound to `currentModel` (@/config/llm) — no
+  switching (only one configured model). 
+- File attach (`useAttachment.ts`): switched from allow-list to BLOCKLIST —
+  accepts ANY text-readable file EXCEPT images/pdf/office-binary/archives/media/
+  exe/fonts (`BLOCKED_ATTACH_EXTS`), 512KB cap. So "any code" works without
+  enumerating languages. `ATTACH_ACCEPT_HINT` is only the picker `accept` hint,
+  NOT the real filter. (Reconciles user's "any text-readable" choice with "no
+  images/pdf/binary".)
+- All in `ExploreChat.vue`. CRITICAL for tests: kept classes `.explore-composer`
+  (now the bottom bar), `.explore-send`, `.explore-stop`, and the `textarea` —
+  ExploreChat.test.ts (9 tests) depends on them. Textarea is borderless inside
+  the box (box owns border + focus-within ring).
+- i18n: `coach.composerDisclaimer` + `coach.composerAddFile` (en/zh).
+  `coach.loadFile`/`loadFileLabel` now unused (left in place).
+- Scope: Explore only. Task-mode composer (DescriptionEditor form variant)
+  untouched.
+
+## v10.142 — Explore: long code → file card + right-side artifact viewer
+- Long AI code blocks flooded the Explore chat. Now a code block ≥ 40 lines
+  (`LONG_CODE_LINE_THRESHOLD` in codeArtifact.ts) collapses into a download CARD
+  (icon + filename + "label · N lines" + Copy/Download); clicking the card opens
+  the full code in a right-side ArtifactPanel (split/push — chat shrinks left).
+  Claude's artifact-viewer pattern (sample-4.jpg).
+- Scope: EXPLORE ONLY — gated by `collapseLong: layout === 'stacked'` passed from
+  ChatBubble to `enhanceCodeBlocks`. Task-mode (`layout="bubble"`) keeps inline
+  code. Don't enable collapse for bubble layout.
+- New singleton store `src/composables/useArtifact.ts` (current/isOpen/open/close,
+  like useToast). New `src/components/chat/ArtifactPanel.vue` renders the code via
+  `renderMarkdown('````'+lang+...)` (4-backtick fence to avoid ``` collisions)
+  inside `.coach-response` so it reuses the hljs theme.
+- `enhanceCodeBlocks(root, {collapseLong, labels})` — labels now passed in (copy/
+  download/open/lines), replacing the old `setArtifactLabels` call. Card mode
+  keeps the `<pre>` in the DOM but `display:none` (coach-response.css
+  `.code-artifact--card pre`) so Copy/Download/open still read its text.
+  `handleArtifactClick` gained the `open` action → `handlers.onOpen`. Meta gained
+  `langToken` (hljs token for the viewer) + `lines`.
+- App.vue: Explore branch wrapped in `.explore-layout` (flex row) with
+  `<ArtifactPanel/>` mounted (renders only when open). Panel width
+  `clamp(360px,42%,720px)`.
+- i18n: `coach.artifactLines`/`artifactView`/`artifactClose` (en/zh).
+
+## v10.143 — Fix: Explore artifact split layout (multi-root scoped-style trap)
+- Bug in v10.142: chat appeared split even with no artifact open, and didn't
+  restore to full width after closing the viewer.
+- Root cause: `.explore-layout > .explore-chat { flex:1 }` was in App.vue's
+  SCOPED style, but ExploreChat is MULTI-ROOT (`<section>` + teleported
+  `<ComposerPopout>`), so Vue does NOT add the parent's scoped data-attribute to
+  its root → the rule never matched → chat sized to content (right-side gap).
+- Fix: set `flex:1; min-width:0` on `.explore-chat` in ExploreChat's OWN scoped
+  style; removed the dead App.vue rule.
+- LESSON (reusable): a parent's scoped CSS cannot target a multi-root child's
+  root element. Style such a child from within the child component, or use
+  `:deep()`. [[feedback_table_layout_fixed_widths]]-style gotcha.
+
+## v10.144 — Artifact viewer: line numbers + HTML/SVG live preview
+- Enhanced ArtifactPanel.vue (v10.142 viewer): text/code → left line-number
+  gutter; html/svg → live preview in a sandboxed iframe with a Preview|Code
+  toggle (default Preview). Mirrors Claude (sample CSS: `.linenumber` +
+  `content:attr(data-line-number)` + iframe).
+- `kind` = html/svg/text from `current.lang` (hljs token) + content sniff
+  (`<svg`, `<!doctype html>`). Preview iframe: `sandbox="allow-scripts"` (NO
+  same-origin → isolated); SVG wrapped in a centering HTML doc as srcdoc.
+- Line-number gutter approach: a parallel `<pre>` of 1..N beside the
+  renderMarkdown-highlighted `<pre>`, sharing `--art-code-lh` line-height +
+  matching padding; `white-space:pre` (no wrap) keeps 1 line = 1 number. Only
+  the code column scrolls horizontally; body scrolls vertically over both. This
+  avoids splitting hljs-highlighted HTML (multiline tokens) per line.
+- hljs token colors are GLOBAL (`[data-theme] .hljs-*`), so the code view does
+  NOT need a `.coach-response` wrapper for colors — but I kept the class on the
+  scroll div; `:deep(pre)` strips margin/border/bg for alignment.
+- i18n: `coach.artifactPreview`/`artifactCode` (en/zh). Reuses v10.142
+  langToken. Card/store/threshold unchanged.
+
+## v10.145 — Artifact viewer: Claude elevated bg + draggable resize bar
+- ArtifactPanel.vue refinements to match Claude: (1) panel background switched
+  from `--bg-primary` to `--bg-secondary` (= Claude bg-000 elevated; chat/body
+  is bg-primary = Claude bg-100) so the panel reads as a raised surface; gutter
+  moved to `--bg-primary` (recessed); pre/hljs transparent; iframe white.
+- (2) Draggable resize bar: `.artifact-resizer` (cursor:col-resize) on the
+  panel's left edge. `panelWidth` ref persisted to
+  `localStorage['explore_artifact_width']`; drag clamps panel≥320 / chat≥280 /
+  ≤80vw. Right edge captured at pointerdown; window pointermove/up listeners;
+  `dragging` flag adds user-select:none. Chat (flex:1) shrinks automatically
+  (v10.143) — no App.vue change.
+- Claude dark bg tokens (from sample CSS): bg-000 hsl(60 2.1% 18.4%) elevated,
+  bg-100 hsl(60 2.7% 14.5%) main — app's bg-secondary/bg-primary already map to
+  these.
+
+## v10.146 — Fix: artifact resize bar (color states + drag smoothness)
+- Drag felt clumsy: the preview <iframe> captured pointer events when the cursor
+  crossed it, halting window pointermove. FIX: `setPointerCapture(e.pointerId)`
+  on the handle in startResize + `.artifact-panel--dragging .artifact-iframe
+  { pointer-events:none }` + rAF-coalesced width updates. REUSABLE LESSON: any
+  drag/resize over an iframe MUST use setPointerCapture (or an overlay), else the
+  iframe swallows the move events.
+- Color states (ArtifactPanel.vue resizer): `::before` = full-height border
+  line, `::after` = small grip bar. Rest: both `--border-color`. Hover: line
+  `--accent-blue` (light), grip `color-mix(--accent-blue 65%, black)` (dark).
+  Drag/active: both back to `--border-color`. Dragging rules placed AFTER hover
+  (equal specificity → source order wins).
+
+## v10.147 — Resizer drag color + custom ~1/3 chat scrollbar
+- Resizer (ArtifactPanel.vue): dragging now turns BOTH the border line + grip
+  LIGHT BLUE (`--accent-blue`); corrected v10.146 which reverted to border color.
+  Hover: line light blue, grip darker (color-mix accent+black). Grip width 6px.
+- Custom chat scrollbar (ExploreChat.vue): native bar hidden
+  (`scrollbar-width:none` + `::-webkit-scrollbar{width:0}`); replaced by a custom
+  `.chat-thumb` fixed at ~1/3 of the view height (`(clientHeight-2*INSET)/3`),
+  draggable via setPointerCapture + window pointermove/up, position from
+  `scrollTop/range`. `updateThumb()` called from onScroll, ResizeObserver, the
+  messages watch, and onNewChat. Track `.chat-scrollbar` inset `right:4px` = the
+  gap from the artifact grip bar. `.explore-scroll` wrapped in
+  `.explore-scroll-wrap` (relative) to host the overlay.
+- The custom thumb is a FIXED fraction (not content-proportional) per the user's
+  explicit choice.
+
+## v10.148 — Explore: Chat/History/New-chat → left vertical rail
+- Moved Explore's view switch from a horizontal top bar to a Claude-style left
+  vertical rail (`.explore-rail` in ExploreChat.vue): labeled icon+text items
+  New chat / Chat / History + a collapse toggle (168px ↔ 56px icons-only).
+  `.explore-chat` is now `flex-direction: row` → rail | `.explore-main`; combined
+  with App.vue `.explore-layout` the area reads rail | chat | artifact-panel.
+- `railCollapsed` persisted in `localStorage['explore_rail_collapsed']`; collapsed
+  hides `.rail-label` (tooltips via title).
+- CRITICAL for tests: kept `.explore-tab` on Chat & History + `.explore-newchat`
+  on New chat (ExploreChat.test.ts selects `.explore-tab`[0]=Chat,[1]=History +
+  `.explore-newchat`). The active class is now `.rail-item.active` (was
+  `tab-active`).
+- Search NOT duplicated in the rail — CoachHistoryTab already has search/filters.
+- i18n: `coach.railToggle` (en/zh). Explore-only; Task CoachPanel tabs untouched.
+
+## v10.149 — Explore: full-bleed edges + recessed rail bg
+- Match Claude (sample-1): Explore shell is now full-bleed (rail flush to left
+  page border, artifact viewer flush to right border). `.app-main--explore`
+  overrides the shared centered layout with `max-width:none; margin:0;
+  padding-left/right:0`. Task/View keep centered max-width + padding.
+- New token `--bg-sunken` (recessed sidebar surface): dark #1F1E1C (≈ Claude
+  bg-200), light #ECEAE4. Rail bg switched from `--bg-secondary` (elevated) to
+  `--bg-sunken`. Layering now: rail (sunken) | chat (bg-primary) | artifact panel
+  (bg-secondary elevated) — matches Claude.
+- Collapsed rail width 56→52px. Surface tokens summary: bg-sunken < bg-primary <
+  bg-secondary < bg-tertiary (dark = darker→lighter).
+
+## v10.150 — Explore rail: same bg as chat panel
+- Reverted v10.149's recessed rail: `.explore-rail` background `var(--bg-sunken)`
+  → `transparent` so the rail matches the main chat panel (page --bg-primary).
+  Flush-left + collapse + thin border-right divider kept.
+- Removed the now-unused `--bg-sunken` token (dark + light) from variables.css.
+- Surface layering now: rail = chat (bg-primary) | artifact panel (bg-secondary
+  elevated). User prefers the rail to blend with the chat, NOT a darker sidebar.
+
+## v10.151 — Explore-mode context limit + Context calculator
+- New `src/utils/contextCalculator.ts`: `contextBytes()` measures UTF-8 byte size
+  of the messages array via `TextEncoder` (so multibyte Chinese counts by true
+  wire size, not char length). `contextUsage()` → `{bytes, limit, percent, over}`;
+  `formatKB()` → "92.0 KB".
+- Per-model limit lives in `src/config/llm.ts`: `DEFAULT_CONTEXT_LIMIT_BYTES`
+  (92KB), `MODEL_CONTEXT_LIMITS` (seeded `minimax → 90KB`), `getContextLimitBytes()`
+  (case-insensitive substring match on the active model, else 92KB default). Add
+  new model windows to MODEL_CONTEXT_LIMITS, not scattered constants.
+- Enforcement is **Explore-only** and does NOT touch shared `useLLM` /
+  `createStreamFlow` (Task mode stays untouched). Two layers, both using the same
+  calculator: ExploreChat composer shows a live `X / 92.0 KB` badge (red `.over`)
+  + disables Send; `App.vue handleExploreSend` is the authoritative guard that
+  blocks + toasts before `requestExploreCoach` (also covers replay/continue).
+- Over-limit behavior = **block + warn** (no silent truncation). i18n keys
+  `coach.contextOverLimit` / `coach.contextBadgeTitle`; `{used}`/`{limit}`/`{model}`
+  filled via manual `.replace()` because `t()` has no interpolation.
+
+## v10.152 — Multi-file attachments + render-as-files
+- Composer attachment store is now **multi-file**: `attachedFiles = ref<Attachment[]>([])`
+  in `useAttachment.ts` (was a single `attachedFile`). Shared by BOTH the Explore
+  composer (`ExploreChat.vue`) and the Task form (`DescriptionEditor.vue`) — both
+  got `multiple` inputs + a wrapping `.attach-chip-row` with per-file `detach(name)`.
+  `attach()` de-dupes by filename; `detachAll()` clears after a send.
+- **Display ↔ API decoupling** (the important bit): a user `ChatMessage.content`
+  holds ONLY the typed text; files live on `message.attachments` (`{name,size,content}`,
+  type in `api.ts`). File bodies are re-inlined into the upstream string ONLY in
+  `useLLM.ts` when building `apiMessages` (`inlineAttachments(msg.content, msg.attachments)`).
+  So the bubble renders **clickable file cards** (ChatBubble `.attach-card`, downloads via
+  `downloadFile`) instead of a wall of inlined text, while the model still gets the content.
+- `applyAttachment()` is now a thin wrapper over the pure `inlineAttachments(text, files)`.
+  Never inline files into displayed/persisted content again — only at apiMessages build time.
+- Persistence mirrors toolEvents: `addRecord(…, attachments?)` + `_restoreInto` use the
+  same conditional-spread so cards survive reload/replay/continue and stay byte-identical
+  for non-attachment records.
+- Ties into v10.151: the 92KB projection (composer badge + `handleExploreSend`) re-inlines
+  each message's attachments so the measured size matches what is actually sent.
+- Shared `createStreamFlow` was touched (re-inline loop) but it's a no-op without
+  attachments, so Task mode / the MCP-gateway path is unaffected — rule still respected.
+
+## v10.153 — Rename chat-log headers in history
+- Sessions are derived groupings keyed by `sessionId` with NO stored title. Custom
+  names live in a separate localStorage store `coach-session-names` in
+  `useCoachHistory.ts` (`sessionNames` ref + `getSessionName`/`setSessionName`).
+  Header in `CoachHistoryTab.vue` shows custom name, else `firstUserPreview()`.
+- Trigger: pencil button (revealed on `.session-header` hover) → inline `<input>`;
+  Enter/blur saves, Esc cancels. `@click.stop` on input + `@click.prevent.stop` on
+  pencil so editing doesn't toggle the `<details>` card. Blank name deletes the
+  custom name (reverts to auto-preview).
+- Shared component → works for BOTH Explore and Task coach history (names keyed by
+  globally-unique sessionId; no channel gating).
+- Cleanup: `clearHistory()` wipes names + LS key; `deleteRecords()` runs
+  `pruneOrphanNames()` to drop names whose session has no records left.
+
+## v10.154 — Chat-log buffer indicator
+- History action bar (`CoachHistoryTab.vue`) shows a buffer indicator right of the
+  "Download Raw" button: `recordCount / MAX_RECORDS` text + a mini progress bar.
+- `MAX_RECORDS` (200) is now EXPORTED from `useCoachHistory.ts` (was module-private);
+  the cap is GLOBAL across all channels (`addRecord` slices `coachHistory` to 200,
+  FIFO). Indicator shows the global count, not per-channel (tooltip notes this).
+- Color escalates via classes: blue → `buffer-warn` (amber, reuses `isNearCap` ≥180)
+  → `buffer-full` (red, `recordCount >= MAX_RECORDS`). Fill width = recordCount/MAX_RECORDS.
+- Reused existing `recordCount` + `isNearCap`; only new export was `MAX_RECORDS`.
+  i18n `coach.historyBufferTitle` ({n}/{max} via manual replace).
+
+## v10.155 — Collapse history session cards by default
+- `CoachHistoryTab.vue` grouped-session `<details>` no longer has the `open`
+  attribute — chat-log cards start collapsed so a long history is scannable.
+  Summary header (rename pencil, preview, time+count, Continue) stays visible;
+  click to expand. Native `<details>`, no JS state; resets on tab remount.
+  Chevron handled by existing `details[open] > .session-header::before` rotation.
+
+## v10.156 — Fix composer attachment "×" clipped for long filenames
+- Attachment chips (`.attach-chip` in ExploreChat.vue + DescriptionEditor.vue) had
+  the `×` remove button clipped for longer filenames: the chip was inline-flex with
+  `max-width + overflow:hidden` and the filename was a bare text node (min-width:auto)
+  that wouldn't shrink, pushing the × past the clip boundary.
+- Fix: filename now lives in `<span class="attach-chip-name">` (flex:1; min-width:0;
+  overflow:hidden; text-overflow:ellipsis) so ONLY the name truncates; icon + ×
+  stay `flex-shrink:0` and always visible. Chip dropped its own overflow/ellipsis.
+  `:title="f.name"` shows full name on hover. `detach(name)` was already correct.
+- Lesson: when a flex "chip/pill" gains trailing controls, truncate the text child,
+  not the whole flex container — container overflow:hidden clips the controls.
+
+## v10.157 — Context limit measured in TOKENS (was bytes)
+- SUPERSEDES the v10.151 byte-based context guardrail. `contextCalculator.ts` now
+  ESTIMATES TOKENS, not bytes: `estimateTokens(text)` = CJK chars (`/[　-鿿＀-￯]/`) ≈1
+  token each + remaining chars/4; `estimateContextTokens` adds 4 tokens/message
+  overhead. `contextUsage` → `{ tokens, limit, percent, over }`; `formatTokens`
+  (`1.5K`/`128K`). (`contextBytes`/`formatKB` are gone.)
+- Why: LLM context windows are token-based; bytes are language-inconsistent
+  (EN ~4 bytes/tok, ZH ~2–3) — bad for a bilingual app. It's a pre-send WARNING
+  guardrail (model still enforces the real limit), so an estimate is fine — no
+  tokenizer dependency added.
+- `config/llm.ts`: `DEFAULT_CONTEXT_LIMIT_TOKENS=128000` + `MODEL_CONTEXT_LIMITS`
+  (tokens, real per-model windows, ordered MOST-SPECIFIC FIRST since first
+  `includes` wins) + `getContextLimitTokens()`. Edit these as models change.
+- Badge shows `1.2K / 128K tok`; i18n `contextBadgeTitle`/`contextOverLimit` say tokens.
+
+## v10.158 — Two model fields + Explore composer model picker
+- LLM Settings now has TWO model slots (was single `glm-model`): `model-1` (Task +
+  default Explore) and `model-2` (optional secondary), plus `explore-model` (which
+  one Explore uses). `config/llm.ts`: `model1`/`model2`/`taskModel`/`exploreModel`
+  refs, `availableModels` (computed, drops empty model2), `getModel1/2`+`setModel1/2`,
+  `getTaskModel`, `getExploreModel`+`setExploreModel`, `reconcileExplore`.
+  REMOVED `getModel`/`setModel`/`currentModel` — use `getTaskModel`/`taskModel`
+  (Task surfaces) or `getExploreModel`/`exploreModel` (Explore) instead.
+- `getModel1()` migrates legacy `glm-model` → no data loss for existing users.
+- Per-path model: direct path (`_callGLMStream`, Task/Analyze) sends `getTaskModel()`;
+  brokered path (`_callBrokeredLLM`, Explore) sends `getExploreModel()`. Server
+  unchanged (forwards client's `model`).
+- Explore composer has a `<select>` over `availableModels`; Task is locked to Model 1.
+- Export/import settings JSON: `model-1`/`model-2` (was `glm-model`); import still
+  reads old `glm-model` as Model 1.
+- `getContextLimitTokens(model = getExploreModel())` default is now the Explore model.
+
+## v10.159 — Brokered (Explore) errors must ride the `data:` channel
+- BUG (fixed): Explore could give an empty reply with NO error toast. The server
+  (`server/routes/llm.ts`) writes SSE headers immediately, so upstream failures hit
+  the catch with `headersSent` already true and were written as an SSE COMMENT
+  (`: error ...`). The client (`_callBrokeredLLM`) only parses `data:` lines, so it
+  silently ignored the comment → blank bubble.
+- Fix: server `writeSSEError()` emits `data: {"error":{"message":...}}`; client parses
+  `{error}` and `throw`s so `createStreamFlow` → `handleExploreSend` shows the toast.
+- LESSON: on the brokered SSE path, anything the SPA must see (incl. errors) MUST be a
+  `data:` event, never an SSE comment. Also narrowed the client's JSON.parse `try` so a
+  real thrown error isn't swallowed by the "ignore malformed line" catch.
+- Common real trigger this now surfaces: the Explore-selected model isn't served by the
+  proxy, or the brokered server (`deploy/.env`) lacks its baseURL/key. Task mode uses the
+  direct browser path, so Task working + Explore silent ⇒ brokered server/model issue.
+
+## v10.160 — Explore multi-modal (image attachments)
+- Explore composer accepts images (png/jpg/jpeg/gif/webp, ≤4MB) → vision model. EXPLORE
+  ONLY; Task stays text-only. `Attachment` gained `kind:'text'|'image'` + `mime`; images
+  read as base64 data URLs.
+- THREE representations of an attachment (don't conflate):
+  1) Display: ChatBubble renders image `kind` as `<img class="attach-image">` thumbnail.
+  2) API: `buildMultimodalContent()` (used only when `createStreamFlow` opt `multimodal:true`,
+     set on exploreCoach) → OpenAI parts `[{type:'text'},{type:'image_url',image_url:{url}}]`.
+     `LLMChatMessage.content` is now `string | LLMContentPart[]`; server schema content is
+     `oneOf[string,array]`; ChatOpenAI/ReactAgent handle vision.
+  3) Persistence: SESSION-ONLY. `stripImageContent()` blanks image base64 before `addRecord`
+     (useLLM) and before `saveResponsesToStorage` (App.vue) — base64 would blow the
+     localStorage quota. Reloaded images show `coach.imageNotRetained` placeholder.
+- `inlineAttachments()` renders images as `[Image: name]` placeholder (NEVER base64) so the
+  text/direct path and the token guard never carry base64. Token guard counts images at a
+  flat ~800 tokens (`PER_IMAGE_TOKENS` in contextCalculator), not the data URL.
+
+## v10.161 — Explore server↔upstream config & TLS (debugging guide)
+- Explore (brokered) does NOT use the SPA "LLM Settings" — those drive ONLY Task (direct
+  browser path). Explore uses the SERVER env from `deploy/.env`: `LLMPROXY_BASE_URL` +
+  `LLMPROXY_API_KEY` (read in `server/llm/openai-client.ts`). So "I set the LLM setting but
+  Explore fails" is expected.
+- Symptom seen: Task works, Explore "Connection error." then "terminated". Both = server↔proxy
+  transport failure (surfaced by v10.159). Classic cause: the NODE server doesn't trust the
+  corporate TLS cert the BROWSER trusts (browser=OS/corp CA, Node=own bundle).
+- Diagnosis aids added: `server/routes/llm.ts` now appends `err.cause.code` to the toast +
+  logs `causeCode/causeMsg` (TLS code like DEPTH_ZERO_SELF_SIGNED_CERT vs UND_ERR_SOCKET/
+  ECONNRESET). `openai-client.ts` boot-logs the proxy URL/key/insecure status.
+- Fixes: `LLMPROXY_INSECURE_TLS=true` (DEV escape hatch → sets NODE_TLS_REJECT_UNAUTHORIZED=0)
+  or PROD-correct `NODE_EXTRA_CA_CERTS=<corp-root-ca.pem>` (must be a REAL env var before Node
+  starts — NOT via --env-file). Server `bodyLimit` raised 1MB→8MB (`LLM_BODY_LIMIT_MB`) so
+  multi-modal image turns don't 413.
+
+## v10.162 — Explore UND_ERR_SOCKET after model-selection (key entitlement, NOT MCP)
+- Regression timeline: Explore worked when it sent ONE fixed model; v10.158 made it send the
+  SELECTED model (`getExploreModel()`), after which both models → `terminated (UND_ERR_SOCKET)`.
+  MCP/tools is NOT the cause (bound since v10.133, before the regression).
+- Root-cause class: Explore (server path) authenticates to the proxy with the SERVER's
+  `deploy/.env` `LLMPROXY_API_KEY`, which is a DIFFERENT credential than the SPA key Task uses.
+  `UND_ERR_SOCKET` (proxy closes, no HTTP response) ⇒ gateway-level reject — most likely the
+  server key isn't entitled to the selected model. Same model working in Task ≠ working in
+  Explore because of the different key/path.
+- Diagnostics added: `server/routes/llm.ts` logs `llm/chat request {model,tools,multimodal}`
+  and appends `[model=…]` to the surfaced error → the toast shows EXACTLY which model the
+  server tried. `EXPLORE_DISABLE_MCP=true` strips tool-binding (isolation lever; not the fix).
+- Lesson: when debugging Explore-only failures, FIRST confirm the exact model the server sent
+  and that `LLMPROXY_API_KEY` is entitled to it — don't assume model parity with Task.
+
+## v10.163 — ACTUAL root cause of Explore UND_ERR_SOCKET: empty assistant messages in history
+- CORRECTION to v10.162: it was NOT key entitlement and NOT the model. The captured request
+  payload showed the `messages` array full of `{role:'assistant',content:''}` from prior FAILED
+  turns. The client re-sends the whole history every turn → the proxy rejects requests that
+  contain empty assistant messages → drops the socket (`UND_ERR_SOCKET`). Self-perpetuating:
+  one failure left an empty placeholder, poisoning all later turns and piling up more.
+- Why it persisted: `createStreamFlow`'s generic-error AND cancel branches left the empty
+  assistant placeholder in `messages.value` (only the 429 branch popped it). New chat "didn't
+  help" because any single failure immediately re-polluted.
+- Fix (v10.163): `apiMessages` now SKIPS empty turns (`!content.trim() && !attachments`) so empty
+  assistant/user messages are never sent; generic-error + cancel branches POP the empty
+  placeholder. Also: images sent only for the CURRENT turn + a vision model (`isVisionModel()` in
+  config/llm.ts; history/text models → `[Image: name]` placeholder), and New chat calls `detachAll()`.
+- LESSON: never ship empty assistant messages to an OpenAI-compatible proxy; clean failed-turn
+  placeholders out of chat history before re-sending. The decisive diagnostic was the actual
+  Network request payload, not the model/key.
+- (v10.163 was a real bug + needed fix, but NOT the final cause — see v10.164.)
+
+## v10.164 — THE final cause of Explore UND_ERR_SOCKET: Fastify coerced string content → array
+- After v10.163 the wire payload was clean (all-string `content`) yet the server STILL logged
+  `multimodal:true` and dropped. Wire shows string, server sees array ⇒ Fastify/ajv COERCED it.
+- Cause: the v10.160 server schema change `content: oneOf:[{type:'string'},{type:'array'}]` +
+  Fastify's default ajv type-coercion rewrote the string `content` into an array → corrupted
+  payload → proxy rejects → socket drop. Broke at v10.160 exactly; pre-v10.160 `{type:'string'}`
+  never coerced. Hit ALL models / every text turn / `multimodal:true` with no image.
+- Fix: `server/routes/llm.ts` `content` schema → `{}` (no `type` ⇒ ajv leaves it untouched;
+  string stays string, real vision parts-array stays array). Added `contentTypes` to the request
+  log. Regression test: string content reaches the agent as a string.
+- BIG LESSON: a `oneOf`/multi-type request schema for a field + Fastify ajv `coerceTypes` can
+  silently MUTATE request data. If wire ≠ what the handler sees, suspect schema coercion. For
+  pass-through fields that may be string OR structured, use `content: {}` (no type), not `oneOf`.
+- Diagnostic that cracked it: compare the DevTools Network request payload (wire) against what
+  the server logs/forwards (handler) — the mismatch pinpointed coercion.
+
+## v10.165 — Image attachment gated to vision models (qwen) in Explore
+- `ExploreChat.vue`: `acceptHint` is computed from `isVisionModel(exploreModel)` — text models
+  (minimax) get a text-only file picker; vision models (qwen) also accept images. `handleFileSelect`
+  rejects image files on a text model (`toast.imageNeedsVisionModel`); `onModelChange` drops any
+  already-attached images when switching to a text model. Backstop is the v10.163 send-time gating.
+- A full "Lessons Learned" retrospective of the Explore UND_ERR_SOCKET saga (4 layers: invisible
+  errors → empty-assistant re-send → stale image → Fastify content coercion) is in PLAN.md under
+  the v10.165 entry. Key meta-lesson: when wire ≠ handler, suspect request-schema coercion.
+
+## v10.166 — Readable model-select dropdown
+- Native `<select>` dropdowns default to a near-white option list. Style `.composer-model-select
+  option` with `background-color: var(--bg-secondary)` + `color: var(--text-primary)` so options
+  match the composer surface and are readable (Chromium/Edge honor option bg/color).
+
+## v10.167 — Explore message UX (user meta-row, AI elapsed header, no empty-state flash)
+- `ChatBubble` is shared by Task (bubble) + Explore (stacked). New chat UX is **Explore-only** —
+  gate every addition on `layout === 'stacked'` so Task is untouched (project rule).
+- User meta-row (date · Retry · Edit · Copy) sits under the user bubble, revealed on
+  `.chat-msg:hover` / `:focus-within`. Copy uses `@/utils/clipboard` `copyText` (never raw clipboard).
+- Retry/Edit on ANY user turn = truncate everything after it (drop reply + later turns + their
+  history records via `hashId` → `deleteRecords`) then regenerate. Built on the existing
+  `request(payload, _isAutoRetry=true)` primitive via new `regenerate(payload?)` flow method
+  (`regenerateExploreCoach`); history is rebuilt from the message array so edited text flows through
+  without re-pushing a user turn. Pass a fresh `buildPayload('coach')` so it works post-reload
+  (when `_lastPayload` is null). Edit also calls `updateRecordContent(hashId, text)`.
+- "Thought for Xs" header = time-to-first-token: `ChatMessage.firstTokenMs` set in `useLLM` on the
+  first chunk (`streamStart − assistant.timestamp`; placeholder timestamp = request-start).
+- "No content available" came from `formatCoach` on empty content. Fix is in `ChatBubble`'s content
+  watcher: keep `formattedContent=''` for empty content. Do NOT `v-if` `.coach-response` — its click
+  listener is attached once in `onMounted`, so the element must stay in the DOM.
+
+## v10.168 — Locale-aware dates must use the app toggle, not OS fallback
+- `toLocaleDateString(undefined, …)` falls back to the **OS locale** — on a zh Windows box that
+  renders Chinese dates even in English mode. Always pass an explicit locale tied to the app's
+  language toggle: `isZh.value ? 'zh-CN' : 'en-US'` (see `ChatBubble.vue` `dateLabel`).
+
+## v10.169 — Per-session history download named by label
+- History export functions (`exportAsJson/Markdown/Records` in `useCoachHistory.ts`) take an optional
+  `baseName?`; default stays `coach-history-<date>` so the action-bar merge-all path is unchanged.
+  Per-session download passes `sanitizeFilename(sessionTitle(group))` (custom name ?? first-message
+  preview). `sanitizeFilename` strips `\ / : * ? " < > |`, collapses whitespace, caps 60, falls back 'chat'.
+- UI: hover-revealed download icon in each `CoachHistoryTab` session header → reuses `DownloadModal`
+  (format chooser) but scoped to one session via `downloadSessionId`. Ungrouped/legacy records have no
+  label so they keep only the action-bar export.
+
+## v10.170 — Bare (un-delimited) LaTeX auto-wrap for KaTeX
+- Math renderer = KaTeX via remark-math/rehype-katex in `src/utils/markdown.ts` (kept; correct choice —
+  sync/streaming-friendly, NOT MathJax). All preprocessing assumed DELIMITED math (`$ $$ \[ \(`); models
+  that ignore the `$`-delimiter system-prompt instruction emit bare LaTeX that leaked as text.
+- Fix: `wrapBareLatex()` conservatively wraps a whole line in `$$…$$` only when it's clearly a standalone
+  equation (no `$`, no `|`, no CJK, not a markdown structural line, has a strong LaTeX command or `ident=…\cmd`
+  shape, ≤2 prose words). MUST track BOTH fenced-code state AND open multiline `$$` blocks (inner lines have no
+  `$` of their own — wrapping them corrupts the block; that was the first-cut regression). Also un-doubles
+  `\cmd`→`\cmd` within wrapped lines. Inline bare LaTeX in prose is intentionally NOT handled (false-positive risk).
+- Also strengthened `response-format.md` (ALWAYS delimit; never raw commands; no doubled backslashes).
+
+## v10.171 — Brand renamed AGec → EXA (language-agnostic gradient wordmark)
+- App brand mark is **EXA** (was AGec). It is English-only / NOT translated — `AppHeader.vue` renders a
+  single `aria-label="EXA"` wordmark regardless of the language toggle (no more `currentLang` v-if split).
+- Artistic treatment: `.brand-exa` = purple→blue gradient text (reuses `--accent-purple`/`--accent-blue`,
+  the Explore-hero/thinking-orb gradient); `.brand-x` is the focal glyph (brighter blue→cyan gradient,
+  1.18em, weight 900, stronger glow) symbolizing "infinite boundaries (X)". Old `.logo-a/.logo-g/.logo-ec` removed.
+- `index.html` title = EXA, html lang = en. `header.title` i18n key = 'EXA' in both locales (only the
+  removed ZH header branch used it).
+
+## v10.172 — Brand is EAX (was EXA); dots mirror letter colors
+- Final brand mark order is **EAX** (E A X), NOT EXA. `AppHeader.vue` wordmark uses three per-letter
+  solid brand colors: `.brand-e` purple (`--accent-purple`), `.brand-a` blue (`--accent-blue`),
+  `.brand-x` cyan `#22d3ee` (focal: larger/heavier/glow). The three header dots `.dot-e/.dot-a/.dot-x`
+  use the SAME three colors left→right so they mirror the letters (replaced the old mac red/amber/blue).
+- All brand strings = 'EAX' (index.html title, i18n header.title en+zh, aria-label).
+
+## v10.173 — Claude-style borderless tables in Explore (stacked)
+- Markdown tables are wrapped in `<div class="table-scroll">` by `markdown.ts` (flat replace before
+  DOMPurify) for horizontal scroll; the base `.coach-response table` no longer uses `display:block`
+  (that caused shrink-wrap/narrow tables) — it's `display:table; width:100%` now, filling the column.
+- Explore Claude look is scoped to `.layout-stacked .coach-response` (table/th/td): borderless, no header
+  fill, bold header with single bottom border, thin row dividers only, airy padding, sans font, flush-left
+  first column. Task (bubble) keeps the boxed grid (now full-width). See `src/styles/coach-response.css`.
+
+## v10.174 — AI file blocks → download chip (`:::file` verbatim, streaming-safe)
+- AI can emit `:::file name="x.md"` … `:::` (open-source remark-directive `:::` convention) and it renders
+  as a single download chip. `extractFileBlocks()` in `markdown.ts` runs FIRST: fence-aware line scanner,
+  captures the body VERBATIM into `<div class="file-artifact" … data-content-b64>` (UTF-8 base64, inert
+  through remark/rehype/DOMPurify). Body is NEVER parsed → inner ```/tables/math can't break it.
+- Streaming: an unterminated `:::file` → `file-artifact--pending` chip and the partial body is DROPPED
+  (no spill/truncation before the closing `:::`).
+- Non-interference is the key constraint: extractor only matches exact `:::file`/`:::` LINES (and skips code
+  fences), so normal inline `$…$`/`$$`/`|tables|` are untouched (tests in `fileArtifact.test.ts` assert this).
+- Chip render/click in `codeArtifact.ts` (`enhanceFileArtifacts` + `handleArtifactClick` file branch, base64
+  `encodeContent`/`decodeContent`, `fileMetaForFilename`); invoked from `ChatBubble.enhanceArtifacts`.
+  System prompt (`response-format.md`) teaches the convention, scoped to explicit file requests only.
+
+## v10.179 — Docker deploy: pass LLM env into the container
+- The container CMD does NOT load deploy/.env; runtime env must be in the compose `environment:` block.
+  Added `LLMPROXY_BASE_URL/LLMPROXY_API_KEY/EXPLORE_DISABLE_MCP/INTERNAL_API_TOKEN` (interpolated from
+  deploy/.env, like QUALITY_API_KEY). Previously only QUALITY_API_KEY was passed → prod Explore/Task chat
+  would 502. (This LLM-env fix was kept when the v10.175–v10.179 Mermaid/PlantUML diagram feature was
+  rolled back to v10.174.)
+- Dev gotcha: editing deploy/.env does NOT restart `npm run server` (tsx watch only watches source) — must
+  force-kill the port (`Get-NetTCPConnection -LocalPort 8080 … Stop-Process`) and restart.
+
+## v10.175 (post-rollback) — SVG artifact preview was blank white
+- `:::file name="*.svg"` cards open in `ArtifactPanel` Preview (`kind:'svg'` → iframe `srcdoc` = `SVG_WRAP_STYLE` +
+  source). Blank-but-Code-shows-source means the render, not the pipeline, is the problem. Two causes for AI
+  SVGs: white/transparent art on a flat `#fff` bg (invisible), and `width/height="100%"` collapsing in a
+  flex/centered box. Fix in `SVG_WRAP_STYLE`: light CHECKERBOARD backdrop (reveals white/transparent art) +
+  `svg{width:auto;height:auto;max-width/height:100%}` (renders at viewBox intrinsic size, scaled to fit).
+  Reuse this pattern for any standalone-SVG/image preview.
+
+## v10.176 — File-as-card is prompt-driven, not heuristic
+- "Requested file → download card; illustrative code → inline" is an INTENT decision only the model can make,
+  so it lives in `src/config/skills/response-format.md`, NOT in rendering. `:::file name="…"` always cards
+  (any length, both layouts); plain ```fences collapse only at 40 lines (`LONG_CODE_LINE_THRESHOLD`).
+- Explore's whole system prompt = `getResponseFormat()` (`useLLM.ts:677`); Task/Analyze append it. A
+  localStorage `response-format` override (Settings edit) SHADOWS the default `.md` until reset — check this
+  first if a prompt edit "doesn't take effect".
+
+## v10.177–v10.178 — Artifact card names (model name, else section heading)
+- The deployed GWM model does NOT reliably emit `:::file` or fence filenames even for explicit file requests
+  (snapshot showed a 719-line ```html → card titled `snippet.html`). So prompt-only naming is insufficient;
+  the renderer must derive a name. Don't assume prompt directives like `:::file` are honored.
+- Naming priority in `enhanceCodeBlocks` (`codeArtifact.ts`): fence filename (```lang name.ext, carried by
+  `remarkCodeFilename` in `markdown.ts` as `<code data-filename>`) → `detectFilenameHint` (first-line `// app.js`)
+  → **nearest preceding heading** (`nearestHeading()` scans prev siblings + climbs; `safeNamePart` keeps CJK) →
+  `snippet.ext`. Heading-derivation is the model-agnostic fallback that fixed the "snippet" complaint.
+- `:::file name="…"` cards were already AI-named. AST/DOM over regex: fence meta via mdast `hProperties`, heading
+  via DOM walk — never regex the rendered HTML.
+- The fence filename is carried AST-side: `remarkCodeFilename` in `markdown.ts` copies a `code` node's info-string
+  filename onto the rendered `<code>` as `data-filename` (survives rehype-highlight + DOMPurify). Reuse this
+  pattern (mdast `hProperties`) to surface any fence metadata in the DOM — do NOT regex the rendered HTML.
+- `:::file name="…"` cards were already named (AI-supplied). All naming intent comes from the model via the
+  prompt's "Naming" section in `response-format.md`.
+
+## v10.179 — rehype-highlight `languages` REPLACES the default set (highlighting gotcha)
+- Syntax highlighting was silently dead for python/cpp/js/etc.: `markdown.ts` passed
+  `rehypeHighlight({ languages: { cmake, makefile } })`. In rehype-highlight v7 the `languages` map
+  **overrides** lowlight's `common` bundle instead of extending it — so only the two custom langs tokenized;
+  everything else got an `hljs language-*` class but **no token spans** (looked highlighted, wasn't). This was
+  the long-standing "pre-existing, unrelated" `formatCoach.test.ts` hljs failure.
+- Fix: `import { common } from 'lowlight'` and spread it back — `languages: { ...common, cmake, makefile }`.
+  Any time you add a custom highlight.js language, you MUST spread `common` too or you nuke all the defaults.
+- Side effect to watch: tests that assert a literal code string (e.g. `self.m = m`) break once highlighting
+  works, because token spans split the text. Assert a contiguous sub-slice (`.m = m`) instead.
+- The `===COACH_TURN===` coach divider is GONE by design (multi-turn = separate ChatMessage[] entries since the
+  Coach chat-UI redesign). Dead CSS `.coach-response-divider` lingers but nothing emits the marker.

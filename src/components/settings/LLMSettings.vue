@@ -29,10 +29,19 @@
           </div>
         </div>
 
-        <!-- Model Name -->
+        <!-- Model Name — two slots: Model 1 (Task + default Explore) and Model 2 (selectable in Explore) -->
         <div class="field-group">
           <label class="field-label">{{ t('settings.model') }}</label>
-          <input v-model="localModel" type="text" list="model-presets" class="field-input" :placeholder="t('settings.modelPlaceholder')" autocomplete="off" />
+          <div class="model-row">
+            <div class="model-col">
+              <input v-model="localModel1" type="text" list="model-presets" class="field-input" :placeholder="t('settings.modelPlaceholder')" autocomplete="off" />
+              <span class="model-caption">{{ t('settings.modelTask') }}</span>
+            </div>
+            <div class="model-col">
+              <input v-model="localModel2" type="text" list="model-presets" class="field-input" :placeholder="t('settings.modelPlaceholder')" autocomplete="off" />
+              <span class="model-caption">{{ t('settings.modelSecondary') }}</span>
+            </div>
+          </div>
           <datalist id="model-presets">
             <option v-for="model in allModelPresets" :key="model" :value="model" />
           </datalist>
@@ -171,7 +180,7 @@ import { useI18n } from '@/i18n'
 import { ICONS } from '@/config/icons'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import {
-  getApiKey, setApiKey, getModel, setModel,
+  getApiKey, setApiKey, getModel1, getModel2, setModel1, setModel2,
   getProviderUrl, setProviderUrl,
   GLM_BASE_URL, GLM_DEFAULT_MODEL, LLM_MODEL_PRESETS
 } from '@/config/llm'
@@ -199,7 +208,8 @@ const settingsModalRef = ref<HTMLElement>()
 const { activate: activateSettingsTrap, deactivate: deactivateSettingsTrap } = useFocusTrap(settingsModalRef)
 
 const localApiKey = ref(getApiKey())
-const localModel = ref(getModel())
+const localModel1 = ref(getModel1())
+const localModel2 = ref(getModel2())
 const localProviderUrl = ref(localStorage.getItem('provider-url') ?? '')
 
 function currentLang(): 'zh' | 'en' { return isZh.value ? 'zh' : 'en' }
@@ -226,7 +236,8 @@ watch(localApiKey, () => { validationState.value = 'idle'; validationError.value
 watch(() => props.modelValue, (open) => {
   if (open) {
     localApiKey.value = getApiKey()
-    localModel.value = getModel()
+    localModel1.value = getModel1()
+    localModel2.value = getModel2()
     localProviderUrl.value = localStorage.getItem('provider-url') ?? ''
     const lang = currentLang()
     localTaskCoachSkill.value = getCoachSkillTaskRaw(lang)
@@ -262,7 +273,7 @@ async function handleTestKey() {
     const res = await fetch(testEndpointUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model: localModel.value.trim() || GLM_DEFAULT_MODEL, stream: false, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
+      body: JSON.stringify({ model: localModel1.value.trim() || GLM_DEFAULT_MODEL, stream: false, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
     })
     if (res.status === 401) {
       validationState.value = 'invalid'; validationError.value = t('error.glm401')
@@ -393,7 +404,8 @@ function handleExport() {
   const data = {
     'provider-url': localProviderUrl.value,
     'glm-api-key': localApiKey.value,
-    'glm-model': localModel.value
+    'model-1': localModel1.value,
+    'model-2': localModel2.value
   }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -411,7 +423,10 @@ function handleImport(e: Event) {
       const data = JSON.parse(ev.target?.result as string)
       if (data['provider-url'] !== undefined) localProviderUrl.value = data['provider-url']
       if (data['glm-api-key'] !== undefined) localApiKey.value = data['glm-api-key']
-      if (data['glm-model']) localModel.value = data['glm-model']
+      // Two model slots; fall back to the legacy single `glm-model` for old files.
+      if (data['model-1']) localModel1.value = data['model-1']
+      else if (data['glm-model']) localModel1.value = data['glm-model']
+      if (data['model-2'] !== undefined) localModel2.value = data['model-2']
       // Skills and templates are imported independently via their own buttons
     } catch { /* ignore invalid JSON */ }
     ;(e.target as HTMLInputElement).value = ''
@@ -422,7 +437,8 @@ function handleImport(e: Event) {
 function handleSave() {
   setProviderUrl(localProviderUrl.value)
   setApiKey(localApiKey.value.trim())
-  setModel(localModel.value.trim() || GLM_DEFAULT_MODEL)
+  setModel1(localModel1.value.trim() || GLM_DEFAULT_MODEL)
+  setModel2(localModel2.value.trim())
   setCoachSkillTask(localTaskCoachSkill.value)
   setAnalyzeSkill(localAnalyzeSkill.value)
   setResponseFormat(localResponseFormat.value)
@@ -459,6 +475,11 @@ function handleSave() {
 }
 .field-input:focus { border-color: var(--accent-blue); }
 .field-input:disabled { cursor: not-allowed; }
+
+/* Two-column model row (Model 1 = Task, Model 2 = secondary/Explore) */
+.model-row { display: flex; gap: var(--space-3); }
+.model-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.model-caption { font-size: var(--font-sm); color: var(--text-muted); }
 
 .toggle-group {
   display: flex; gap: 4px; padding: 4px; border-radius: var(--radius-md);

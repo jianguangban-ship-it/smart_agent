@@ -8,22 +8,74 @@ import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
 import rehypeStringify from 'rehype-stringify'
+import { common } from 'lowlight'
 import DOMPurify from 'dompurify'
+import { encodeContent, fileMetaForFilename } from './codeArtifact'
 
 // Additional highlight.js languages not in lowlight's common bundle
 import cmake from 'highlight.js/lib/languages/cmake'
 import makefile from 'highlight.js/lib/languages/makefile'
 
+// ─── Code-fence filename → <code data-filename> ────────────────────────────────
+// Minimal mdast node shape for the dependency-free walk below.
+interface MdNode {
+  type?: string
+  meta?: string | null
+  data?: { hProperties?: Record<string, unknown> }
+  children?: MdNode[]
+}
+
+/**
+ * Pull a safe `name.ext` filename token out of a code fence's info string — the
+ * text after the language, e.g. ```python quicksort.py → "quicksort.py". Mirrors
+ * `detectFilenameHint`'s validation: basename only, no path traversal.
+ */
+function fenceFilename(meta: string | null | undefined): string | null {
+  if (!meta) return null
+  const tok = meta.trim().split(/\s+/)[0] || ''
+  if (/^[\w.\-/]+\.[A-Za-z0-9]+$/.test(tok) && !tok.includes('..')) {
+    return tok.split('/').pop() || null
+  }
+  return null
+}
+
+/**
+ * remark transform: copy a code fence's filename (from its info string) onto the
+ * emitted `<code>` as `data-filename`, so the artifact card can title itself with
+ * it instead of the generic "snippet". AST-based (visits mdast `code` nodes), not
+ * a regex on rendered text; dependency-free walk (no `unist-util-visit`).
+ */
+function remarkCodeFilename() {
+  return (tree: MdNode) => {
+    const walk = (node: MdNode | undefined): void => {
+      if (!node || typeof node !== 'object') return
+      if (node.type === 'code' && node.meta) {
+        const name = fenceFilename(node.meta)
+        if (name) {
+          node.data = node.data || {}
+          node.data.hProperties = { ...(node.data.hProperties || {}), 'data-filename': name }
+        }
+      }
+      if (Array.isArray(node.children)) for (const child of node.children) walk(child)
+    }
+    walk(tree)
+  }
+}
+
 // ─── Unified processor (built once, reused across calls) ───────────────────────
 const processor = unified()
   .use(remarkParse)                                    // markdown → mdast
+  .use(remarkCodeFilename)                              // ```lang name.ext → <code data-filename>
   .use(remarkMath)                                     // AST-based math ($, $$) — skips code blocks naturally
   .use(remarkGfm)                                      // tables, strikethrough, autolinks, task lists
   .use(remarkBreaks)                                   // \n → <br> (GFM-style)
   .use(remarkRehype, { allowDangerousHtml: true })     // mdast → hast
   .use(rehypeRaw)                                      // parse raw HTML strings into hast nodes
   .use(rehypeKatex, { throwOnError: false } as never)   // render math nodes → KaTeX HTML
-  .use(rehypeHighlight, { detect: true, languages: { cmake, makefile } })
+  // `languages` REPLACES rehype-highlight's default set, so we must spread
+  // lowlight's `common` bundle back in — otherwise only cmake/makefile would
+  // tokenize and python/cpp/js/etc. render as plain text (just an `hljs` class).
+  .use(rehypeHighlight, { detect: true, languages: { ...common, cmake, makefile } })
   .use(rehypeStringify)                                // hast → HTML string
 
 // ─── DOMPurify config ──────────────────────────────────────────────────────────
@@ -163,6 +215,145 @@ function escapePipesInMath(text: string): string {
   return s
 }
 
+// Strong LaTeX commands that, on their own, strongly imply a line is an equation.
+const STRONG_LATEX_CMD = /\\(?:frac|dfrac|tfrac|sum|int|iint|oint|prod|sqrt|begin|left|right|lim|binom|overline|underline|vec|hat|partial|nabla|cdot|times|approx|leq|geq|neq)\b/
+// Any backslash-command (used together with an `ident =` equation shape).
+const ANY_LATEX_CMD = /\\[a-zA-Z]+/
+// CJK range — lines containing Chinese chars are left to the delimiter pipeline
+// (block-wrapping them risks swallowing prose).
+const CJK = /[、-〿㐀-䶿一-鿿豈-﫿！-￯]/
+// Markdown structural line starts we must never wrap.
+const MD_STRUCTURE = /^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s?|-{3,}\s*$|`{3,})/
+
+/**
+ * Auto-wrap bare (un-delimited) block-level LaTeX equations in `$$ … $$` so
+ * KaTeX can render output from models that ignore the "use $ delimiters"
+ * instruction (e.g. `J = \sum_{i=1}^{N} \left\vert … \right\vert_Q^2`).
+ *
+ * Conservative by design — only whole lines that *look like an equation* and
+ * carry almost no prose are wrapped, so ordinary text (incl. Windows paths,
+ * tables, code, Chinese prose) is never touched. Inline bare LaTeX inside a
+ * sentence is intentionally NOT handled here (relies on the system prompt).
+ */
+function wrapBareLatex(text: string, isStreaming: boolean): string {
+  const lines = text.split('\n')
+  const endsWithNewline = text.endsWith('\n')
+  let inFence = false
+  let inDisplay = false   // inside an open multiline $$ … $$ block
+
+  const out = lines.map((line, idx) => {
+    // Track fenced code blocks (``` / ~~~) — never wrap inside them.
+    if (/^\s*(?:```|~~~)/.test(line)) { inFence = !inFence; return line }
+    if (inFence) return line
+
+    // Track multiline $$ display blocks: an odd count of $$ on a line toggles
+    // the open/closed state. Never wrap lines belonging to such a block — the
+    // inner lines have no $ of their own but are still math.
+    const wasInDisplay = inDisplay
+    const ddCount = (line.match(/\$\$/g) || []).length
+    if (ddCount % 2 === 1) inDisplay = !inDisplay
+    if (wasInDisplay) return line
+
+    // Skip the final, still-streaming line so a half-equation doesn't flash.
+    if (isStreaming && !endsWithNewline && idx === lines.length - 1) return line
+
+    const trimmed = line.trim()
+    if (!trimmed) return line
+    if (line.includes('$')) return line          // already (partly) delimited
+    if (line.includes('|')) return line          // likely a GFM table row
+    if (line.startsWith('    ') || line.startsWith('\t')) return line // indented code
+    if (CJK.test(line)) return line
+    if (MD_STRUCTURE.test(line)) return line
+
+    const hasStrong = STRONG_LATEX_CMD.test(trimmed)
+    const isEquation = /^[A-Za-z\\][\w\\]*\s*(?:=|:=|\\(?:approx|leq|geq|neq|equiv|propto))/.test(trimmed) && ANY_LATEX_CMD.test(trimmed)
+    if (!hasStrong && !isEquation) return line
+
+    // Prose guard: count natural-language words (≥3 letters) that are NOT part of
+    // a LaTeX command. If the line reads mostly as prose, leave it alone.
+    const withoutCmds = trimmed.replace(/\\[a-zA-Z]+/g, ' ')
+    const proseWords = (withoutCmds.match(/[A-Za-z]{3,}/g) || []).length
+    if (proseWords > 2) return line
+
+    // Repair double-escaped commands within this line only (\\vert → \vert),
+    // leaving genuine `\\` row breaks (followed by space / single-letter) alone.
+    const cleaned = trimmed.replace(/\\\\([a-zA-Z]{2,})/g, '\\$1')
+    return `$$${cleaned}$$`
+  })
+
+  return out.join('\n')
+}
+
+// ─── File artifact extraction (`:::file name="…"` … `:::`) ─────────────────────
+// LLMs that ignore delimiters break fenced-code "files" (a Markdown file's own
+// ``` closes the outer fence → truncation/spill). We capture file blocks VERBATIM
+// before the markdown pipeline using a line-anchored marker (remark-directive's
+// `:::` container convention) so inner ``` / tables / math can never break them,
+// and so normal inline math/tables (which never start a line with `:::`) are
+// untouched. Content rides in an inert base64 data attribute on a placeholder div.
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function parseFileName(rest: string): string {
+  const q = rest.match(/name\s*=\s*"([^"]+)"/) || rest.match(/name\s*=\s*'([^']+)'/)
+  if (q) return q[1].trim()
+  const bare = rest.replace(/[{}]/g, ' ').trim()
+  const tok = bare.split(/\s+/).find(x => /\.[A-Za-z0-9]+$/.test(x))
+  return tok || 'file.txt'
+}
+
+/**
+ * Replace `:::file …` / `:::` blocks with an inert `.file-artifact` placeholder
+ * (rendered into a download chip post-v-html by codeArtifact.ts). Fence-aware so
+ * a `:::file` mentioned inside a ``` code block is left alone. During streaming an
+ * unterminated block becomes a `--pending` chip and its partial body is dropped,
+ * so nothing spills into the chat before the file is complete.
+ */
+function extractFileBlocks(text: string, _isStreaming: boolean): string {
+  if (!text.includes(':::file')) return text
+  const lines = text.split('\n')
+  const out: string[] = []
+  let inFence = false
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+    if (/^\s*(?:```|~~~)/.test(line)) { inFence = !inFence; out.push(line); i++; continue }
+    const open = !inFence ? /^\s*:::file\b(.*)$/.exec(line) : null
+    if (!open) { out.push(line); i++; continue }
+
+    const filename = parseFileName(open[1])
+    // Scan for the closing ::: line; capture body verbatim.
+    let j = i + 1
+    const body: string[] = []
+    let closed = false
+    while (j < lines.length) {
+      if (/^\s*:::\s*$/.test(lines[j])) { closed = true; break }
+      body.push(lines[j]); j++
+    }
+
+    if (!closed) {
+      // Unterminated (mid-stream): pending chip, drop the partial body entirely.
+      out.push('', `<div class="file-artifact file-artifact--pending" data-filename="${escapeAttr(filename)}"></div>`, '')
+      return out.join('\n')
+    }
+
+    const content = body.join('\n')
+    const meta = fileMetaForFilename(filename)
+    const lineCount = content === '' ? 0 : content.replace(/\n$/, '').split('\n').length
+    out.push(
+      '',
+      `<div class="file-artifact" data-filename="${escapeAttr(filename)}" data-mime="${escapeAttr(meta.mime)}" data-lang="${escapeAttr(meta.label)}" data-lang-token="${escapeAttr(meta.ext)}" data-lines="${lineCount}" data-content-b64="${encodeContent(content)}"></div>`,
+      ''
+    )
+    i = j + 1
+  }
+
+  return out.join('\n')
+}
+
 /**
  * During streaming, strip trailing unclosed math delimiters to prevent raw
  * LaTeX tokens from flashing. Only trims from the END of the text.
@@ -200,14 +391,23 @@ function hideUnclosedMath(text: string): string {
 export function renderMarkdown(text: string, isStreaming = false): string {
   if (!text) return ''
 
+  // 0. Extract `:::file …` blocks VERBATIM into inert placeholders BEFORE any
+  // other pass, so file bodies (which may contain ``` / tables / math) are never
+  // parsed, and an unterminated block mid-stream becomes a pending chip (no spill).
+  let input = extractFileBlocks(text, isStreaming)
+
   // During streaming, trim trailing unclosed math delimiters
-  let input = isStreaming ? hideUnclosedMath(text) : text
+  if (isStreaming) input = hideUnclosedMath(input)
 
   // 1. Unwrap LaTeX that the LLM accidentally put in code fences
   input = unwrapLatexFromCodeBlocks(input)
 
   // 2. Normalize \[...\] → $$...$$, \(...\) → $...$
   input = normalizeMathDelimiters(input)
+
+  // 2b. Auto-wrap bare (un-delimited) block equations so models that ignore the
+  // "$ delimiters" instruction still render (e.g. `J = \sum ... \right\vert_Q^2`).
+  input = wrapBareLatex(input, isStreaming)
 
   // 3. Ensure multiline $$ blocks have $$ on its own line (for remark-math flow)
   input = normalizeDisplayMathBlocks(input)
@@ -219,7 +419,14 @@ export function renderMarkdown(text: string, isStreaming = false): string {
   input = escapePipesInMath(input)
 
   // 6. Render through unified/remark/rehype pipeline
-  const rawHtml = String(processor.processSync(input))
+  let rawHtml = String(processor.processSync(input))
+
+  // 6b. Wrap each table in a horizontal-scroll container so wide (math-heavy)
+  // tables scroll instead of stretching the panel. GFM tables don't nest, so the
+  // flat replace is safe. `<div class>` is allowed by PURIFY_CONFIG below.
+  rawHtml = rawHtml
+    .replace(/<table(\s[^>]*)?>/g, '<div class="table-scroll"><table$1>')
+    .replace(/<\/table>/g, '</table></div>')
 
   // 7. Sanitise
   return DOMPurify.sanitize(rawHtml, PURIFY_CONFIG)
