@@ -53,7 +53,8 @@ const REQUEST_BODY_SCHEMA = {
   }
 } as const
 
-async function requireInternalTokenIfConfigured(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+// Exported so sibling routes (transcribe.ts) enforce the same guard.
+export async function requireInternalTokenIfConfigured(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!INTERNAL_API_TOKEN) return
   const provided = req.headers['x-internal-token']
   if (provided !== INTERNAL_API_TOKEN) {

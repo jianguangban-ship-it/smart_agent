@@ -169,6 +169,13 @@ describe('formatCoachResponse', () => {
     })
   })
 
+  describe('response boundary divider', () => {
+    it('renders ===COACH_TURN=== as response-divider', () => {
+      const result = formatCoachResponse({ message: 'answer one\n\n===COACH_TURN===\n\nanswer two' })
+      expect(result).toContain('coach-response-divider')
+    })
+  })
+
   describe('array input', () => {
     it('uses first element of array', () => {
       const result = formatCoachResponse([{ status: 'PASS' }])

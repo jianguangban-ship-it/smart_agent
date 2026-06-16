@@ -8890,59 +8890,1064 @@ Naming priority in `enhanceCodeBlocks`: fence name (```lang name.ext) → first-
 | `src/components/layout/AppHeader.vue` | v10.177 → v10.178. |
 | `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
 
-## v10.179 — Fix syntax highlighting + green the test suite
 
-### Design rationale
+## v10.179 — Voice dictation in the Explore composer (mic, device picker, whisper STT)
 
-`npm test` showed 4 failing tests on the branch. Investigation (re-running each
-against committed HEAD via `git stash`) split them into one real code bug and
-three stale tests:
+Phase 1 of voice input, matching Claude.ai's dictation UX (user snapshots `voice-mode.png` / `hold-to-record.png`): a mic button + voice-settings menu in the Explore composer; recording shows a live waveform with ✕/✓; confirmed audio is transcribed by the GWM proxy's faster-whisper (`default/whisper-large-v3-turbo`) and APPENDED to the draft for review — never auto-sent. Phase 2 (conversational voice mode: animated background, auto-send, TTS) is intentionally NOT built; seams are reserved.
 
-- **Real bug — syntax highlighting was silently disabled.** `markdown.ts` passed
-  `rehypeHighlight` an option of `languages: { cmake, makefile }`. In
-  rehype-highlight v7 the `languages` map *replaces* the default `common` bundle
-  rather than extending it, so only cmake/makefile tokenized — every other code
-  block (python, cpp, js, …) rendered as plain text with just an `hljs language-*`
-  class and **no token spans**. The two `formatCoach.test.ts` `hljs-keyword`
-  assertions had been failing for this reason and were logged as "pre-existing,
-  unrelated" across many prior versions. Fix: spread lowlight's `common` back in —
-  `languages: { ...common, cmake, makefile }`.
-- **Stale test — `===COACH_TURN===` divider.** Per v-Coach-redesign (PLAN ~line
-  1626) the divider preprocessing was intentionally removed as dead code once
-  multi-turn coach responses became separate `ChatMessage[]` entries. Nothing
-  emits or consumes the marker anymore (only dead CSS remained). Removed the
-  orphaned `response boundary divider` test.
-- **Stale test — stacked layout "inline avatar".** The Explore (stacked) layout
-  was deliberately redesigned to be avatar-less / pure-Claude (alignment + bubble
-  convey the speaker; role label is `sr-only`). Updated the assertion to expect no
-  avatar and an `sr-only` role label, and corrected the stale source comment in
-  `ChatBubble.vue`.
-
-Enabling real highlighting surfaced one more test that had been passing *because*
-highlighting was broken: `mathRendering.test.ts` asserted the literal `self.m = m`
-to prove code isn't math-rendered. Highlighting now wraps `self` in a token span,
-so the assertion was relaxed to `.m = m` (still proves the `m`s weren't turned
-into KaTeX) with an explanatory comment.
-
-Result: **416/416 tests pass**, `vue-tsc` + vite build clean.
+### Design
+- **STT stays server-side.** The browser can't reach llmproxy (firewall/key custody), so a new `POST /api/llm/transcribe` on the existing Fastify server forwards audio upstream, reusing `LLMPROXY_BASE_URL`/`LLMPROXY_API_KEY`/`X-Internal-Token`/`LLMPROXY_INSECURE_TLS` — zero new credentials.
+- **`audio/transcriptions`, not `audio/translations`.** The user-quoted path was `translations`, but in the OpenAI convention that FORCES English output; `transcriptions` preserves the spoken language (Chinese in → Chinese out, the bilingual requirement). `STT_PATH`/`STT_MODEL` are env-overridable; verify with GWM IT which path the proxy exposes.
+- **SPA→server transport = base64 JSON** (no `@fastify/multipart` dep — Fastify v4 would pin 8.x; matches the base64-image convention; a 60 s opus clip ≈ ≤700 KB, far under `LLM_BODY_LIMIT_MB`). The server re-encodes to real multipart via native `FormData`/`Blob`, so the 33% overhead never leaves the box.
+- **Secure-context degradation.** Prod is plain HTTP → `getUserMedia` doesn't exist (same class of issue as `navigator.clipboard`). `isVoiceSupported()` gates everything: disabled mic + "needs HTTPS or localhost" tooltip, settings chevron hidden, zero console errors. Escape hatch documented in `.env.example` (HTTPS deploy or `InsecureOriginsAllowedForUrls` policy).
+- **Waveform = DOM bars, not canvas** (36 × 2 px divs off a level ring buffer): themed by CSS vars, testable in jsdom, trivial at ~12 Hz.
+- **Hold-to-record listens for release on `window`**, not pointer capture — the mic button unmounts when the recording bar swaps in, which would drop capture.
 
 ### Changes
+- **`server/routes/transcribe.ts`** (new) — base64→multipart forwarder; 502 with `err.cause` code on upstream failure; 60 s timeout.
+- **`server/routes/llm.ts`** — export `requireInternalTokenIfConfigured` for the sibling route. **`server/index.ts`** — register `transcribeRoutes`.
+- **`deploy/.env.example`** — STT section (`STT_PATH`, `STT_MODEL`, secure-context note).
+- **`src/utils/sttClient.ts`** (new) — Blob→base64→`/api/llm/transcribe`, internal-token header pattern from `useLLM.ts`.
+- **`src/composables/useVoiceRecorder.ts`** (new) — device enumeration (+`devicechange`), getUserMedia w/ stale-device retry, MediaRecorder lifecycle (mime fallback chain, 5 min auto-stop), AnalyserNode RMS level + waveform ring buffer, localStorage persistence (device, hold-to-record), strict teardown (tracks + AudioContext).
+- **`src/components/chat/VoiceControls.vue`** (new) — idle (chevron + mic), settings menu (live level meter / device radio list w/ "Microphone {n}" fallback / hold-to-record pill switch), recording bar (waveform + ✕/✓ + transcribing spinner), error→toast mapping, Esc cancels.
+- **`src/components/chat/ExploreChat.vue`** — `VoiceControls` in `.composer-bar-right`; other bar controls `v-show="!isRecording"` (select keeps state); `appendTranscript()` appends with a separating space.
+- **`src/i18n/en.ts` / `zh.ts`** — new `voice.*` group (13 keys, line-parallel).
+- **`AppHeader.vue`** — v10.178 → v10.179.
 
-- [x] **Highlighting fix** — register lowlight `common` languages so all code
-      fences syntax-highlight again (user-visible regression fix)
-- [x] **Removed** stale `===COACH_TURN===` divider test
-- [x] **Updated** stacked-layout test + `ChatBubble.vue` comment to match the
-      avatar-less Explore design
-- [x] **Relaxed** the Chinese-code-block math test assertion to survive highlighting
-
-### File matrix
+### Verification
+- `npx vue-tsc -b` green. `npx vitest run`: 445 passed, only the 4 pre-existing unrelated failures (`formatCoach.test.ts` ×3, `ChatBubble.layout.test.ts` ×1). New tests: `server/__tests__/llm-transcribe.test.ts` (8 — upstream URL/auth/FormData shape, env overrides, token guard, 400/502 paths), `useVoiceRecorder.test.ts` (13 — real-class MediaRecorder/AudioContext fakes per the vi.fn-ctor lesson; deviceId constraint, teardown, error mapping, persistence), `VoiceControls.test.ts` (12 — support gate, menu, hold mode, confirm/cancel/error flows).
+- Manual (localhost dev = secure context): record → Chinese speech → Chinese text appended; cancel discards; permission-denied toast; unsupported state renders disabled mic.
 
 | File | Change |
 |------|--------|
-| `src/utils/markdown.ts` | Import lowlight `common`; `languages: { ...common, cmake, makefile }` |
-| `src/utils/__tests__/formatCoach.test.ts` | Removed orphaned COACH_TURN divider test |
-| `src/components/chat/__tests__/ChatBubble.layout.test.ts` | Assert avatar-less stacked layout + sr-only role label |
-| `src/components/chat/ChatBubble.vue` | Corrected stale avatar comment |
-| `src/utils/__tests__/mathRendering.test.ts` | `self.m = m` → `.m = m` assertion |
-| `src/components/layout/AppHeader.vue` | v10.178 → v10.179 |
+| `server/routes/transcribe.ts` | new STT proxy route (base64 in, multipart up). |
+| `server/routes/llm.ts`, `server/index.ts` | guard export; route registration. |
+| `server/__tests__/llm-transcribe.test.ts` | 8 route tests. |
+| `deploy/.env.example` | `STT_PATH`/`STT_MODEL` + secure-context note. |
+| `src/utils/sttClient.ts` | upload client. |
+| `src/composables/useVoiceRecorder.ts` | audio capture composable. |
+| `src/composables/__tests__/useVoiceRecorder.test.ts` | 13 composable tests. |
+| `src/components/chat/VoiceControls.vue` | mic + menu + recording bar UI. |
+| `src/components/chat/__tests__/VoiceControls.test.ts` | 12 component tests. |
+| `src/components/chat/ExploreChat.vue` | composer integration. |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | `voice.*` keys. |
+| `src/components/layout/AppHeader.vue` | v10.178 → v10.179. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
+
+
+## v10.180 — Voice STT: default to the path GWM actually exposes + diagnosable error toast
+
+Manual verification of v10.179: all UI flows worked (settings menu, device picker, level meter, waveform, ✕/✓), but every transcription failed with the generic "转写失败" toast. Live probes against llmproxy (real key, real Chinese WAV) isolated the failure to the upstream, not our code.
+
+### Diagnosis (probed 2026-06-10)
+- `POST /v1/audio/transcriptions` → **404** `{"detail":"Not Found"}` — our v10.179 default path is simply not registered on GWM's backend.
+- `POST /v1/audio/translations` → **422** without a file (route exists, validates), but **500** `Internal Server Error` on every real request — across `whisper-large-v3-turbo`/`whisper-large-v3`/`sense-voice-small`, 43 KB–214 KB WAVs (16/22 kHz), with/without `language`/`response_format`/part content-type/`default/` prefix.
+- `GET /v1/models` confirms `default/whisper-large-v3-turbo` exists (catalog also has `sense-voice-small` ASR and TTS models `cosyvoice3`/`xtts-v2`/`kokoro-82m` — Phase-2 relevant).
+- **Net: voice dictation is blocked on GWM IT fixing the translations 500.** Encouraging: sense-voice cannot translate, so "translations" is likely just GWM's generic STT mount — language preservation must be re-verified once the 500 is fixed.
+
+### Changes
+- **`server/routes/transcribe.ts`** — default `STT_PATH` flipped to `audio/translations` (the only registered path); header comment documents the probe results and the verify-Chinese-output follow-up. `STT_PATH` env still overrides.
+- **`src/utils/sttClient.ts`** — new `STTError` carrying the server's diagnostic (`{ message }` from the 502 body, e.g. "STT upstream HTTP 500").
+- **`src/components/chat/VoiceControls.vue`** — failure toast appends the detail: "转写失败 — 请重试 (STT upstream HTTP 500)" — 404-misconfig vs 500-upstream now visible without server logs.
+- **`deploy/.env.example`** — STT section comment matches reality.
+- **Tests** — route default-URL assertions flipped; STTError-detail toast case + plain-Error fallback case added (VoiceControls now 13 tests).
+- **`AppHeader.vue`** — v10.179 → v10.180.
+
+### Verification
+- `npx vue-tsc -b` green; `llm-transcribe` (8) + `VoiceControls` (13) suites green.
+- Re-probe when GWM IT reports a fix: `curl -k -X POST https://llmproxy.gwm.cn/v1/audio/translations -H "Authorization: Bearer <key>" -F "file=@<wav>" -F "model=default/whisper-large-v3-turbo"` → expect 200 `{"text":"…"}` — then re-run the manual UI checklist and confirm Chinese in → Chinese out (if English: escalate for a transcriptions route, set `STT_PATH` accordingly).
+
+| File | Change |
+|------|--------|
+| `server/routes/transcribe.ts` | default path → `audio/translations`; probe notes. |
+| `src/utils/sttClient.ts` | `STTError` with server diagnostic. |
+| `src/components/chat/VoiceControls.vue` | toast appends upstream detail. |
+| `server/__tests__/llm-transcribe.test.ts` | default/override URL assertions flipped. |
+| `src/components/chat/__tests__/VoiceControls.test.ts` | detail-suffix + fallback toast cases. |
+| `deploy/.env.example` | STT path reality note. |
+| `src/components/layout/AppHeader.vue` | v10.179 → v10.180. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
+
+
+## v10.181 — STT endpoint decoupling + local faster-whisper verification server
+
+GWM's STT upstream remains broken (500, blocked on IT). To verify the voice-dictation feature end-to-end regardless of GWM, this version (a) decouples the STT endpoint from the chat proxy and (b) adds a local, open-source faster-whisper server (MIT) the app can point at.
+
+### Design
+- **`STT_BASE_URL` / `STT_API_KEY`** (new env, `server/routes/transcribe.ts`): both default to the `LLMPROXY_*` values — zero behavior change for existing deploys — but can point STT at ANY OpenAI-compatible server while chat stays on GWM. Empty `STT_API_KEY` sends no Authorization header (auth-less local server). This is also the permanent seam for a future prod STT sidecar.
+- **`tools/local-stt/`** (new): ~70-line FastAPI wrapper around `faster-whisper` (`WhisperModel('small', cpu/int8)`, env-tunable). Serves BOTH `/v1/audio/transcriptions` and `/v1/audio/translations`, and both plainly transcribe with the spoken language preserved — the translations alias exists only so the GWM-shaped `STT_PATH` config works unchanged. Machine constraints that picked this design: no Docker (rules out Speaches container), Python 3.14.3 with a `ctranslate2` cp314 win wheel on PyPI, ffmpeg present. Explicitly a verification tool, not prod.
+- Model download gotcha (hit during setup): `HF_ENDPOINT=https://hf-mirror.com` FAILS with `FileMetadataError` (mirror redirect drops HF metadata headers); plain huggingface.co works through the local system proxy. README documents the mirror as fallback only.
+
+### Changes
+- **`server/routes/transcribe.ts`** — `STT_BASE_URL`/`STT_API_KEY` with LLMPROXY fallbacks; conditional Authorization header.
+- **`server/__tests__/llm-transcribe.test.ts`** — new case: base-URL override + empty-key → no auth header (9 tests).
+- **`deploy/.env.example`** — STT_BASE_URL/STT_API_KEY docs with the local example.
+- **`tools/local-stt/`** — `server.py`, `requirements.txt`, `README.md` (setup/run/smoke-test). `.gitignore` excludes its `.venv/`.
+- **`deploy/.env`** (machine-local, gitignored) — toggle block pointing STT at `http://127.0.0.1:8100/v1`; delete to return to GWM.
+- **`AppHeader.vue`** — v10.180 → v10.181.
+
+### Verification
+- `llm-transcribe` suite 9/9 green; `vue-tsc -b` green.
+- Local STT: `GET /healthz` ok; direct curl of the Chinese probe WAV returns Chinese text; `POST /api/llm/transcribe` through the Fastify server returns the same; UI: speak Chinese → Chinese text appended to the Explore composer draft.
+- Flip-back: delete the two STT_* lines from `deploy/.env` → STT returns to GWM (502 + diagnostic toast until IT fixes their 500).
+
+
+## v10.182 — GWM STT fixed: it was a wire-format mismatch, not a broken upstream
+
+The GWM proxy's STT was never down. Probing the 422 validation responses revealed its `audio/translations` route is **NOT OpenAI-compatible**: it expects a JSON body `{ model, audio_url: "data:<mime>;base64,…" }`. Our (spec-correct) multipart uploads crashed its JSON parse with a bare Starlette 500 — indistinguishable from a dead backend until we read the pydantic error detail (`"Input should be a valid dictionary…"` with our raw multipart body echoed as `input`). An empty-JSON probe then enumerated the schema: `model` + `audio_url` required.
+
+### Verified against the real endpoint
+- `{ model: "default/whisper-large-v3-turbo", audio_url: "data:audio/wav;base64,…" }` → 200 `{ object, model, text, items }`
+- **Chinese preserved** — simplified ("今天天气很好，我们一起去公园散步吧"), despite the path name; no translation happens
+- **webm/opus accepted** (the browser's MediaRecorder format), both `whisper-large-v3` and `-turbo` work
+- Full chain: SPA-shaped base64 → `/api/llm/transcribe` → GWM → Chinese text ✅
+
+### Changes
+- **`server/routes/transcribe.ts`** — new `STT_FORMAT` env: `gwm-json` (default; passes the SPA's base64 through into a data URL — no decode/re-encode; strips mime parameters like `;codecs=opus` which break data-URL parsing) or `openai-multipart` (standard servers: tools/local-stt, Speaches, OpenAI). Shared `{ text }` response parsing.
+- **`server/__tests__/llm-transcribe.test.ts`** — default test asserts the GWM JSON dialect (model + data-URL audio_url + stripped mime); the local-fallback test now sets `STT_FORMAT=openai-multipart` and keeps the multipart assertions (9 tests).
+- **`deploy/.env.example`** — STT_FORMAT docs; language-preservation now stated as verified.
+- **`deploy/.env`** (machine-local) — v10.181 local toggle replaced with GWM-active default + commented 3-line local fallback (`STT_BASE_URL`/`STT_API_KEY`/`STT_FORMAT`).
+- **`AppHeader.vue`** — v10.181 → v10.182.
+
+### Verification
+- `llm-transcribe` 9/9 green; `vue-tsc -b` green.
+- Live: Fastify (deploy/.env, GWM defaults) + webm/opus base64 POST → `{"text":"今天天气很好,我们一起去公园散步吧。。。"}`.
+- UI: restart `npm run dev:all`, record Chinese speech → Chinese text in composer, now via GWM (no local STT server needed).
+
+
+## v10.183 — View mode: debounced search + stale-while-revalidate data layer
+
+First slice of the View-mode UX/perceived-performance package. At production scale (500–5k tickets) the search box re-ran the O(n) filter scan per keystroke, and a failed refetch wiped visible rows with a full-screen error even though successful refetches already kept stale rows.
+
+### Design
+- **Debounced search** (`useQualityGrid.ts`): `refDebounced(searchText, 250)` from `@vueuse/core` (already a dependency). `filteredTickets` reads the debounced ref; the input stays bound to the raw `searchText` so typing is instant and only the filtering lags 250ms. Team/status selects are discrete picks — they stay immediate.
+- **Stale-while-revalidate** was already half-true (refetches kept old rows until data landed); the real gaps were the error path and the missing signal. New `isRefreshing = loading && tickets.length > 0`; `lastFetched` now returned from the composable. The full-screen `.state-error` only renders when `tickets.length === 0`; a failed refetch over data shows a slim `.stale-error` notice bar (with Retry) above the still-visible grid. While refreshing, `.grid--refreshing` dims the body to 0.65 opacity (header crisp, scroll alive).
+
+### Changes
+- `src/composables/useQualityGrid.ts` — debouncedSearch, isRefreshing, lastFetched returned.
+- `src/components/quality/QualityGridPanel.vue` — error-branch split (full-screen vs notice bar), `grid--refreshing` class + CSS.
+- `src/i18n/en.ts` / `zh.ts` — `view.retry`.
+- `src/composables/__tests__/useQualityGrid.debounce.test.ts` (new, 5 tests) — debounce timing, immediate selects, isRefreshing semantics, stale-on-error, lastFetched. Note: the composable's filter refs are module singletons; the afterEach reset must flush the debounce under fake timers.
+
+## v10.184 — View mode: skeleton rows, updated-at pulse, chip ticks
+
+Perceived-performance layer: the initial fetch rendered a blank grid body, and the 30s tab-focus auto-refresh was completely invisible.
+
+### Design
+- **`QualityRowSkeleton.vue`** (new): shimmer rows mirroring QualityRow's exact grid template (8 columns, 42px min-height) so the header lines up and the swap to real rows doesn't shift layout. Gradient `background-position` keyframe; `aria-hidden`; `prefers-reduced-motion` guard. Shown only when `initialLoading` (loading with zero tickets) — refetches never blank the body.
+- **Updated-at + pulse** (`QualitySummaryBar.vue`): new `lastFetched` prop renders "Updated HH:MM" next to Refresh; a watch pulses it (accent-color flash, 900ms) whenever lastFetched advances — which includes the silent auto-refresh. First value doesn't pulse.
+- **Chip ticks**: counts diffed against the previous `periodCounts`; changed chips get a 0.5s scale tick. Initial population is the baseline, never ticks.
+- **Inline spinner** next to the timestamp while any fetch is in flight.
+
+### Changes
+- `src/components/quality/QualityRowSkeleton.vue` (new); `QualityGridPanel.vue` (initialLoading branch, aria-busy, lastFetched pass-through); `QualitySummaryBar.vue` (summary-head-right block, prop, watches, animations); `en.ts`/`zh.ts` (`view.loading`, `view.updatedAt`).
+- Tests: `QualityGridPanel.skeleton.test.ts` (5), `QualitySummaryBar.test.ts` (4).
+
+## v10.185 — View mode: arrow-key row navigation
+
+ArrowUp/ArrowDown moves focus between virtualized rows, Home/End jump, Enter opens the detail modal.
+
+### Design
+- **`useGridKeyboardNav.ts`** (new composable): one delegated keydown listener on `.grid` — vue-virtual-scroller RECYCLES row DOM, so per-row listeners and cached elements go stale. The current position is re-resolved from the event target's `[data-index]` wrapper (already emitted on every DynamicScrollerItem) on each keystroke; activation reads `items[index]`, never an element-captured ticket. Index moves clamp, call `scrollToItem`, then focus after `nextTick` + one rAF (one retry frame, then container fallback) because the target row may not be mounted yet. `activeIndex` resets when the filtered list identity changes.
+- `QualityRow.vue`'s own `@keydown.enter` was removed — the delegated handler owns Enter, which also fixes a latent bug where Enter on the JIRA anchor opened the modal *and* followed the link (the composable skips events originating inside `<a>`).
+
+### Changes
+- `src/composables/useGridKeyboardNav.ts` (new); `QualityGridPanel.vue` (gridEl/scrollerRef refs, @keydown wiring); `QualityRow.vue` (Enter handler removed).
+- Tests: `useGridKeyboardNav.test.ts` (7) — movement, clamping, Home/End, Enter-by-index, anchor exemption, list-change reset, empty list.
+- Known quirks (accepted): `scrollToItem` is approximate for unmeasured dynamic-height rows (fine for ±1 steps; long Home/End jumps may land near, not on, the row); focus restore after modal close may land on a recycled row (cosmetic).
+
+## v10.186 — View mode: animated trend collapse + memoized modal markdown
+
+### Design
+- **TrendMatrix collapse animation**: replaced the `v-if` toggle with an always-mounted `grid-template-rows: 0fr → 1fr` transition — the only pure-CSS approach that animates unknown content height without max-height guessing. `inert` when closed keeps the hidden table's sticky column/links untabbable; `aria-expanded` + `aria-label` on the toggle; `prefers-reduced-motion` guard. Always-mounted cost is trivial at dozens of team rows.
+- **Memoized modal markdown** (`AgentCheckModal.vue`): module-scope (plain `<script>` block, survives mode switches) content-keyed LRU Map (max 50) over `renderMarkdown` — reopening a ticket skips the full unified + DOMPurify pipeline. Keyed by the raw `agentCheck` string, so refetched/updated tickets stay correct automatically. `src/utils/markdown.ts` itself untouched (shared with the LLM streaming paths).
+
+### Changes
+- `TrendMatrix.vue` (collapse wrapper + CSS, a11y attrs); `AgentCheckModal.vue` (LRU cache); `en.ts`/`zh.ts` (`view.toggleTrend`); `AppHeader.vue` v10.182 → v10.186.
+- Tests: `TrendMatrix.collapse.test.ts` (2), `AgentCheckModal.memo.test.ts` (2).
+
+### Verification (v10.183–v10.186)
+- All four slices TDD'd (RED→GREEN per feature); quality suites: 13 component + 12 composable tests green; full `npm test` + `vue-tsc -b` green.
+- Manual checklist: throttled first load shows shimmer (no blank); period switch keeps rows + dims + spinner; failed refetch shows notice bar with Retry over live data; search updates once ~250ms after typing stops; >30s alt-tab return pulses "Updated HH:MM"; ArrowDown through the virtualization window + Enter opens the right ticket; trend matrix animates; chip counts tick on refresh; all new strings verified in zh + en.
+
+## v10.187 — View mode: Team/Status/Search filters drive the Per-Team Trend
+
+User-reported bug: selecting a Team or Status had no effect on the PER-TEAM TREND board. This was v10.135-era behavior *by design* — `summary` was computed from the raw ticket set ("describes the whole period independent of the grid's filters") and fed both the PERIOD QUALITY chips and the trend matrix. The user expects the trend to follow the filters.
+
+### Design
+- **`filteredSummary`** (new computed in `useQualityGrid.ts`): `summarize(filteredTickets, buckets)` — the trend now reflects exactly the same ticket set as the list below (team + status + debounced search; one mental model, confirmed with user). `summarize()` was already a pure function; it's simply called twice.
+- **Chips stay whole-period** (confirmed with user): `QualitySummaryBar` keeps the unfiltered `summary` as a stable reference — the count label already communicates filtering via "filtered/total".
+- **Single-team Σ row dropped** (`TrendMatrix.vue`): with a team filter active the matrix has one row, and the synthetic "all teams" row would be an identical duplicate — `rows` appends it only when `matrix.length > 1`.
+- Zero-match filter combinations hide the trend board entirely (existing `v-if="summary.total > 0"`), consistent with the list's empty state.
+
+### Changes
+- `src/composables/useQualityGrid.ts` — `filteredSummary` computed + returned; `summarize()` doc comment updated (no longer claims filter-independence).
+- `src/components/quality/QualityGridPanel.vue` — `<TrendMatrix :summary="filteredSummary" />`; chips bar unchanged.
+- `src/components/quality/TrendMatrix.vue` — Σ row only for multi-team matrices.
+- `src/components/layout/AppHeader.vue` — v10.186 → v10.187.
+
+### Verification
+- TDD (RED→GREEN): new `useQualityGrid.filteredSummary.test.ts` (3 — team narrows matrix while `summary` stays whole-period, status narrows periodCounts, search applies after 250ms debounce) + 2 Σ-row cases in `TrendMatrix.collapse.test.ts`. All quality/composable suites green (19 files, 120 tests); `vue-tsc -b` green.
+
+| File | Change |
+|------|--------|
+| `src/composables/useQualityGrid.ts` | `filteredSummary` computed, doc comment. |
+| `src/components/quality/QualityGridPanel.vue` | TrendMatrix gets `filteredSummary`. |
+| `src/components/quality/TrendMatrix.vue` | Skip Σ row when single team. |
+| `src/composables/__tests__/useQualityGrid.filteredSummary.test.ts` | New (3 tests). |
+| `src/components/quality/__tests__/TrendMatrix.collapse.test.ts` | +2 Σ-row tests. |
+| `src/components/layout/AppHeader.vue` | v10.186 → v10.187. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
+
+## v10.188 — Weekly trend buckets labeled with their full date span
+
+User report: with Period = "Last 30 days" the Per-Team Trend "does not display the full 30 days". Diagnosis: coverage was complete — a 30-day span produces 5 weekly buckets covering every day — but `weeklyBuckets()` labeled each column with only its start date ("5/13", "5/20", …), so the board read like 5 scattered single days, and the trailing stub week (e.g. 6/10–6/11) was indistinguishable from a full week.
+
+### Design
+- Label = `start–end` ("5/13–5/19"); a one-day stub stays a bare date ("6/11"), never "6/11–6/11". Confirmed with user over the alternative (30 daily scrollable columns).
+- Only `weeklyBuckets()` changes. Daily (single date), sprint (`W1`/`W2`, sprint names), and monthly (`2026/5`) labels untouched. Downstream is automatically consistent: `summarize()` keys cells by labels from the same array; `TrendMatrix` renders `bucketLabels` verbatim.
+
+### Verification
+- TDD (RED→GREEN): `useTimingPhase.test.ts` last30 case asserts exact span labels; new single-day-stub case (15-day custom range → `['1/1–1/7', '1/8–1/14', '1/15']`). Composable + quality suites green (121 tests); `vue-tsc -b` green.
+
+| File | Change |
+|------|--------|
+| `src/composables/useTimingPhase.ts` | `weeklyBuckets()` span labels. |
+| `src/composables/__tests__/useTimingPhase.test.ts` | Exact-label assertions + stub case. |
+| `src/components/layout/AppHeader.vue` | v10.187 → v10.188. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
+
+## v10.189 — "Mission Quality" bar computed from the filtered set
+
+User request: the summary bar (was PERIOD QUALITY) should describe the filtering result, not the whole period — "more useful to know what happened". This supersedes the v10.187 decision to keep the chips whole-period.
+
+### Design
+- One summary now drives everything below the filter bar: `QualitySummaryBar` receives the same `filteredSummary` the trend uses, so chips, percentages (shares of the filtered set), trend, and list all describe one ticket set. The whole-period `summary` computed lost its last consumer and was removed; the raw period total still reaches the bar via its existing `totalCount` prop ("showing X of Y" label unchanged).
+- Empty-state gating fix that falls out of this: "No tickets checked in this period" now gates on `totalCount` (raw period emptiness), not the filtered total — filters matching nothing shows just the head row (the list has its own no-match state).
+- Chip tick animations firing on filter changes are accepted (visible feedback that the distribution changed).
+- Rename: `view.summaryTitle` = 'Mission quality' / '任务质量'.
+
+### Verification
+- TDD (RED→GREEN): new `QualityGridPanel.summary.test.ts` (chips narrow to filtered status, 100% ratio of filtered set, recover on clear; count label keeps X of Y) + 2 empty-state gating cases in `QualitySummaryBar.test.ts`. Composable + quality suites green (125 tests); `vue-tsc -b` green.
+
+| File | Change |
+|------|--------|
+| `src/components/quality/QualityGridPanel.vue` | Bar gets `filteredSummary`; `summary` destructure removed. |
+| `src/composables/useQualityGrid.ts` | Whole-period `summary` computed removed. |
+| `src/components/quality/QualitySummaryBar.vue` | Empty-state gates on `totalCount`; prop docs. |
+| `src/i18n/en.ts` / `zh.ts` | summaryTitle → Mission quality / 任务质量. |
+| `src/components/quality/__tests__/QualityGridPanel.summary.test.ts` | New (2 tests). |
+| `src/components/quality/__tests__/QualitySummaryBar.test.ts` | +2 gating tests. |
+| `src/composables/__tests__/useQualityGrid.filteredSummary.test.ts` | Whole-period assertions dropped. |
+| `src/components/layout/AppHeader.vue` | v10.188 → v10.189. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory update. |
+
+## v10.190 — "Quality Trend Modelling" tab (all-teams quality prediction page)
+
+Per the user's design snapshot (`data-view-new-board-design..png`, committed): the trend board header becomes a tab strip — `PER-TEAM TREND / Quality Trend Modelling` (modelling name in red) — and the new page charts a quality-score prediction for all teams. The user's math formula arrives later; a clearly-marked provisional model fills the seam.
+
+### Design
+- **`useQualityModel.ts`** (new): pure data layer mirroring `summarize()`. `STATUS_SCORE` (provisional: A=100/B=75/C=50/D=25/格式异常=0; 未知 excluded), `buildSeries(tickets, buckets)` → per-team + `*` all-teams series (bucket score = mean; empty bucket = null gap), and **`predictSeries(history, horizon)` — THE FORMULA SEAM**: replace only this function when the user's model lands. Provisional: least-squares line over non-null points, 3 buckets ahead, clamped [0,100]; <2 points → no forecast.
+- **`QualityTrendModelling.vue`** (new): hand-rolled SVG (no chart lib in the project; intranet npm makes adding one costly). Bold accent-blue all-teams line + thin per-team lines (stable HSL hash of team_key), solid history / dashed forecast with a divider, y gridlines 0–100, x = bucket labels then `+1 +2 +3`, point tooltips via `<title>`, legend + provisional-model note, empty state.
+- **Tab strip + shared collapse** (`QualityGridPanel.vue`): the board header (title + v10.186 0fr→1fr collapse + `inert`) moved up from TrendMatrix so both pages share them. Tabs: `role="tablist"`, active underlined; `.trend-tab--model` red per design. Choice persisted to localStorage `view-trend-tab`. Both pages read the FILTERED set (v10.189 semantics); board hidden when the filtered set is empty (as before).
+- **`TrendMatrix.vue`** slimmed to the table only (Σ-row logic untouched).
+
+### Verification
+- TDD (RED→GREEN): `useQualityModel.test.ts` (8 — ramp/clamp/gap-fitting/<2-points forecasts; mean/gap/未知-exclusion/ordering/forecast series), `QualityTrendModelling.test.ts` (4 — line counts, dashed forecast + divider + `+1..+3`, legend/note, empty state), `QualityGridPanel.trendtabs.test.ts` (4 — default tab, switch+persist, restore, shared collapse). TrendMatrix collapse tests retired in favor of the panel-level ones. Full suite: 497 passed + 4 known-red baseline; `vue-tsc -b` green.
+
+| File | Change |
+|------|--------|
+| `src/composables/useQualityModel.ts` | New — scores, series, `predictSeries` seam. |
+| `src/components/quality/QualityTrendModelling.vue` | New — SVG prediction chart. |
+| `src/components/quality/QualityGridPanel.vue` | Tab strip + shared collapse; board markup/CSS. |
+| `src/components/quality/TrendMatrix.vue` | Slimmed to table only. |
+| `src/i18n/en.ts` / `zh.ts` | `modelTitle`, `modelProvisional`; toggleTrend wording. |
+| `src/composables/__tests__/useQualityModel.test.ts` | New (8 tests). |
+| `src/components/quality/__tests__/QualityTrendModelling.test.ts` | New (4 tests). |
+| `src/components/quality/__tests__/QualityGridPanel.trendtabs.test.ts` | New (4 tests). |
+| `src/components/quality/__tests__/TrendMatrix.collapse.test.ts` | Collapse tests → table smoke test. |
+| `src/components/layout/AppHeader.vue` | v10.189 → v10.190. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
+
+## v10.191 — Quality model formula adopted (weighted average + regression slope indicator)
+
+The user supplied the promised formula via a coach-history export and asked for a review. Adopted: **Model 1, standard weighted average Q = Σ(nᵢ·wᵢ)/N with the 100-point Option B weights (A=100, B=80, C=60, D=20)** — the advice's own recommendation, and structurally identical to what v10.190 already computed (only B/C/D weights shifted from 75/50/25). The regression (advice Model 3, y = mx + b) was already implemented in `predictSeries`.
+
+### Review decisions recorded
+- **Model 2 ("critical failure") rejected as written**: `(100 − 10·n_D − 2·n_C)/N × 100` is dimensionally incoherent — it explodes for small N (N=1 with one D → 9000). Its intent (punish D harder) is already served by Option B's deliberately large C→D gap (60→20).
+- Statuses outside the advice: `格式异常 = 0` (hard failure below D, stays in N); `未知` excluded from scoring. Unchanged from v10.190.
+- The model is no longer provisional — PROVISIONAL markers and the provisional UI note removed.
+
+### Changes
+- `useQualityModel.ts` — Option B weights; OLS core extracted to `linearFit()`; new exported `trendSlope(history)` (the m signal; null when <2 points); `predictSeries` unchanged in behavior.
+- `QualityTrendModelling.vue` — all-teams trend indicator `.model-trend` (↑ Improving / ↓ Declining / → Stable at |m|<0.5, colored, with slope per bucket); note now states the adopted formula.
+- i18n — `modelProvisional` → `modelFormula` + `modelTrendUp/Down/Flat` + `modelPerBucket`.
+
+### Verification
+- TDD (RED→GREEN): STATUS_SCORE table assertion, trendSlope cases (ramp/gap/thin), weight-updated buildSeries expectations, `.model-trend` direction + thin-history omission. Composable + quality suites green (146 tests); `vue-tsc -b` green.
+
+| File | Change |
+|------|--------|
+| `src/composables/useQualityModel.ts` | Option B weights; `linearFit`/`trendSlope`. |
+| `src/components/quality/QualityTrendModelling.vue` | Trend indicator; formula note. |
+| `src/i18n/en.ts` / `zh.ts` | modelFormula/trend strings. |
+| `src/composables/__tests__/useQualityModel.test.ts` | +5 tests, weight updates. |
+| `src/components/quality/__tests__/QualityTrendModelling.test.ts` | +2 trend tests. |
+| `src/components/layout/AppHeader.vue` | v10.190 → v10.191. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory update. |
+
+## v10.192 — View-mode performance validation against the production DB + bench tool
+
+EAX has run in GWM docker since 2026-05-20; the user downloaded the accumulated production `quality.db` (1,155 tickets, 18 teams, 2026-05-20 → 2026-06-10) and swapped it into `data/` to validate View-mode data-visualization performance at real scale.
+
+### Incident found and fixed during the swap
+Replacing `quality.db` alone left the **old dev database's `quality.db-wal`/`-shm` sidecars** in place; SQLite read through the stale WAL and presented the old 7-page dev snapshot — the app showed 11 seed tickets instead of 1,155 production rows. Fix: stop the server, delete the two stale sidecar files. Lesson: when swapping a WAL-mode SQLite file, always move/delete its `-wal`/`-shm` siblings together.
+
+### Bench tool (new, committed)
+`tools/bench/view-bench.ts` — `npx tsx tools/bench/view-bench.ts`. Opens the DB strictly read-only, profiles the data, measures API payload weight per period window, and times the client-side hot paths (median of 50 warm runs) at 1× and 10× scale: the `filteredTickets` predicate scan, `summarize()` (Mission Quality + Per-Team Trend), and `buildSeries()`+`predictSeries()` (Quality Trend Modelling), at the three bucket shapes from `useTimingPhase` (7 daily / 5 weekly / sprint).
+
+### Results (production data, 2026-06-12)
+| Measure | Result | Budget | Verdict |
+|---|---|---|---|
+| `GET /api/tickets` last 7d (337 rows, 667KB) | ~0.23s | <0.5s | ✓ |
+| `GET /api/tickets` 30d/full (1,155 rows, 2.3MB) | ~0.29s | <0.5s | ✓ |
+| filter scan @1×/10× | 0.01 / 0.07ms | ≤10ms | ✓ |
+| `summarize` @1×/10× (worst shape) | 0.49 / 3.8ms | ≤10ms | ✓ |
+| `buildSeries`+`predict` @1×/10× (worst) | 0.37 / 2.6ms | ≤10ms | ✓ |
+
+No optimization needed: every per-filter-change path is well inside the "snappy" budget even at 10× headroom (~11.5k tickets). The unpaginated `/api/tickets` response (2.3MB at full history, `agent_check` avg 0.71KB/row) is acceptable on the intranet; revisit pagination only if history grows ~10×.
+
+| File | Change |
+|------|--------|
+| `tools/bench/view-bench.ts` | New — read-only perf bench for View-mode hot paths. |
+| `src/components/layout/AppHeader.vue` | v10.191 → v10.192. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
+
+## v10.193 — fix: app-wide freeze at production row counts (virtual-scroller itemsLimit)
+
+During the production-DB realtime test the user hit a hard freeze: in View mode with the full dataset loaded, the Explore/Task mode toggle (and all visible re-rendering) went dead, while watchers kept running. Reload recovered it.
+
+### Root cause
+`vue-virtual-scroller`'s RecycleScroller throws `Error: Rendered items limit reached` when the computed visible range exceeds its `itemsLimit` config — **default 1,000**. The range spans the entire dataset whenever the scroller viewport is momentarily unmeasurable (zero height mid-layout/hidden), because the library then "renders all items at once". The throw lands inside Vue's reactive flush and aborts it: from that moment the app stops painting updates (the dead mode toggle was collateral, not the bug). Dev datasets never exceeded 1,000 rows, so only real production data (1,155–1,206 rows) could expose it — vindicating the production-scale test.
+
+### Fix (root cause + defense in depth)
+- `src/main-scroller-config.ts` (new): `applyScrollerConfig()` raises the library config to `SCROLLER_ITEMS_LIMIT = 100_000` via the plugin's `install()` (v3 keeps `itemsLimit` in module config; `installComponents:false` makes install touch only the config). Called from `main.ts` and imported by the regression test so app and test share one code path.
+- `QualityGridPanel.vue` CSS: `.grid-body` min-height `0 → 240px` — the viewport can no longer measure as 0, so the degenerate render-all state (now slow instead of fatal) practically cannot trigger.
+
+### Verification
+- TDD: `QualityGridPanel.itemsLimit.test.ts` (new) mounts the panel with the REAL DynamicScroller, 1,206 tickets, and the degenerate geometry (viewport reporting as tall as the content — the "isn't scrolling" state). RED on the old config (throw + "isn't scrolling" + Vue "Unhandled error"), GREEN with the fix.
+- Full suite + `vue-tsc -b` green at the 4-known-red baseline.
+
+| File | Change |
+|------|--------|
+| `src/main-scroller-config.ts` | New — shared itemsLimit config (100k). |
+| `src/main.ts` | Call `applyScrollerConfig()` at boot. |
+| `src/components/quality/QualityGridPanel.vue` | `.grid-body` min-height floor 240px. |
+| `src/components/quality/__tests__/QualityGridPanel.itemsLimit.test.ts` | New regression test (RED→GREEN). |
+| `src/components/layout/AppHeader.vue` | v10.192 → v10.193. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
+
+## v10.194 — fix: slow mode-switch out of View (keep the grid panel alive)
+
+Residual of the v10.193 freeze: with production data, leaving View mode lagged ~1s+ — worse after flipping Last 7/30 days. Explore↔Task stayed instant. Root cause: vue-virtual-scroller POOLS every row view it ever renders (no trimming API); degenerate render passes at prod scale bloat the pool, and unmounting QualityGridPanel destroys 1000+ pooled component instances on every mode switch out of View.
+
+### Fix
+View panel is now lazy-mounted on first visit, then kept alive with `v-show` — the exact pattern Task mode already used. Leaving View is a display toggle; the pool is never destroyed at switch time. View state (filters/search/scroll/tab) survives switches as a side benefit. Two TDD'd guard rails in `useQualityGrid`:
+- `setGridActive(bool)` (driven by the panel's new `active` prop from App.vue): tab-focus auto-refresh is suppressed while another mode is on screen.
+- Re-entering View refetches automatically when the data went stale (>30s rule, shared with the tab-focus refresh); never double-fetches at first mount.
+
+### Why GWM docker never showed the freeze
+Vue PRODUCTION builds log watcher errors instead of rethrowing (the dev-only rethrow is what aborted the flush) — the scroller throw happened in prod too, silently. Dev-vs-prod error handling differs in kind, not just speed.
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | View panel `v-if` → lazy `v-if` + `v-show` + `:active`; explore `v-else-if` decoupled. |
+| `src/composables/useQualityGrid.ts` | `gridActive` ref, `setGridActive()`, gated visibilitychange. |
+| `src/components/quality/QualityGridPanel.vue` | `active` prop → `setGridActive`. |
+| `src/composables/__tests__/useQualityGrid.activegate.test.ts` | New (5 tests). |
+| `src/components/quality/__tests__/QualityGridPanel.virtualization.test.ts` | New — virtualization holds at 1,206 rows across period swaps. |
+| `src/components/layout/AppHeader.vue` | v10.193 → v10.194. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
+
+## v10.195 — Modelling chart: hover highlight (curve ↔ legend) + uniform line widths
+
+With 18 production teams the modelling chart was an unreadable bundle of thin lines, and the all-teams line (3px) visually outranked the teams (1.5px). User asks: hover must connect a curve to its team label instantly; all lines one width.
+
+### Design
+- **Hover state** (`hoverKey`): hovering a curve OR its legend label pops that series (stroke 2 → 3.5, dots enlarge) and dims all others to 0.15 opacity; the legend chip highlights (background + underline) in sync — both directions.
+- **Invisible hit areas**: each series carries a transparent 12px-stroke copy of its path (`.model-hit`, `pointer-events: stroke`) — 2px strokes are unhittable.
+- **Draw order**: one uniform loop (`orderedSeries`, teams then all-teams); the hovered series re-orders last so it draws on top (SVG stacks by document order, no z-index).
+- **Uniform width**: every curve is `stroke-width: 2`; `--all` keeps only its accent color and bold legend entry. Dots uniform r=3. Transitions 0.15s, `prefers-reduced-motion` honored.
+- Data layer untouched (`useQualityModel.ts`) — purely presentational.
+
+### Verification
+- TDD (RED→GREEN): +6 tests in `QualityTrendModelling.test.ts` — hit areas exist/aria-hidden, hover pops + dims (incl. all-teams), curve→legend sync, legend→curve sync, hovered-last draw order, no per-line width overrides. 12/12 green.
+- Full suite + `vue-tsc -b` at the 4-known-red baseline.
+
+| File | Change |
+|------|--------|
+| `src/components/quality/QualityTrendModelling.vue` | Hover system, hit areas, unified loop, uniform widths. |
+| `src/components/quality/__tests__/QualityTrendModelling.test.ts` | +6 hover/width tests. |
+| `src/components/layout/AppHeader.vue` | v10.194 → v10.195. |
+| `PLAN.md` | This entry. |
+
+## v10.196 — Quality Trend Modelling migrated to Apache ECharts
+
+User reviewed the hand-rolled SVG chart in DevTools and chose to move to a real chart stack. ECharts 6.1.0 (deps: zrender+tslib, pure JS, NO install scripts → `--ignore-scripts` deploy-safe; GWM Nexus proxies npmjs — intranet docker build is the final confirmation).
+
+### Design
+- **`qualityModelChart.ts`** (new): pure `buildChartOption(series, slotLabels, bucketsLength, theme, allTeamsLabel)` — ALL chart semantics live here, fully unit-tested without rendering. Per ModelSeries: solid history line (nulls = native gaps) + dashed forecast anchored at the last history point, SHARING one `name` so the legend shows one entry per team and legend-hover highlights both. `emphasis.focus: 'series'` reproduces the v10.195 pop+dim (accepted quirk: hovering a line blurs its own forecast twin; legend hover is clean). Item tooltips (team / bucket / score), markLine divider at the last history bucket, scrollable legend (all-teams first), 0–100 y axis, uniform 2px widths, stable `colorOf()` HSL hash kept so team colors survive the migration; all-teams = `--accent-blue`.
+- **`QualityTrendModelling.vue`**: template is now a host div + the unchanged Vue DOM (trend indicator, formula note, empty state). Tree-shaken imports (`echarts/core` + LineChart + Grid/Tooltip/Legend/MarkLine + **SVGRenderer** — DOM stays inspectable, no canvas in jsdom). Lifecycle: init bound to the template ref (the host appears/disappears with the empty-state `v-if`, and the panel lives behind v-show since v10.194), `setOption(…, { notMerge: true })` on data change, `ResizeObserver → resize()` (covers the trend-collapse animation and the kept-alive panel), dispose on ref-loss/unmount. Theme colors resolved per render via `getComputedStyle` (dark + light variable sets; mid-session theme flip refreshes on next data change — accepted).
+- Data layer (`useQualityModel.ts`) and the v10.191 formula untouched.
+
+### Verification
+- TDD (RED→GREEN): `qualityModelChart.test.ts` (11 — series pairing, anchor, gaps, widths/colors, axes, divider, legend order, emphasis, tooltip text, hash stability) + rewritten `QualityTrendModelling.test.ts` (6 — init with SVG renderer, option fed, re-render on prop change, dispose, empty state, trend/note DOM) with `echarts/core` mocked.
+- `vite build` green (main chunk +~340KB, tree-shaken). Full suite + `vue-tsc -b` at the 4-known-red baseline.
+
+| File | Change |
+|------|--------|
+| `package.json` / `package-lock.json` | +echarts@6.1.0 (zrender, tslib). |
+| `src/components/quality/qualityModelChart.ts` | New — pure option builder. |
+| `src/components/quality/QualityTrendModelling.vue` | ECharts lifecycle; SVG markup removed. |
+| `src/components/quality/__tests__/qualityModelChart.test.ts` | New (11 tests). |
+| `src/components/quality/__tests__/QualityTrendModelling.test.ts` | Rewritten (6 wiring tests). |
+| `src/components/layout/AppHeader.vue` | v10.195 → v10.196. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory note. |
+
+## v10.197 — ME task coach prompts upgraded to the rich SW-zh review format
+
+The mechanical-design coach prompts (`coach-skill-task-me-{zh,en}.md`) were far thinner than the SW pair: no domain boundary, no persona codename, no example template, no vague-language rules. Both files were rewritten following the `coach-skill-task-sw-zh.md` structure, using a prompt-TDD loop (baseline → rewrite → re-verify with a fresh subagent simulating the production LLM).
+
+### Design
+- **Persona**: senior chassis-ECU packaging mechanical expert, internal codename **ME01**, must answer identity/codename questions (SW01 pattern).
+- **Task Trigger & Boundary**: mechanical keyword list (壳体/散热筋/TIM/IP67/GD&T/压铸/拔模/DFM…); off-topic inputs get an identity paragraph only — scoring reports are forbidden.
+- **Three core pain points**: traceability + quantified targets (forbids “影响不大/应该没问题”), geometric/interface clarity (forbids dimension-free changes), manufacturing & validation impact.
+- **Enriched checklist** (5 sections): part/drawing-number identification, envelope & keep-out, GD&T tolerances, cross-discipline impact, heat source + assessment basis, IP/sealing, vibration/corrosion, material grade + rationale, DFM/tooling impact, CAD tool & PDM data traceability, measurable acceptance criteria, risk & rollback.
+- **Strict output format** (green-bold verdict / x/100 score / red-bold issue list / template rewrite), a complete worked example (IBC lower-housing cooling fins), and a typical-FAIL list.
+- `me-en.md` is a faithful English mirror (keeps the trailing “Respond in English.” convention).
+
+### Verification
+- Prompt-TDD baseline (RED): current me-zh prompt could not answer a codename question, had no guaranteed off-topic refusal, and produced format-divergent reports with improvised rewrites.
+- Re-test (GREEN): all 3 scenarios pass — vague ticket FAILs citing the forbidden phrases with a template-conformant rewrite; off-topic gets identity-only response; codename answered (ME01).
+- `registry.test.ts` 4/4 green (prompt files are raw markdown imports; no code paths changed).
+
+| File | Change |
+|------|--------|
+| `src/config/skills/coach-skill-task-me-zh.md` | Rewritten in sw-zh rich format (ME01). |
+| `src/config/skills/coach-skill-task-me-en.md` | English mirror of the same structure. |
+| `src/components/layout/AppHeader.vue` | v10.196 → v10.197. |
+| `PLAN.md` | This entry. |
+
+## v10.198 — chart fixes from screenshot review: forecast connection + color spread
+
+User screenshot review of the v10.196 ECharts chart found two issues, both in `qualityModelChart.ts`:
+
+1. **Forecast lines floated detached** from their history whenever a team's data ended before the last history bucket — the null bucket between the anchor point and `+1` breaks the line (ECharts default). Fixed with `connectNulls: true` on FORECAST series only; history keeps its real gaps. (Only "All teams" had connected, because it had data in the final stub bucket — that asymmetry was the tell.)
+2. **Color collisions**: the HSL name-hash placed ~5 of 18 production teams on near-identical greens. Hues now spread by golden angle (`index × 137.508°` over the displayed team order; all-teams keeps `--accent-blue`). Accepted trade-off: colors can shift when filters change the visible team set — hover/legend/tooltip carry identity (v10.195/v10.196 features).
+
+### Verification
+- TDD (RED→GREEN): `connectNulls` on dashed series only; exact golden-angle hue assertions; updated color expectations. 18 chart tests green; full suite at the 4-known-red baseline; typecheck green.
+
+| File | Change |
+|------|--------|
+| `src/components/quality/qualityModelChart.ts` | connectNulls on forecasts; golden-angle `colorOf(key, index)`. |
+| `src/components/quality/__tests__/qualityModelChart.test.ts` | +1 test, color tests rewritten. |
+| `src/components/layout/AppHeader.vue` | v10.197 → v10.198. |
+| `PLAN.md` | This entry. |
+
+## v10.199 — Quality model v2: shrunk scores, damped weighted forecast, uncertainty band
+
+User-driven redesign of the evaluation function (brainstormed, Approach A approved). The v10.191 model whipsawed on thin buckets and its raw-OLS forecasts pinned at 0/100 on real production data. Constraint: every number stays one-line explainable to a team lead.
+
+### The model (`useQualityModel.ts`)
+- **Severity**: D 20 → **10** ("D nearly fails") — realizes the intent of the rejected dimensionally-broken Model 2 inside a plain weighted average.
+- **Shrunk bucket score**: `(sum + K·baseline)/(n + K)`, `SHRINK_K = 5`, baseline = the team's volume-weighted window mean. "Your ticket average, steadied by 5 memory tickets at your own baseline."
+- **Forecast**: count-weighted least squares (`trendSlope(history, counts)`), anchored at the FITTED last-bucket value, damped `slope × Σφᵏ` with `DAMPING = 0.7` (total advance ≤ ~2.28 slopes — cannot run away), clamp retained.
+- **Band**: ±1.96·(weighted RMS residual)·√(1+k/N), clamped; null under 3 fitted points. `ModelSeries` gains `counts` and `band`.
+
+### Chart (`qualityModelChart.ts`, `QualityTrendModelling.vue`)
+- Band rendered ECharts-CI-style (silent stacked lower carrier + shaded diff area, z=1, excluded from legend/tooltip/emphasis): all-teams always, hovered team via `chart.on('mouseover'/'mouseout')` re-render.
+- Tooltips show the bucket's ticket count ("DKKF 5/21: 78 (12 tickets)"); forecast slots and empty buckets omit it.
+- Footnote rewritten in en + zh, one clause per model piece.
+
+### Verification
+- TDD (RED→GREEN): `useQualityModel.test.ts` rewritten (20 — exact shrinkage/WLS/damping/band arithmetic incl. hand-computed cases); chart tests +5 (band pair shape, legend exclusion, hover-band, no-band teams, count tooltips); component +1 (hover wiring). 179 tests green across quality+composable suites.
+- Real-data sanity (production DB, last-30d weekly buckets): all-teams fc [61,61,62] band 53–68; thin team DKKG (2–7 tickets/bucket) steadied at 44 with an honest 35–52 band; no 0/100 pinning anywhere. Full suite at the 4-known-red baseline; typecheck green.
+
+| File | Change |
+|------|--------|
+| `src/composables/useQualityModel.ts` | Model v2. |
+| `src/composables/__tests__/useQualityModel.test.ts` | Rewritten (20 tests). |
+| `src/components/quality/qualityModelChart.ts` | Band series, count tooltips, hoveredKey. |
+| `src/components/quality/__tests__/qualityModelChart.test.ts` | +5 band/tooltip tests. |
+| `src/components/quality/QualityTrendModelling.vue` | Hover-band wiring, counts → trendSlope. |
+| `src/components/quality/__tests__/QualityTrendModelling.test.ts` | +1 wiring test, v2 numbers. |
+| `src/i18n/en.ts` / `zh.ts` | New footnote + `modelTickets`. |
+| `src/components/layout/AppHeader.vue` | v10.198 → v10.199. |
+| `PLAN.md`, `MEMORY.MD` | This entry + memory update. |
+
+## v10.200 — Port Explore display improvements to Task mode chat panel
+
+Ported the Explore-mode reading quality improvements (v10.151–v10.173) to the Task mode AI chat panel so both modes share the same rendering quality for assistant responses.
+
+### Design Rationale
+
+Explore mode accumulated three display improvements that were scoped to `.layout-stacked`: serif typography, airy paragraph rhythm, and Claude-style borderless tables. Task mode (`.layout-bubble`) still used the old defaults: sans font, 85%-width bubbles, and boxed tables. This change mirrors those improvements to Task mode with minimal surgical CSS additions — no template or logic changes.
+
+### Changes
+
+1. **Assistant bubbles go full-width** — Added `.layout-bubble .bubble-assistant { max-width: 100%; flex: 1; }` so assistant responses fill the panel width after the avatar column. User message bubbles stay at 85% (compact, right-aligned).
+2. **Serif typography + airy rhythm** — Added `.layout-bubble .coach-response` block: `font-family: var(--font-serif); font-size: 1rem; line-height: 1.6;` plus heading and paragraph overrides matching the Explore block.
+3. **Claude-style borderless tables** — Added `.layout-bubble .coach-response table/thead/th/td/tr` overrides identical to the `.layout-stacked` block: no border, bold underlined header, thin row dividers only, airy `em`-based padding.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/styles/coach-response.css` | Added `.layout-bubble` typography + table CSS block after the `.layout-stacked` table block |
+| `src/components/chat/ChatBubble.vue` | Added `.layout-bubble .bubble-assistant { max-width: 100%; flex: 1; }` |
+| `src/components/layout/AppHeader.vue` | v10.199 → v10.200 |
 | `PLAN.md` | This entry |
+
+---
+
+## v10.201 — Port remaining Explore UX features to Task mode
+
+Ported five Explore-mode features (v10.139/v10.140/v10.151/v10.157/v10.167) that were gated behind `layout === 'stacked'` to also appear in Task mode.
+
+### Changes
+
+1. **Thinking orb** (v10.139) — The pulsing gradient orb that shows while AI is generating but no token has arrived yet is now enabled in Task mode. The CoachPanel typing-row (bouncing dots) is adjusted to hand off cleanly: it shows only while waiting for the assistant message to be added to the list; once the streaming message appears, the orb inside ChatBubble takes over.
+2. **Pure-Claude headers / role labels** (v10.140) — "AGENT" / "YOU" labels made `sr-only` in all layouts (not just Explore). Visual identity is conveyed by avatar + alignment.
+3. **Context calculator badge** (v10.151/v10.157) — Live token counter added to the Task-mode composer footer. Shows `"NNN / 128K tok"` format; turns red when over the model's context limit. Computed from chat history + current description draft against `getContextLimitTokens(taskModel)`.
+4. **"Thought for Xs" header** (v10.167) — AI response elapsed-time label now appears in Task mode. `firstTokenMs` was already populated by `useLLM.ts` for Task-mode streams; the template gate (`layout === 'stacked'`) was the only barrier.
+5. **User meta-row** (v10.167) — Hover-reveal date · Retry · Edit · Copy row on user messages enabled in Task mode. Retry and Edit wire up through CoachPanel (`retryMsg` / `editMsg` emits) to two new handlers in App.vue (`handleTaskRegenerate`, `handleTaskEditMessage`) that truncate history and call `retryTaskCoach`.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/chat/ChatBubble.vue` | Removed `layout === 'stacked'` gate from orb, elapsed header, role-label sr-only, and user meta-row |
+| `src/components/panels/CoachPanel.vue` | `isWaitingFirstToken` yields to orb; `retryMsg`/`editMsg` emits; context badge computed + template + CSS |
+| `src/App.vue` | `@retry-msg`/`@edit-msg` on CoachPanel; `handleTaskRegenerate`, `handleTaskEditMessage` |
+| `src/components/layout/AppHeader.vue` | v10.200 → v10.201 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.202 — Fix Task-mode Retry/Edit regeneration (bugfix)
+
+The v10.201 Task-mode user meta-row (Retry ↻ / Edit ✎) was wired to the wrong regeneration primitive.
+
+### Bugs fixed
+
+1. **Wrong primitive (functional):** Handlers called `retryTaskCoach()` → `taskCoach.retry()` → `request(_lastPayload, false)`. With `_isAutoRetry=false`, `request()` re-pushes a fresh user message from `_lastPayload` instead of regenerating the clicked turn from the truncated tail — producing a duplicate/wrong user bubble + reply. After a page reload `_lastPayload` is `null`, so the buttons silently did nothing. Now uses `regenerateTaskCoach(buildPayload('coach'))` (`_isAutoRetry=true`), mirroring the Explore handlers: rebuilds from the existing truncated `messages`, no re-push, and works post-reload because a fresh payload is supplied.
+2. **Persistence gap:** Handlers used a bare `splice()` and skipped `updateRecordContent` on edit. Now a `truncateTaskAfter()` helper (mirroring `truncateExploreAfter`) deletes the removed turns' coach-history records via `deleteRecords()`, and the edit handler persists the new text via `updateRecordContent(hashId, …)` — so edits survive reload and truncated turns don't orphan history records.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/composables/useLLM.ts` | Expose `regenerateTaskCoach: taskCoach.regenerate` (factory already returned `regenerate`) |
+| `src/App.vue` | Destructure `regenerateTaskCoach`; add `truncateTaskAfter()`; rewrite `handleTaskRegenerate`/`handleTaskEditMessage` to truncate + regenerate + persist |
+| `src/components/layout/AppHeader.vue` | v10.201 → v10.202 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.203 — Task-mode message UX parity with Explore (no avatars + full-width edit)
+
+Two Task-mode display fixes so the chat panel matches Explore's pure-Claude look (see `snapshot-edit-mode-comparsion.jpg`).
+
+### Changes
+
+1. **Removed avatars from Task mode** — `ChatBubble.vue` no longer renders the side avatar column in either layout (stacked never had it; bubble now matches). Dropped the unused `agentAvatar` const and the avatar/`breathe`-halo CSS. Also removed the avatar from `CoachPanel.vue`'s bouncing-dots typing-row (+ unused `AGENT_AVATAR` const and `.typing-avatar*` CSS). Identity is now conveyed by alignment + serif/bubble, exactly like Explore.
+2. **Full-width edit area in Task mode** — clicking Edit (✎) on a user message previously crushed the textarea into a tiny right-aligned box (the bubble is content-sized in bubble layout). Added a `bubble-editing` class (bound to the existing `editing` ref) and `.layout-bubble .bubble-editing { max-width: 100%; flex: 1; }` so the bubble stretches to full panel width while editing — mirroring Explore's stretched edit area. Save/Cancel stay bottom-right.
+
+### Tests / baseline
+
+Updated `ChatBubble.layout.test.ts` (both layouts now assert no avatars) and `ChatBubble.actions.test.ts` (meta-row now renders in bubble too — the v10.201 port left this assertion stale). Resolving the layout test moves the suite baseline from **4 known-red → 3 known-red** (formatCoach ×3 remain: C++/Python highlighting, response-divider). Full suite: 537 passed, 3 known-red, no new failures; typecheck clean.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/chat/ChatBubble.vue` | Remove avatar column + dead CSS/const; `bubble-editing` full-width edit |
+| `src/components/panels/CoachPanel.vue` | Remove typing-row avatar + unused const/CSS |
+| `src/components/chat/__tests__/ChatBubble.layout.test.ts` | Assert no avatars in both layouts (fixes known-red) |
+| `src/components/chat/__tests__/ChatBubble.actions.test.ts` | Meta-row now renders in bubble layout |
+| `src/components/layout/AppHeader.vue` | v10.202 → v10.203 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.204 — Contain the Task-mode Analysis tab scroll (stop page scrolling)
+
+Task mode runs under a viewport lock so only inner regions scroll. This held on the Chat/Review tab but broke on the **Analysis** sub-tab: scrolling (especially with the cursor near the page border) scrolled the whole app up and off-screen.
+
+### Root cause
+
+Every tab renders inside PanelShell's `.panel-body` (`flex:1; overflow-y:auto`), the intended scroller. The working tabs contain themselves: `.chat-container` (`min-height:100px`) and `.history-tab` (`height:100%` + inner `.history-list{flex:1;overflow-y:auto}`). But the Analysis wrapper `.coach-analysis` had **no CSS** — no height/min-height/overflow — and the slotted `AIReviewPanel` deliberately has no scroll of its own. So the tall analysis report grew the wrapper and scrolling leaked past `.panel-body` to the page.
+
+### Fix
+
+Added scoped `.coach-analysis` CSS in `CoachPanel.vue` mirroring `.history-tab`: `height:100%; min-height:0; overflow-y:auto; overscroll-behavior:contain`. The analysis tab now fills the panel body and scrolls internally; `overscroll-behavior:contain` stops wheel-chaining to the page at the scroll limits. Inherently Task-scoped (the Analysis tab only exists in Task-mode CoachPanel); no change to the shared PanelShell or AIReviewPanel, and no double scrollbar (the child fills the body exactly).
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/panels/CoachPanel.vue` | Add `.coach-analysis` containment CSS |
+| `src/components/layout/AppHeader.vue` | v10.203 → v10.204 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.205 — Fix Task-mode page scroll (clamp the grid row height)
+
+Completes v10.204. The Analysis tab still let the whole app scroll up (header off-screen, black void below) when scrolling near the right edge.
+
+### Root cause
+
+`.grid-layout` (the Task two-column container) had no `grid-template-rows`, so its single implicit row was `auto` (max-content). The tall `AIReviewPanel` analysis report inflated the row past the viewport, so both columns stretched beyond the locked `.app-main--task` and scrolling escaped to the page — from any cursor position. This also defeated v10.204: `.coach-analysis { height:100% }` resolved against the content-sized column, so it never scrolled.
+
+### Fix
+
+Added `grid-template-rows: minmax(0, 1fr)` to `.grid-layout` in `App.vue`. The row is now clamped to the container (viewport) height and can shrink, so columns are definite-height, their `overflow:hidden` + inner scrollers engage (v10.204's `.coach-analysis` now actually scrolls), and the grid no longer overflows the viewport lock. Chat/History tabs and Explore mode (flex-based) were never affected.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | `.grid-layout`: add `grid-template-rows: minmax(0, 1fr)` |
+| `src/components/layout/AppHeader.vue` | v10.204 → v10.205 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.206 — Apply Explore display polish to the Task-mode Analysis panel
+
+Brought the serif typography / airy rhythm / Claude-style borderless tables (ported to the Review chat in v10.200) to the **Analysis** panel (`AIReviewPanel.vue`).
+
+### Design Rationale
+
+The Analysis panel renders the same `.coach-response` markdown but via its own scoped `:deep()` overrides (dense 13px sans, boxed/gridded tables), and sits outside any `.layout-bubble`/`.layout-stacked` ancestor, so the shared Explore rules never reached it. The fix updates those `:deep()` typography + table rules in place to mirror `.layout-bubble .coach-response`.
+
+### Changes
+
+1. **Serif body** — `.coach-response` now `font-family: var(--font-serif); font-size: 1rem; line-height: 1.6; color: var(--text-primary)`.
+2. **Serif headings + airy rhythm** — h1/h2 → serif 1.4rem; h3 → serif 1.15rem; h4–6 gain serif (purple accent kept); `p` margin 0.85em; `li` margin 0.25em. Heading border-bottom dividers preserved.
+3. **Claude-style borderless tables** — replaced the boxed block (1px borders, header fill, `display:block` shrink hack, row hover) with the Explore style: no border, bold underlined header, thin row-only dividers, sans 0.95rem, airy em padding. Horizontal scroll continues via the global `.coach-response .table-scroll` wrapper (analysis markdown uses the same `renderMarkdown` pipeline).
+
+The review panel's **semantic accent identity** (purple strong/headings-accent, status badges, info rows, issue lists, `coach-main-message`, `coach-highlight-error`) is deliberately preserved — it encodes analysis-specific meaning and isn't part of the font/typography/table polish.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/panels/AIReviewPanel.vue` | `:deep()` typography + table rules → Explore/Review polish |
+| `src/components/layout/AppHeader.vue` | v10.205 → v10.206 |
+| `PLAN.md` | This entry |
+
+---
+
+## doc — Analysis history diff (feature reference)
+
+Reference note for the **analysis history diff** in the Task-mode Analysis panel — lets a user see what changed between the current analysis result and the previous run. (Documentation only; no code change.)
+
+### How it works
+
+- **UI** — The Analysis tab toolbar shows a **"Show diff" / "Hide diff"** toggle (`AIReviewPanel.vue`), visible only when `canShowDiff && !isAnalyzing`. Toggling swaps the rendered markdown (`filteredAnalysisHtml`) for the diff view (`diffHtml`); the perspective tabs hide while the diff is shown.
+- **"Previous" tracking** — `useLLM.ts` holds `previousAnalyzeResponse`; the analyze flow's `onBeforeRequest` snapshots the current response into it right before each new analyze starts, so "previous" = the immediately prior analysis. It's reset by `clearAnalyzeResponse`, and passed to the panel as `:previous-response` (`App.vue`).
+- **Compute** — `AIReviewPanel.vue`: `prevRawText` = previous `.message`, `rawText` = current `.message`; `canShowDiff` = markdown response && a previous result exists && its text is non-empty; `diffHtml = diffWords(prevRawText, rawText)`.
+- **Diff util** — `src/utils/diffText.ts` `diffWords()` is an LCS-based **word-level** diff: tokenizes on `\S+|\s+` (preserves spacing), HTML-escapes, and emits `<ins class="diff-add">` (added) / `<del class="diff-del">` (removed). It diffs the **raw markdown text**, not the rendered HTML.
+- **Styling** — `.diff-view` is monospace `pre-wrap`; `.diff-add` renders green, `.diff-del` red.
+
+### Reference Files
+
+| File | Role |
+|------|------|
+| `src/components/panels/AIReviewPanel.vue` | Toggle UI, `canShowDiff`/`diffHtml`, `.diff-view` styling |
+| `src/utils/diffText.ts` | `diffWords()` LCS word-level diff → add/del spans |
+| `src/composables/useLLM.ts` | `previousAnalyzeResponse` snapshot (analyze `onBeforeRequest`) |
+| `src/App.vue` | Wires `:previous-response` into the Analysis panel |
+
+---
+
+## v10.207 — Analysis button toggles to Cancel; drop floating Cancel + Loading badge
+
+Consolidated the analysis-cancel UX into the action bar, mirroring the Review Send→Stop pattern.
+
+### Changes
+
+1. **Analysis button is now a toggle** (`TaskForm.vue`) — idle shows **Analyze** (emits `analyze`); while `isAnalyzeLoading` it becomes a red **Cancel** (emits `cancelAnalyze`, reusing the `.action-stop` style + stop-square icon). Added `cancelAnalyze` emit; dropped the now-inert spinner branch from the idle button.
+2. **Wiring** (`App.vue`) — `@cancel-analyze="cancelAnalyze"` on `<TaskForm>` (`cancelAnalyze` already from `useLLM`).
+3. **Removed the in-panel cancels + Loading badge** (`AIReviewPanel.vue`) — deleted the golden-yellow `status-loading` badge, the loading-state Cancel button, and the streaming `cancel-row`. The backoff-state cancel is kept (429 rate-limit recovery isn't covered by the action-bar toggle). Removed now-dead CSS (`.status-loading`, `.mini-spinner`, `.cancel-row`, `.cancel-icon`); kept `.cancel-btn` (backoff).
+
+Create JIRA is unchanged (quick, non-cancellable confirm→POST).
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/form/TaskForm.vue` | Analysis→Cancel toggle; `cancelAnalyze` emit |
+| `src/App.vue` | `@cancel-analyze="cancelAnalyze"` |
+| `src/components/panels/AIReviewPanel.vue` | Remove Loading badge + in-progress Cancel buttons + dead CSS |
+| `src/components/layout/AppHeader.vue` | v10.206 → v10.207 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.208 — Widen AGENT STATE left column
+
+The Task-mode AGENT STATE panel used an even `1fr 1fr` grid, so the left column's long values (Active Skill file name + `[modified]` tag) wrapped awkwardly while the right column only held short "No" states.
+
+### Change
+
+`AgentInfo.vue` — `.agent-grid` `grid-template-columns: 1fr 1fr` → `1.5fr 1fr`. The left column gets ~60% width (right group shifts right), giving Model / Active Role / Active Skill / Analyze Skill more room. Row-major pairing, the full-width `.backoff-row`, and the `max-width: 620px` single-column collapse are unaffected.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/form/AgentInfo.vue` | `.agent-grid` columns `1fr 1fr` → `1.5fr 1fr` |
+| `src/components/layout/AppHeader.vue` | v10.207 → v10.208 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.209 — Remove double scrollbar in the Analysis panel
+
+After an analysis completed, the Analysis panel showed two nested vertical scrollbars.
+
+### Root cause
+
+PanelShell's `.panel-body` (`flex:1; overflow-y:auto`) is the standard scroller and holds `.coach-tabs` + the active tab content. v10.204 added `.coach-analysis { height:100%; overflow-y:auto; … }`, so `coach-analysis` (100% of panel-body) **plus** the tab bar exceeded the panel-body → panel-body scrolled (outer bar) **and** coach-analysis scrolled (inner bar). v10.204 was a first attempt at the page-scroll bug; **v10.205** (`grid-template-rows: minmax(0,1fr)`) was the real fix, making the v10.204 inner-scroller redundant — and the source of the second bar.
+
+### Fix
+
+Removed the `.coach-analysis` rule in `CoachPanel.vue`. The analysis content now scrolls in the single `.panel-body` scroller (same as Chat/History). The page is still contained by v10.205's grid-row clamp + `.col-left { overflow:hidden }`.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/panels/CoachPanel.vue` | Remove the v10.204 `.coach-analysis` inner-scroller rule |
+| `src/components/layout/AppHeader.vue` | v10.208 → v10.209 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.210 — Remove the Analysis "inner panel" box (match Review's flow)
+
+The Task-mode Analysis tab wrapped the whole report in a bordered card, unlike the Review chat which renders the same markdown directly on the page. The user prefers the Review look.
+
+### Root cause
+
+The analysis response goes through `formatCoachResponse`'s structured path, which wraps `markdown_msg` in `<div class="coach-main-message">` (`formatCoach.ts:109`). Review renders that via the global `coach-response.css` (`.coach-main-message { padding: 0 }`, invisible), but `AIReviewPanel.vue` overrode it as a card (bg-tertiary + left-border + radius) — the visible "big badge".
+
+### Fix
+
+`AIReviewPanel.vue` — neutralized `:deep(.coach-main-message)` to `background: transparent; border: none; border-radius: 0; padding: 0; margin: 0`. The report now flows directly with the v10.206 serif/typography/borderless-table polish, matching the Review chat. Other structured elements (status badge, info rows, comment/issue lists) are untouched.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/panels/AIReviewPanel.vue` | De-box `:deep(.coach-main-message)` |
+| `src/components/layout/AppHeader.vue` | v10.209 → v10.210 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.211 — New top-level mode "Config" (配置) + placeholder page
+
+Scaffolded a fourth top-level mode alongside Explore · Task · View. This step adds the mode + an empty page; content lands next.
+
+### Changes
+
+1. **Mode type/state** (`useAppMode.ts`) — `AppMode` gains `'config'`; `validModes` includes it (so the header button auto-renders via the existing `v-for`). `applyModeFlags` unchanged (Config is read-only like View).
+2. **i18n** (`en.ts`/`zh.ts`) — `mode.config` = `Config` / `配置`; new `config.comingSoon` placeholder string.
+3. **New page** (`src/components/config/ConfigPanel.vue`) — centered placeholder (gear icon + title + "coming soon"); accepts an `active?` prop for parity with View.
+4. **App wiring** (`App.vue`) — `app-main--config` class; Config block rendered with the View lazy-mount pattern (`configVisited` ref + watch, `v-if`/`v-show`/`:active`); `modeDescriptions.config: ''` so the mode-switch description swap stays defined; `ConfigPanel` import.
+5. **Header** (`AppHeader.vue`) — `.mode-btn.mode-config.active` amber highlight.
+6. **Exhaustive Record fix** (`useReviewWorkflow.ts`) — added `config` entries to the `Record<AppMode, …>` review-state maps (caught by typecheck).
+
+### Verification
+
+- `npx tsc --noEmit` clean. Full suite: 537 passed, 3 known-red (formatCoach ×3); no new failures.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/composables/useAppMode.ts` | `AppMode` + `validModes` add `config` |
+| `src/i18n/en.ts` / `zh.ts` | `mode.config` + `config.comingSoon` |
+| `src/components/config/ConfigPanel.vue` | **New** placeholder page |
+| `src/App.vue` | Config render block, lazy-mount, modeDescriptions, import, main class |
+| `src/components/layout/AppHeader.vue` | Config active color; v10.210 → v10.211 |
+| `src/composables/useReviewWorkflow.ts` | `config` entries in `Record<AppMode>` maps |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.212 — Config page sidebar rail + sub-pages (Team / Model / Skills)
+
+Gave the Config mode a collapsible left sidebar (mirroring Explore's rail) that switches between sub-pages. Sub-page content is still placeholder; this builds the navigation shell.
+
+### Changes
+
+1. **`ConfigPanel.vue` rebuilt** — full-bleed `.config-layout` (flex): a left `.config-rail` (168px, collapses to 52px icon-only, persisted to `config_rail_collapsed`) with a top toggle + three items **Team / Model / Skills**, and a `.config-content` area that scrolls internally and renders the active sub-page placeholder. `activeSubPage` persisted to `config_sub_page` (default Team). Rail styling copied from Explore's `.explore-rail` values (blue-tint active state).
+2. **Proper line-style icons** (24×24, stroke=currentColor): Team → Feather *users* (group), Model → Feather *cpu* (chip), Skills → sparkles (the app's AI/skill icon).
+3. **`App.vue`** — Config is now a full-bleed, viewport-locked shell like Explore: added `app--config-lock` to the root class + the lock CSS group, and `.app-main--config` to the full-bleed + overflow CSS groups.
+4. **i18n** — `config.team/model/skills/railToggle` in en (Team/Model/Skills/Toggle sidebar) and zh (团队/模型/技能/折叠侧边栏).
+
+### Verification
+
+- `npx tsc --noEmit` clean.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/config/ConfigPanel.vue` | Rebuilt with rail + sub-page switching + icons |
+| `src/App.vue` | `app--config-lock` + full-bleed/lock CSS for config |
+| `src/i18n/en.ts` / `zh.ts` | `config.team/model/skills/railToggle` |
+| `src/components/layout/AppHeader.vue` | v10.211 → v10.212 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.213 — Relocate LLM Settings into Config sub-pages (Model + Skills); remove the modal
+
+Moved the ⚙ LLM Settings modal's contents into the Config page's Model and Skills sub-pages, with a full-page layout. Team stays a placeholder. The modal is gone; the header ⚙ now switches to Config mode.
+
+### Changes
+
+1. **New `src/styles/config-forms.css`** — shared form-control styles (ported from the modal) scoped under `.config-form` so generic class names can't collide; imported once in `main.ts`. Includes a sticky `.config-save-bar`.
+2. **New `ModelConfig.vue`** — Provider URL, API Key (+ Test + valid/invalid badges), Model 1 / Model 2 (with presets datalist), Export/Import API settings, and a Save button. Re-syncs from storage when the page becomes active.
+3. **New `SkillsConfig.vue`** — Task Coach skill, Analyze skill, Response Format (taller textareas, import/export-md, reset, char/token counters), and the Template-chip editor + Save. Reloads unmodified skills on language switch and task-layer change.
+4. **`ConfigPanel.vue`** — content area renders Team placeholder + `ModelConfig` + `SkillsConfig` (v-show by active sub-page); content area no longer force-centers.
+5. **Removed the modal** — deleted `LLMSettings.vue`; the header ⚙ gear and `Ctrl+,` now call `setMode('config')`; dropped `showSettingsModal`/`onSettingsSaved`/`@open-settings`/the ESC-close-settings branch.
+6. **i18n** — `config.modelSubtitle` / `config.skillsSubtitle` (en + zh). All field labels reuse the existing `settings.*` keys.
+
+All persistence is unchanged — same localStorage keys via the same `@/config/llm`, `@/config/skills`, `@/config/templates` getters/setters; each page has its own Save (toast `settings.saved`).
+
+### Verification
+
+- `npx tsc --noEmit` clean. Full suite: 537 passed, 3 known-red (formatCoach ×3); no new failures.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/styles/config-forms.css` | **New** shared `.config-form` styles |
+| `src/components/config/ModelConfig.vue` | **New** Model sub-page |
+| `src/components/config/SkillsConfig.vue` | **New** Skills sub-page |
+| `src/components/config/ConfigPanel.vue` | Render the sub-pages |
+| `src/components/settings/LLMSettings.vue` | **Deleted** (modal removed) |
+| `src/App.vue` | Remove modal mount/state/handlers; `Ctrl+,` → Config |
+| `src/components/layout/AppHeader.vue` | Gear → `setMode('config')`; remove `openSettings` emit; v10.212 → v10.213 |
+| `src/main.ts` | Import `config-forms.css` |
+| `src/i18n/en.ts` / `zh.ts` | `config.modelSubtitle` / `config.skillsSubtitle` |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.214 — Claude-style Explore composer (model menu, context ring, send-on-type)
+
+Reworked the Explore composer (`ExploreChat.vue`) to match Claude's, per Ethan's annotated snapshot.
+
+### Changes
+
+1. **`+` add-file** — borderless ghost button (was a bordered circle).
+2. **Model selector** — replaced the native `<select>` with a Claude-style dropdown menu: a `{model} ▾` button opening an upward card listing `availableModels` (Model 1 / Model 2) with a check on the active one. Closes on outside-click (`onClickOutside` from `@vueuse/core`). `selectModel(m)` reuses the old image-drop-on-non-vision logic. (Effort / More-models rows omitted — no backend.)
+3. **Context ring** — replaced the `NNN / 128K tok` text with a circular ring + **Low / Middle / High** label, moved to the footer row (right of the centered disclaimer). `ctxLevel` thresholds: <50% Low (blue) / 50–85% Middle (amber) / ≥85% or over High (red); the arc fills by percent; tooltip keeps the token detail.
+4. **Send / Stop as icons** — Send is now a light-blue up-arrow square that **appears only when the draft is non-empty** (disabled when over context), with a soft blue glow on hover (the breathing-orb blue). Stop is a red stop-square shown while streaming.
+5. **i18n** — `coach.ctxLow/ctxMiddle/ctxHigh` (en + zh).
+
+### Verification
+
+- `npx tsc --noEmit` clean. Updated `ExploreChat.model.test.ts` to drive the new menu (open → read `.model-menu-item` → select). Full suite: 537 passed, 3 known-red (formatCoach ×3); no new failures.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/chat/ExploreChat.vue` | Composer template + script (model menu, ctx ring, icon send) + CSS |
+| `src/components/chat/__tests__/ExploreChat.model.test.ts` | Drive the new dropdown menu |
+| `src/i18n/en.ts` / `zh.ts` | `coach.ctxLow/ctxMiddle/ctxHigh` |
+| `src/components/layout/AppHeader.vue` | v10.213 → v10.214 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.215 — Faithful Claude model-selector for the Explore composer
+
+v10.214's flat model picker was replaced with the full Claude-style nested menu, matching the saved Claude reference (`claude-reference/`) + Ethan's annotated snapshot.
+
+### Changes
+
+1. **New `ComposerModelMenu.vue`** — Claude-style model selector:
+   - **Trigger**: ghost button `{model}` + muted `High` (effort) + chevron-down.
+   - **Main menu** (opens upward): active model as a 2-line item (name + "{N}K context" caption + blue check) → separator → **`Effort  High ›`** (static placeholder, inert) → separator → **`More models ›`**.
+   - **More-models flyout** (opens left): Model 1 / Model 2 first, then the `LLM_MODEL_PRESETS` catalog grouped by provider (deduped), each a radio item with a check on the active model; scrollable. Selecting emits `select(m)` and closes.
+   - Closes on outside-click (`onClickOutside`) and Escape.
+2. **`ExploreChat.vue`** — uses `<ComposerModelMenu @select="onModelPicked">`; `onModelPicked` keeps the set-model + drop-images-on-non-vision logic. Removed the v10.214 inline menu + its CSS + now-unused imports.
+3. **i18n** — `coach.effort/effortHigh/moreModels/modelCtxSuffix` (en + zh).
+
+Effort stays a non-functional placeholder (no reasoning-effort backend); no "currently unavailable" state (we have no unavailable models). The `+`, send-on-type (light-blue), and Low/Middle/High context ring from v10.214 are unchanged.
+
+### Verification
+
+- `npx tsc --noEmit` clean. Rewrote `ExploreChat.model.test.ts` to drive the nested menu (open → active item → More-models flyout → select). Full suite at the 3-known-red baseline (formatCoach ×3); the `openai-client` server test flaked once on the full run but passes in isolation (env-at-module-load order).
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/chat/ComposerModelMenu.vue` | **New** Claude-style model selector |
+| `src/components/chat/ExploreChat.vue` | Use the component; remove inline menu + dead CSS/imports |
+| `src/components/chat/__tests__/ExploreChat.model.test.ts` | Drive the nested menu |
+| `src/i18n/en.ts` / `zh.ts` | `coach.effort/effortHigh/moreModels/modelCtxSuffix` |
+| `src/components/layout/AppHeader.vue` | v10.214 → v10.215 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.216 — Align Explore-composer fonts with the Claude reference
+
+Matched the composer / model-selector typography to Claude's reference (`claude-reference/` CSS tokens). Main fix: the model selector was monospace; Claude's UI is all sans. CSS-only.
+
+### Claude spec applied (from the reference)
+- Composer input (`.font-large`): sans 16px / line-height 1.4.
+- Body / menu items (`.text-body`): sans 14px / lh 20px.
+- Footnote (descriptions, effort value, context, disclaimer) (`.text-footnote`): sans 12px / lh 16px.
+- Caption (group labels): sans 11px.
+- Model trigger name: sans 14px.
+
+### Changes
+
+1. **`ComposerModelMenu.vue`** — `.cmodel-btn` `--font-mono` → `--font-sans`, 14px; `.cmodel-item` 16px → 14px (lh 20px); `.cmodel-item-desc`/`.cmodel-item-value` → 12px/lh16; `.cmodel-group-label` → 11px.
+2. **`ExploreChat.vue`** — textarea line-height 1.5 → 1.4; `.composer-disclaimer` → sans 12px; `.composer-ctx` → sans 12px / weight 500.
+
+### Verification
+
+- `npx tsc --noEmit` clean. CSS-only — no test impact (baseline stays 3 known-red formatCoach ×3).
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/components/chat/ComposerModelMenu.vue` | sans font, 14/12/11px sizes |
+| `src/components/chat/ExploreChat.vue` | textarea lh 1.4; disclaimer + context label sans 12px |
+| `src/components/layout/AppHeader.vue` | v10.215 → v10.216 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.217 — Fix "More models" flyout direction (right + up)
+
+The Explore model-selector's More-models flyout opened left + downward; Claude opens it right + upward. Flipped both axes of `.cmodel-flyout` in `ComposerModelMenu.vue`: `right:100%/top:0` → `left:calc(100%+6px)/bottom:0` (to the right of the menu, bottom-aligned so it grows up), and the enter/leave transform from `translateX(6px)` → `translateX(-6px)`. CSS-only.
+
+| File | Change |
+|------|--------|
+| `src/components/chat/ComposerModelMenu.vue` | Flyout opens right + up |
+| `src/components/layout/AppHeader.vue` | v10.216 → v10.217 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.218 — Clear Explore composer file chips immediately on send
+
+After attaching files + sending in Explore mode, the chips lingered in the composer for the whole stream (and were orphaned on error). Root cause: `handleExploreSend` (`App.vue`) called `detachAll()` only after `await requestExploreCoach(...)` and inside `if (!err)`.
+
+Fix: moved `detachAll()` to right after `buildPayload('coach')` (before the await), unconditionally. The files are already snapshotted into `payload.data.attachments` (and read synchronously by the explore flow's `getAttachments` at request start), so the in-flight message keeps them while the composer clears immediately — mirroring the draft clear.
+
+| File | Change |
+|------|--------|
+| `src/App.vue` | `handleExploreSend`: clear attachments on send, not after the stream |
+| `src/components/layout/AppHeader.vue` | v10.217 → v10.218 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.219 — Fix middle-dot (`·`) math rendering inside `\text{}`
+
+`$…\text{W/m·K}…$` and `\text{N·m}` rendered the middle dot as a red `\cdotp` error.
+
+### Root cause
+
+KaTeX maps a literal `·` (U+00B7) to the **math-only** command `\cdotp` (no text-mode variant). LLMs put it **inside `\text{…}`** (text mode), where it can't render → red error. Other symbols (×, ±, ≥, →) work because they're in bare math, not inside `\text{}`.
+
+### Fix
+
+Added `normalizeUnitDotsInMath` in `markdown.ts` (math-scoped, like `escapePipesInMath`): inside `$…$`/`$$…$$`, split `\text{A·B}` → `\text{A}\cdot\text{B}` (so `\cdot` lands in math mode) and convert any remaining bare/`\mathrm{}` dot to `\cdot`. Handles `·`/`⋅`/`∙`. Prose middle dots (outside math) are untouched. Wired as step 4b in `renderMarkdown`.
+
+### Verification
+
+- `npx tsc --noEmit` clean. `mathRendering.test.ts`: +3 cases (W/m·K & N·m render without `katex-error`/`\cdotp`; bare `$a · b$` renders; prose `·` untouched) — 79 pass.
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `src/utils/markdown.ts` | `normalizeUnitDotsInMath` + step 4b |
+| `src/utils/__tests__/mathRendering.test.ts` | +3 middle-dot tests |
+| `src/components/layout/AppHeader.vue` | v10.218 → v10.219 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.220 — Remove the header gear (settings) icon
+
+The top-right ⚙ gear (since v10.213 it only switched to Config mode) was redundant with the header **Config** mode button. Removed the button + its `.settings-btn` CSS + the now-unused `ICONS` import in `AppHeader.vue`. The remaining theme + help icons re-space automatically via `.header-right { gap: var(--space-3) }` (no empty slot). Config is still reachable via the mode switcher and `Ctrl+,`.
+
+| File | Change |
+|------|--------|
+| `src/components/layout/AppHeader.vue` | Remove gear button + CSS + unused import; v10.219 → v10.220 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.221 — History "Download Raw" → one ZIP, a file per chat (named by chat)
+
+The History tab's "Download Raw" merged all selected chats into one file. Now it saves **each chat independently, named by its chat title**, delivered as a single **.zip** (one file per chat).
+
+### Changes
+
+1. **Dependency** — added `fflate` (tiny, zero-dep, sync zip).
+2. **`useCoachHistory.ts`** — extracted `recordsToMarkdown`/`recordsToJson` builders (shared by the single-file exporters and the zip); added `exportSessionsZip(sessions, format)` — one file per chat named by `sanitizeFilename(title)` (same-titled chats get `(2)`, `(3)` suffixes; `both` adds `.md`+`.json` per chat), zipped via `fflate.zipSync` and downloaded as `coach-history-<date>.zip`.
+3. **`CoachHistoryTab.vue`** — the bulk `handleDownload` path now groups the selected-or-all records by session (named by chat title) and calls `exportSessionsZip` for 2+ chats, or a plain single-file `exportRecords` for one chat (+ a defensive fallback file for any session-less records). The per-session download button is unchanged.
+
+### Verification
+
+- `npx tsc --noEmit` clean. Tests: extended `CoachHistoryTab.download.test.ts` (single chat → plain file; multiple → `exportSessionsZip` with per-chat named groups) and `useCoachHistory.export.test.ts` (one `coach-history-<date>.zip` download). Full suite: 543 passed, 3 known-red (formatCoach ×3).
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `package.json` | + `fflate` |
+| `src/composables/useCoachHistory.ts` | content builders + `exportSessionsZip` |
+| `src/components/coach/CoachHistoryTab.vue` | bulk download → per-chat zip |
+| `src/composables/__tests__/useCoachHistory.export.test.ts` | +zip test |
+| `src/components/coach/__tests__/CoachHistoryTab.download.test.ts` | +bulk per-chat tests |
+| `src/components/layout/AppHeader.vue` | v10.220 → v10.221 |
+| `PLAN.md` | This entry |
+
+---
+
+## chore — realtime data-loading test report (production DB) + ingest bench tool
+
+Companion to the v10.192 view-bench: `tools/bench/ingest-bench.ts` (run: `npx tsx tools/bench/ingest-bench.ts`, needs the dev server + `QUALITY_API_KEY`; writes synthetic `PERFTEST-*` rows — restore the DB after). Results against the 1,155-row production DB (2026-06-12):
+
+| Measure | Result |
+|---|---|
+| Auth/schema gates (no key / wrong key / bad issueKey / off-enum status) | 401·401·400·400 ✓ |
+| Create → 201, same-key update → 200 `updated`, no duplicate | ✓ |
+| POST→visible-in-GET latency | 110ms |
+| 50-upsert burst (n8n batch sim) POST latency | median 1.4ms · p95 2.3ms · max 2.6ms |
+| GET full window after burst (1,206 rows) | 81ms |
+
+Live behaviour checks (user-confirmed): refresh keeps stale rows + dims + spinner, "Updated HH:MM" pulse, chip ticks, skeleton on throttled reload, search instant at 1,206 rows. The auto-refresh/failure-path legs were preempted by the discovery of the v10.193 itemsLimit freeze — which the realtime test existed to find, so: mission accomplished.

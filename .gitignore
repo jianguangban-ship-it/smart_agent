@@ -21,4 +21,8 @@ deploy/.env.*
 *-api-settings-*.json
 # Local tooling / crash dumps
 .antigravitycli/
+bash.exe.stackdump
+# Local STT verification server (tools/local-stt) — venv + model weights are machine-local
+tools/local-stt/.venv/
+tools/local-stt/models/
 *.stackdump

@@ -11,7 +11,7 @@ beforeAll(() => {
   } as Storage
 })
 
-import { sanitizeFilename, exportAsJson } from '../useCoachHistory'
+import { sanitizeFilename, exportAsJson, exportSessionsZip } from '../useCoachHistory'
 import type { CoachHistoryRecord } from '@/types/api'
 
 describe('sanitizeFilename', () => {
@@ -43,6 +43,28 @@ describe('exportAsJson custom filename', () => {
     const records: CoachHistoryRecord[] = [{ id: 'a1', role: 'user', content: 'hi', timestamp: 1 }]
     exportAsJson(records, 'My Label')
     expect(anchor.download).toBe('My Label.json')
+
+    createEl.mockRestore()
+  })
+})
+
+describe('exportSessionsZip', () => {
+  it('downloads a single coach-history-<date>.zip', () => {
+    const anchor = { href: '', download: '', click: vi.fn() } as unknown as HTMLAnchorElement
+    const createEl = vi.spyOn(document, 'createElement').mockReturnValue(anchor)
+    vi.spyOn(document.body, 'appendChild').mockImplementation((n) => n)
+    vi.spyOn(document.body, 'removeChild').mockImplementation((n) => n)
+    const G = globalThis as { URL: { createObjectURL: unknown; revokeObjectURL: unknown } }
+    G.URL.createObjectURL = vi.fn(() => 'blob:x')
+    G.URL.revokeObjectURL = vi.fn()
+
+    exportSessionsZip([
+      { name: 'Chat One', records: [{ id: 'a1', role: 'user', content: 'hi', timestamp: 1 }] },
+      { name: 'Chat Two', records: [{ id: 'b1', role: 'user', content: 'yo', timestamp: 2 }] },
+    ], 'markdown')
+
+    expect(anchor.click).toHaveBeenCalledTimes(1)   // one zip, not N files
+    expect(anchor.download).toMatch(/^coach-history-\d{4}-\d{2}-\d{2}\.zip$/)
 
     createEl.mockRestore()
   })

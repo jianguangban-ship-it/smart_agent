@@ -91,8 +91,10 @@
 
       <div class="explore-composer-wrap">
         <!-- Claude-style composer box: chip + textarea on top, a control bar
-             below (+ add-file left | model label + Send right). Expand/popout
-             stays inside DescriptionEditor. Mic/voice intentionally omitted. -->
+             below (+ add-file left | model label + mic + Send right).
+             Expand/popout stays inside DescriptionEditor. v10.179 adds mic
+             dictation (VoiceControls); conversational voice mode (Phase 2)
+             is still intentionally omitted. -->
         <div class="composer-box">
           <input
             ref="fileInputRef"
@@ -122,6 +124,7 @@
           </div>
           <div class="explore-composer">
             <button
+              v-show="!isRecording"
               type="button"
               class="composer-add-btn"
               :title="t('coach.composerAddFile')"
@@ -134,37 +137,60 @@
               </svg>
             </button>
             <div class="composer-bar-right">
-              <span
-                class="composer-context"
-                :class="{ over: ctxUsage.over }"
-                :title="ctxTitle"
-              >{{ ctxBadge }}</span>
-              <select
-                class="composer-model-select"
-                :value="exploreModel"
-                :title="exploreModel"
-                :aria-label="t('coach.composerModelSelect')"
-                @change="onModelChange"
-              >
-                <option v-for="m in availableModels" :key="m" :value="m">{{ m }}</option>
-              </select>
+              <!-- Claude-style model selector (nested menu + More-models flyout). -->
+              <ComposerModelMenu v-show="!isRecording" @select="onModelPicked" />
+              <VoiceControls
+                :disabled="isLoading"
+                @recording="isRecording = $event"
+                @text="appendTranscript"
+              />
               <button
                 v-if="isLoading"
+                v-show="!isRecording"
                 type="button"
-                class="explore-stop"
+                class="explore-icon-btn explore-stop"
+                :title="t('coach.exploreStop')"
+                :aria-label="t('coach.exploreStop')"
                 @click="$emit('cancel')"
-              >{{ t('coach.exploreStop') }}</button>
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+              </button>
               <button
-                v-else
+                v-else-if="draft.trim()"
+                v-show="!isRecording"
                 type="button"
-                class="explore-send"
-                :disabled="!draft.trim() || ctxUsage.over"
+                class="explore-icon-btn explore-send"
+                :title="t('coach.exploreSend')"
+                :aria-label="t('coach.exploreSend')"
+                :disabled="ctxUsage.over"
                 @click="send"
-              >{{ t('coach.exploreSend') }}</button>
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5" /><polyline points="6 11 12 5 18 11" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
-        <p class="composer-reminder">{{ t('coach.composerDisclaimer') }}</p>
+        <div class="composer-reminder">
+          <span class="composer-disclaimer">{{ t('coach.composerDisclaimer') }}</span>
+          <span
+            class="composer-ctx"
+            :class="'composer-ctx--' + ctxLevel"
+            :title="ctxTitle + ' · ' + ctxBadge + ' · ' + ctxUsage.percent + '%'"
+          >
+            <span class="composer-ctx-label">{{ ctxLevelLabel }}</span>
+            <svg class="ctx-ring" viewBox="0 0 20 20" aria-hidden="true">
+              <circle class="ctx-ring-track" cx="10" cy="10" r="7" fill="none" stroke-width="2.5" />
+              <circle
+                class="ctx-ring-fill" cx="10" cy="10" r="7" fill="none" stroke-width="2.5"
+                stroke-linecap="round" transform="rotate(-90 10 10)"
+                :stroke-dasharray="ctxRingCircumference"
+                :stroke-dashoffset="ctxRingOffset"
+              />
+            </svg>
+          </span>
+        </div>
       </div>
     </template>
 
@@ -199,9 +225,11 @@ import ChatBubble from './ChatBubble.vue'
 import CoachHistoryTab from '@/components/coach/CoachHistoryTab.vue'
 import DescriptionEditor from '@/components/form/DescriptionEditor.vue'
 import ComposerPopout from '@/components/form/ComposerPopout.vue'
+import VoiceControls from './VoiceControls.vue'
+import ComposerModelMenu from './ComposerModelMenu.vue'
 import { useAttachment, inlineAttachments, type AttachError, ATTACH_ACCEPT_HINT, IMAGE_ACCEPT_HINT } from '@/composables/useAttachment'
 import { useToast } from '@/composables/useToast'
-import { exploreModel, availableModels, setExploreModel, getContextLimitTokens, isVisionModel } from '@/config/llm'
+import { exploreModel, setExploreModel, getContextLimitTokens, isVisionModel } from '@/config/llm'
 import { getResponseFormat } from '@/config/skills'
 import { contextUsage, formatTokens } from '@/utils/contextCalculator'
 import type { ChatMessage, LLMChatMessage } from '@/types/api'
@@ -244,6 +272,15 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 // v10.130: matches Task-mode coach composer UX — clicking the ⤢ on the inline
 // composer opens a floating draggable popout sharing the same draft model.
 const isPopoutOpen = ref(false)
+// v10.179: while voice dictation records, the bar shows only the waveform and
+// ✕/✓ controls (other bar buttons v-show'd out, matching Claude's UX).
+const isRecording = ref(false)
+
+/** Dictated text is APPENDED to the draft for review — never auto-sent. */
+function appendTranscript(text: string) {
+  const existing = draft.value
+  draft.value = existing.trim() ? `${existing.replace(/\s*$/, '')} ${text}` : text
+}
 
 function openFilePicker() {
   fileInputRef.value?.click()
@@ -367,10 +404,23 @@ const ctxUsage = computed(() => {
 const ctxBadge = computed(() => `${formatTokens(ctxUsage.value.tokens)} / ${formatTokens(ctxUsage.value.limit)} tok`)
 const ctxTitle = computed(() => t('coach.contextBadgeTitle').replace('{model}', exploreModel.value))
 
-function onModelChange(e: Event) {
-  setExploreModel((e.target as HTMLSelectElement).value)
+// Context-usage ring: Low (<50%) / Middle (50–85%) / High (≥85% or over),
+// each its own colour. The ring arc fills proportional to the usage percent.
+const ctxLevel = computed<'low' | 'middle' | 'high'>(() => {
+  const p = ctxUsage.value.percent
+  if (ctxUsage.value.over || p >= 85) return 'high'
+  if (p >= 50) return 'middle'
+  return 'low'
+})
+const ctxLevelLabel = computed(() => t('coach.ctx' + ctxLevel.value.charAt(0).toUpperCase() + ctxLevel.value.slice(1)))
+const ctxRingCircumference = 2 * Math.PI * 7
+const ctxRingOffset = computed(() => ctxRingCircumference * (1 - Math.min(ctxUsage.value.percent, 100) / 100))
+
+// Model picked from the Claude-style ComposerModelMenu.
+function onModelPicked(m: string) {
+  setExploreModel(m)
   // Switching to a text model: drop any already-attached images (text files kept).
-  if (!isVisionModel(exploreModel.value)) {
+  if (!isVisionModel(m)) {
     attachedFiles.value.filter(f => f.kind === 'image').map(f => f.name).forEach(detach)
   }
 }
@@ -612,6 +662,7 @@ watch(
   align-items: center;
   gap: var(--space-2);
 }
+/* + add-file: borderless ghost button (Claude-style). */
 .composer-add-btn {
   display: inline-flex;
   align-items: center;
@@ -619,71 +670,23 @@ watch(
   width: 30px;
   height: 30px;
   flex-shrink: 0;
-  border: 1px solid var(--border-color);
+  border: none;
   border-radius: var(--radius-full);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .composer-add-btn:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
-  background: var(--blue-subtle, rgba(96, 165, 250, 0.08));
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
 }
 .composer-add-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
-.composer-model {
-  font-family: var(--font-mono);
-  font-size: var(--font-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* Explore model picker: looks like the old muted mono label until hovered. */
-.composer-model-select {
-  font-family: var(--font-mono);
-  font-size: var(--font-xs);
-  color: var(--text-secondary);
-  max-width: 180px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  padding: 2px 4px;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.15s, color 0.15s;
-}
-.composer-model-select:hover {
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-.composer-model-select:focus {
-  border-color: var(--accent-blue);
-}
-/* The open dropdown list: match the composer surface with readable text instead
-   of the browser's default near-white background. */
-.composer-model-select option {
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-}
-/* Live context-size badge: usage of the active model's context window.
-   Turns red when the projected payload exceeds the limit (Send is disabled). */
-.composer-context {
-  font-family: var(--font-mono);
-  font-size: var(--font-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  cursor: default;
-}
-.composer-context.over {
-  color: var(--accent-red);
-  font-weight: 600;
-}
+
+/* Model selector styles now live in ComposerModelMenu.vue (v10.215). */
 /* v10.130: the textarea itself now lives inside <DescriptionEditor> (composer
    variant). This wrapper just gives it flex-fill behavior in the row. The
    textarea's own border, focus ring, sizing, and font come from
@@ -709,28 +712,35 @@ watch(
   color: var(--text-primary);
   font-size: 1rem;
   font-family: var(--font-sans);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 .composer-box :deep(.desc-textarea--composer:focus) {
   outline: none;
   box-shadow: none;
 }
-.explore-send, .explore-stop {
+/* Send / Stop — icon-only rounded squares. Send appears only when there's text. */
+.explore-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
   height: 32px;
-  padding: 0 var(--space-3);
+  flex-shrink: 0;
   border: none;
   border-radius: var(--radius-md);
-  font-size: var(--font-base);
-  font-weight: 600;
   color: white;
   cursor: pointer;
+  transition: filter 0.15s, box-shadow 0.15s, opacity 0.15s;
 }
+.explore-icon-btn svg { width: 17px; height: 17px; }
 .explore-send { background: var(--accent-blue); }
-.explore-send:disabled { opacity: 0.5; cursor: default; }
+.explore-send:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 0 12px 2px rgba(107, 170, 224, 0.45);
+}
+.explore-send:disabled { opacity: 0.45; cursor: default; }
 .explore-stop { background: var(--accent-red); }
+.explore-stop:hover { filter: brightness(1.08); }
 
 /* File-loading composer */
 .explore-composer-wrap {
@@ -761,14 +771,43 @@ watch(
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 2px var(--blue-subtle, rgba(96, 165, 250, 0.15));
 }
-/* Muted reminder beneath the composer (AI can make mistakes…). */
+/* Footer row beneath the composer: disclaimer centered + context ring right. */
 .composer-reminder {
-  margin: 0;
-  text-align: center;
-  font-size: var(--font-xs);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+}
+.composer-disclaimer {
+  font-family: var(--font-sans);
+  font-size: 12px;
   color: var(--text-muted);
   opacity: 0.75;
+  text-align: center;
 }
+/* Context-usage ring + Low/Middle/High label (right-aligned). */
+.composer-ctx {
+  position: absolute;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+}
+.composer-ctx-label { letter-spacing: 0.2px; }
+.ctx-ring { width: 16px; height: 16px; }
+.ctx-ring-track { stroke: var(--border-color); }
+.ctx-ring-fill { transition: stroke-dashoffset 0.3s ease, stroke 0.2s ease; }
+.composer-ctx--low { color: var(--accent-blue); }
+.composer-ctx--low .ctx-ring-fill { stroke: var(--accent-blue); }
+.composer-ctx--middle { color: var(--accent-orange); }
+.composer-ctx--middle .ctx-ring-fill { stroke: var(--accent-orange); }
+.composer-ctx--high { color: var(--accent-red); }
+.composer-ctx--high .ctx-ring-fill { stroke: var(--accent-red); }
 .hidden-file-input {
   display: none;
 }

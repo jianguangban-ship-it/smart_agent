@@ -16,21 +16,18 @@ import type { ChatMessage } from '@/types/api'
 const userMsg: ChatMessage = { id: 'u1', role: 'user', content: 'hello', timestamp: 1 }
 
 describe('ChatBubble layout prop', () => {
-  it('defaults to bubble layout with the side avatar column (Task unchanged)', () => {
+  it('bubble layout has no avatars (pure-Claude, matches Explore)', () => {
     const wrapper = mount(ChatBubble, { props: { message: userMsg } })
     expect(wrapper.find('.chat-msg.layout-bubble').exists()).toBe(true)
     expect(wrapper.find('.chat-msg.layout-stacked').exists()).toBe(false)
-    expect(wrapper.find('.msg-avatar-col').exists()).toBe(true)
+    expect(wrapper.find('.msg-avatar-col').exists()).toBe(false)
     expect(wrapper.find('.msg-avatar-inline').exists()).toBe(false)
   })
 
-  it('stacked layout drops the avatar entirely and uses an sr-only role label', () => {
+  it('stacked layout also has no avatars', () => {
     const wrapper = mount(ChatBubble, { props: { message: userMsg, layout: 'stacked' } })
     expect(wrapper.find('.chat-msg.layout-stacked').exists()).toBe(true)
-    // Explore (stacked) goes pure-Claude: no avatar column, no inline avatar —
-    // alignment + bubble convey the speaker, and the role label is sr-only.
     expect(wrapper.find('.msg-avatar-col').exists()).toBe(false)
     expect(wrapper.find('.msg-avatar-inline').exists()).toBe(false)
-    expect(wrapper.find('.msg-role-label.sr-only').exists()).toBe(true)
   })
 })

@@ -8,7 +8,6 @@ import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
 import rehypeStringify from 'rehype-stringify'
-import { common } from 'lowlight'
 import DOMPurify from 'dompurify'
 import { encodeContent, fileMetaForFilename } from './codeArtifact'
 
@@ -72,10 +71,7 @@ const processor = unified()
   .use(remarkRehype, { allowDangerousHtml: true })     // mdast → hast
   .use(rehypeRaw)                                      // parse raw HTML strings into hast nodes
   .use(rehypeKatex, { throwOnError: false } as never)   // render math nodes → KaTeX HTML
-  // `languages` REPLACES rehype-highlight's default set, so we must spread
-  // lowlight's `common` bundle back in — otherwise only cmake/makefile would
-  // tokenize and python/cpp/js/etc. render as plain text (just an `hljs` class).
-  .use(rehypeHighlight, { detect: true, languages: { ...common, cmake, makefile } })
+  .use(rehypeHighlight, { detect: true, languages: { cmake, makefile } })
   .use(rehypeStringify)                                // hast → HTML string
 
 // ─── DOMPurify config ──────────────────────────────────────────────────────────
@@ -195,6 +191,34 @@ function fixSpacedDollarDelimiters(text: string): string {
   s = s.replace(/(?<!\$)\$\s+([^$\n]+?)\s+\$(?!\$)/g, (_m, inner) => `$${inner}$`)
 
   return s
+}
+
+// Middle-dot characters LLMs use for units: · (U+00B7), ⋅ (U+22C5), ∙ (U+2219).
+const UNIT_DOT = /[·⋅∙]/
+
+/**
+ * KaTeX maps a literal middle dot to the MATH-only command \cdotp. LLMs commonly
+ * place it inside \text{…} (e.g. \text{W/m·K}, \text{N·m}), where a math-mode atom
+ * can't render → KaTeX shows a red "\cdotp" error. Inside math regions: split
+ * \text{A·B} → \text{A}\cdot\text{B} (so \cdot lands in math mode between text
+ * groups), then turn any remaining dot (bare, or inside the math-mode \mathrm{})
+ * into \cdot. Scoped to $…$ / $$…$$ so prose middle dots (UI counters, etc.) are
+ * untouched. Mirrors the escapePipesInMath / fixSpacedDollarDelimiters approach.
+ */
+function normalizeUnitDotsInMath(text: string): string {
+  if (!UNIT_DOT.test(text)) return text
+  const fix = (math: string): string => {
+    let s = math
+    let prev: string
+    do {
+      prev = s
+      s = s.replace(/\\text\{([^{}]*?)[·⋅∙]([^{}]*?)\}/g, '\\text{$1}\\cdot\\text{$2}')
+    } while (s !== prev)
+    return s.replace(/[·⋅∙]/g, '\\cdot ')
+  }
+  let out = text.replace(/\$\$([\s\S]*?)\$\$/g, (m) => fix(m))
+  out = out.replace(/(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g, (m) => fix(m))
+  return out
 }
 
 /**
@@ -414,6 +438,10 @@ export function renderMarkdown(text: string, isStreaming = false): string {
 
   // 4. Fix spaced dollar delimiters: $ x $ → $x$
   input = fixSpacedDollarDelimiters(input)
+
+  // 4b. Fix literal middle dots in math (·/⋅/∙) — KaTeX maps them to math-only
+  // \cdotp, which errors inside \text{…} (e.g. \text{W/m·K}). Convert to \cdot.
+  input = normalizeUnitDotsInMath(input)
 
   // 5. Escape | inside math so GFM table parsing doesn't split on them
   input = escapePipesInMath(input)

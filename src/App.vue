@@ -1,9 +1,6 @@
 <template>
-  <div class="app" :class="{ 'app--explore-lock': appMode === 'explore', 'app--task-lock': appMode === 'task' }">
-    <AppHeader :is-ai-busy="isAiBusy" :ready-mode="bgReady" @open-settings="showSettingsModal = true" />
-
-    <!-- Settings Modal -->
-    <LLMSettings v-model="showSettingsModal" @saved="onSettingsSaved" />
+  <div class="app" :class="{ 'app--explore-lock': appMode === 'explore', 'app--task-lock': appMode === 'task', 'app--config-lock': appMode === 'config' }">
+    <AppHeader :is-ai-busy="isAiBusy" :ready-mode="bgReady" />
 
     <!-- Hotkey Cheat Sheet Modal -->
     <HotkeyModal v-model="showHotkeyModal" />
@@ -29,12 +26,29 @@
       </div>
     </Transition>
 
-    <main class="app-main" :class="{ 'app-main--view': appMode === 'view', 'app-main--explore': appMode === 'explore', 'app-main--task': appMode === 'task' }">
-      <!-- View mode: full-width JIRA Quality Grid (n8n-fed) -->
-      <QualityGridPanel v-if="appMode === 'view'" />
+    <main class="app-main" :class="{ 'app-main--view': appMode === 'view', 'app-main--explore': appMode === 'explore', 'app-main--task': appMode === 'task', 'app-main--config': appMode === 'config' }">
+      <!-- View mode: full-width JIRA Quality Grid (n8n-fed).
+           v10.194: mounted lazily on first visit, then kept alive via v-show
+           (same pattern as Task mode below) — unmounting the virtualized grid
+           at production row counts costs ~1s+ of pooled-view destruction, which
+           made every mode switch out of View lag. The :active prop gates the
+           composable's auto-refresh while another mode is on screen. -->
+      <QualityGridPanel
+        v-if="viewVisited"
+        v-show="appMode === 'view'"
+        :active="appMode === 'view'"
+      />
+
+      <!-- Config mode: settings page (placeholder for now). Lazy-mounted on first
+           visit then kept alive via v-show, same pattern as View. -->
+      <ConfigPanel
+        v-if="configVisited"
+        v-show="appMode === 'config'"
+        :active="appMode === 'config'"
+      />
 
       <!-- Explore mode: chat (shrinks left when the artifact viewer opens) -->
-      <div v-else-if="appMode === 'explore'" class="explore-layout">
+      <div v-if="appMode === 'explore'" class="explore-layout">
         <ExploreChat
           :messages="exploreCoachMessages"
           :is-loading="isExploreCoachLoading"
@@ -78,6 +92,8 @@
             @import-templates="handleTemplateImport"
             @replay="handleReplay"
             @continue-session="handleContinueSession"
+            @retry-msg="handleTaskRegenerate"
+            @edit-msg="handleTaskEditMessage"
             @desc-focus="descFocused = true"
             @desc-blur="descFocused = false"
           >
@@ -143,6 +159,7 @@
             @create="handleCreateClick"
             @reset="handleReset"
             @cancel-coach="cancelTaskCoach"
+            @cancel-analyze="cancelAnalyze"
             @project-change="onProjectChange"
             @suggest-links="handleSuggestLinks"
             @impact-analysis="handleImpactAnalysis"
@@ -188,7 +205,15 @@ import { useI18n } from '@/i18n'
 import { useForm } from '@/composables/useForm'
 import { useWebhook } from '@/composables/useWebhook'
 import { useLLM, coachSkillEnabled, setCoachSkillEnabled } from '@/composables/useLLM'
-import { appMode, applyModeFlags } from '@/composables/useAppMode'
+import { appMode, applyModeFlags, setMode } from '@/composables/useAppMode'
+
+// v10.194: View panel is lazy-mounted on first visit, then kept alive
+// (v-show) so mode switches never pay the virtualized grid's unmount.
+const viewVisited = ref(appMode.value === 'view')
+watch(appMode, m => { if (m === 'view') viewVisited.value = true })
+// Config page — same lazy-mount-then-keep-alive pattern as View.
+const configVisited = ref(appMode.value === 'config')
+watch(appMode, m => { if (m === 'config') configVisited.value = true })
 import { loadRuntimeConfig, runtimeTeamMembers, runtimeProjects } from '@/composables/useRuntimeConfig'
 import { setSelectedProjectName } from '@/composables/useSprint'
 import { useToast } from '@/composables/useToast'
@@ -211,7 +236,6 @@ import type { TemplateDefinition } from '@/types/template'
 import { getSessionRecords, startNewSession, deleteRecords, updateRecordContent } from '@/composables/useCoachHistory'
 
 import AppHeader from '@/components/layout/AppHeader.vue'
-import LLMSettings from '@/components/settings/LLMSettings.vue'
 import HotkeyModal from '@/components/shared/HotkeyModal.vue'
 import TaskForm from '@/components/form/TaskForm.vue'
 import CoachPanel from '@/components/panels/CoachPanel.vue'
@@ -222,6 +246,7 @@ import BatchPanel from '@/components/panels/BatchPanel.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
 import QualityGridPanel from '@/components/quality/QualityGridPanel.vue'
+import ConfigPanel from '@/components/config/ConfigPanel.vue'
 import ExploreChat from '@/components/chat/ExploreChat.vue'
 import ArtifactPanel from '@/components/chat/ArtifactPanel.vue'
 
@@ -260,7 +285,7 @@ const {
   // task channel
   isTaskCoachLoading, taskCoachMessages, taskCoachWasCancelled, taskCoachHadError,
   taskCoachStreamSpeed, taskCoachBackoffSecs,
-  requestTaskCoach, cancelTaskCoach, retryTaskCoach, clearTaskCoach, restoreTaskCoachMessages,
+  requestTaskCoach, cancelTaskCoach, retryTaskCoach, regenerateTaskCoach, clearTaskCoach, restoreTaskCoachMessages,
   // explore channel
   isExploreCoachLoading, exploreCoachMessages, exploreCoachWasCancelled, exploreCoachHadError,
   exploreCoachStreamSpeed, exploreCoachBackoffSecs,
@@ -298,7 +323,6 @@ const {
 
 const errorMessage = ref('')
 const showConfirmModal = ref(false)
-const showSettingsModal = ref(false)
 const pendingPromptOverride = ref<string | null>(null)
 
 // Per-mode description store — each mode owns its own description so resets are isolated.
@@ -306,7 +330,8 @@ const pendingPromptOverride = ref<string | null>(null)
 const modeDescriptions = reactive<Record<string, string>>({
   explore: '',
   task: '',
-  view: ''  // View is read-only — kept for shape consistency, never written
+  view: '',   // View is read-only — kept for shape consistency, never written
+  config: ''  // Config is read-only too — shape consistency for the mode-switch swap
 })
 const showHotkeyModal = ref(false)
 const confirmModalRef = ref<HTMLElement>()
@@ -722,9 +747,12 @@ async function handleExploreSend(text: string) {
   // Clean text for display/persistence; files travel in payload.data.attachments
   // (set by buildPayload) and are re-inlined for the API in useLLM.
   payload.data.description = text
+  // Files are now captured in the payload (and the user message useLLM pushes
+  // synchronously), so clear the composer chips immediately — mirroring the draft
+  // clear — instead of waiting for the whole stream to finish (v10.218).
+  detachAll()
   const err = await requestExploreCoach(payload)
   if (!err) {
-    detachAll()
     saveResponsesToStorage()
   } else if (err !== 'cancelled') {
     errorMessage.value = err
@@ -813,6 +841,44 @@ async function handleExploreEditMessage(payload: { id: string; content: string }
   if (msg.hashId) updateRecordContent(msg.hashId, payload.content)
   truncateExploreAfter(idx)
   await runExploreRegenerate()
+}
+
+// Drop every message after `index` (its assistant reply + later turns) and
+// delete the matching persisted history records, then trim the in-memory array.
+// Mirrors truncateExploreAfter for the task channel.
+function truncateTaskAfter(index: number) {
+  const removed = taskCoachMessages.value.slice(index + 1)
+  const ids = new Set(removed.map(m => m.hashId).filter(Boolean) as string[])
+  if (ids.size) deleteRecords(ids)
+  taskCoachMessages.value.splice(index + 1)
+}
+
+// Task-mode: Retry (↻) from a user message — drop its reply + later turns,
+// regenerate from it. Uses regenerate (not retry) so no new user turn is pushed;
+// passes a fresh payload so it works even after a reload (when _lastPayload null).
+async function handleTaskRegenerate(id: string) {
+  if (isTaskCoachLoading.value) return
+  const idx = taskCoachMessages.value.findIndex(m => m.id === id)
+  if (idx < 0 || taskCoachMessages.value[idx].role !== 'user') return
+  truncateTaskAfter(idx)
+  const err = await regenerateTaskCoach(buildPayload('coach'))
+  if (!err) saveResponsesToStorage()
+  else if (err !== 'cancelled') { errorMessage.value = err; addToast('error', err) }
+}
+
+// Task-mode: Edit (✎) on a user message — replace its text (+ persisted record),
+// drop later turns, regenerate from the edited message.
+async function handleTaskEditMessage(payload: { id: string; content: string }) {
+  if (isTaskCoachLoading.value) return
+  const idx = taskCoachMessages.value.findIndex(m => m.id === payload.id)
+  if (idx < 0 || taskCoachMessages.value[idx].role !== 'user') return
+  const msg = taskCoachMessages.value[idx]
+  msg.content = payload.content
+  if (msg.hashId) updateRecordContent(msg.hashId, payload.content)
+  truncateTaskAfter(idx)
+  const err = await regenerateTaskCoach(buildPayload('coach'))
+  if (!err) saveResponsesToStorage()
+  else if (err !== 'cancelled') { errorMessage.value = err; addToast('error', err) }
 }
 
 function handleElicitation() {
@@ -952,10 +1018,6 @@ function onProjectChange() {
   form.assignee = ''
 }
 
-function onSettingsSaved() {
-  addToast('success', t('settings.saved'))
-}
-
 // Coach chip templates — driven by effective templates (JSON files or localStorage overrides)
 function applyCoachChip(chipKey: string) {
   const lang = isZh.value ? 'zh' : 'en'
@@ -979,8 +1041,6 @@ function handleKeyboard(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     if (showHotkeyModal.value) {
       showHotkeyModal.value = false
-    } else if (showSettingsModal.value) {
-      showSettingsModal.value = false
     } else if (showConfirmModal.value) {
       showConfirmModal.value = false
     }
@@ -992,7 +1052,7 @@ function handleKeyboard(e: KeyboardEvent) {
     }
   } else if (e.ctrlKey && e.key === ',') {
     e.preventDefault()
-    if (!showConfirmModal.value) showSettingsModal.value = true
+    if (!showConfirmModal.value) setMode('config')
   } else if (e.ctrlKey && e.shiftKey && e.key === 'Enter') {
     e.preventDefault()
     handleAnalyze()
@@ -1028,10 +1088,11 @@ onUnmounted(() => {
   flex-direction: column;
 }
 /* Definite-height viewport lock so the PAGE never scrolls — only the inner
-   scroll regions do, keeping composers/actions pinned. Shared by Explore and
-   Task; do not revert either to relying on .app's min-height. */
+   scroll regions do, keeping composers/actions pinned. Shared by Explore,
+   Task and Config; do not revert any to relying on .app's min-height. */
 .app--explore-lock,
-.app--task-lock {
+.app--task-lock,
+.app--config-lock {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -1047,15 +1108,17 @@ onUnmounted(() => {
    (ExploreChat / the Task grid) fills viewport-minus-header and only its inner
    regions scroll. Keeps the centered max-width + horizontal padding. */
 .app-main--explore,
-.app-main--task {
+.app-main--task,
+.app-main--config {
   padding-top: 0;
   padding-bottom: 0;
   min-height: 0;
   overflow: hidden;
 }
-/* Explore is full-bleed (Claude-style): the rail reaches the left page border
-   and the artifact viewer reaches the right. Task/View stay centered. */
-.app-main--explore {
+/* Explore and Config are full-bleed (Claude-style): the rail reaches the left
+   page border. Task/View stay centered. */
+.app-main--explore,
+.app-main--config {
   max-width: none;
   margin: 0;
   padding-left: 0;
@@ -1074,6 +1137,12 @@ onUnmounted(() => {
   /* Ratio lives in src/styles/variables.css as --task-col-left /
      --task-col-center (defaults to 1fr 1fr = 50/50). Edit there to tune. */
   grid-template-columns: var(--task-col-left) var(--task-col-center);
+  /* Clamp the single row to the container height. Without an explicit row track
+     the implicit row is `auto` (max-content), so a tall column (e.g. the Analysis
+     tab's AIReviewPanel) inflates the row past the viewport — the grid then
+     overflows the lock and the whole page scrolls. minmax(0,1fr) keeps the row
+     at the viewport height and lets columns shrink so their inner regions scroll. */
+  grid-template-rows: minmax(0, 1fr);
   gap: 0;
   /* Fill the locked .app-main--task so columns get a definite height and
      scroll internally (Task-only via v-show, so unconditional is safe). */

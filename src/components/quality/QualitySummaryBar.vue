@@ -19,28 +19,38 @@
           >
             <span class="dot" :style="{ backgroundColor: colorForStatus(s) }"></span>
             <span class="chip-label">{{ s }}</span>
-            <span class="chip-count">{{ summary.periodCounts[s] }}</span>
+            <span class="chip-count" :class="{ 'chip-count--tick': changedStatuses.has(s) }">{{ summary.periodCounts[s] }}</span>
             <span class="chip-ratio">{{ ratioFor(s) }}</span>
           </span>
         </div>
       </div>
-      <button class="refresh-btn" :disabled="loading" @click="$emit('refresh')">
-        <span v-if="loading">{{ t('view.refreshing') }}</span>
-        <span v-else>{{ t('view.refresh') }}</span>
-      </button>
+      <div class="summary-head-right">
+        <!-- v10.184: visible heartbeat for every fetch — including the 30s
+             tab-focus auto-refresh, which previously had no UI signal. -->
+        <span v-if="loading" class="refresh-spinner" aria-hidden="true"></span>
+        <span v-if="updatedLabel" class="updated-at" :class="{ pulse }">{{ updatedLabel }}</span>
+        <button class="refresh-btn" :disabled="loading" @click="$emit('refresh')">
+          <span v-if="loading">{{ t('view.refreshing') }}</span>
+          <span v-else>{{ t('view.refresh') }}</span>
+        </button>
+      </div>
     </div>
-    <div v-if="summary.total === 0" class="summary-empty">{{ t('view.periodEmpty') }}</div>
+    <!-- v10.189: `summary` is the FILTERED set, so "empty period" must gate on
+         the raw period total — filters matching nothing is not an empty period
+         (the list below shows its own no-match state). -->
+    <div v-if="(totalCount ?? summary.total) === 0" class="summary-empty">{{ t('view.periodEmpty') }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from '@/i18n'
 import { colorForStatus } from '@/types/quality'
 import { range } from '@/composables/useTimingPhase'
 import type { PeriodSummary } from '@/composables/useQualityGrid'
 
 const props = defineProps<{
+  /** v10.189: the FILTERED summary — chips/ratios describe what the user is looking at. */
   summary: PeriodSummary
   /** Number of tickets visible after Team/Status/Search filters. */
   filteredCount?: number
@@ -48,9 +58,59 @@ const props = defineProps<{
   totalCount?: number
   /** Disables the Refresh button while a fetch is in flight. */
   loading?: boolean
+  /** Epoch ms of the last successful fetch; 0 = never fetched. */
+  lastFetched?: number
 }>()
 defineEmits<{ refresh: [] }>()
 const { t } = useI18n()
+
+/**
+ * v10.184: "Updated HH:MM" next to the Refresh button. Pulses briefly when
+ * lastFetched advances so even the silent 30s tab-focus auto-refresh gets a
+ * visible acknowledgement. The first value (initial load) doesn't pulse.
+ */
+const updatedLabel = computed((): string => {
+  if (!props.lastFetched) return ''
+  const d = new Date(props.lastFetched)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return t('view.updatedAt').replace('{time}', `${hh}:${mm}`)
+})
+
+const pulse = ref(false)
+let pulseTimer: ReturnType<typeof setTimeout> | undefined
+watch(() => props.lastFetched, (now, prev) => {
+  if (!prev || !now || now === prev) return
+  pulse.value = true
+  clearTimeout(pulseTimer)
+  pulseTimer = setTimeout(() => { pulse.value = false }, 900)
+})
+
+/**
+ * v10.184: chips whose count just changed get a brief scale "tick" so a
+ * refresh that shifts the distribution is noticeable. Skips the initial
+ * population — only statuses already on screen can tick.
+ */
+const changedStatuses = ref<Set<string>>(new Set())
+let prevCounts: Record<string, number> = {}
+let tickTimer: ReturnType<typeof setTimeout> | undefined
+watch(() => props.summary.periodCounts, (counts) => {
+  const hit = new Set<string>()
+  for (const s of Object.keys(counts)) {
+    if (prevCounts[s] !== undefined && prevCounts[s] !== counts[s]) hit.add(s)
+  }
+  prevCounts = { ...counts }
+  if (hit.size > 0) {
+    changedStatuses.value = hit
+    clearTimeout(tickTimer)
+    tickTimer = setTimeout(() => { changedStatuses.value = new Set() }, 600)
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  clearTimeout(pulseTimer)
+  clearTimeout(tickTimer)
+})
 
 /**
  * v10.136: shows the same filter-aware count that used to live in the
@@ -138,6 +198,50 @@ function ratioFor(status: string): string {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+.summary-head-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+.refresh-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+.updated-at {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.updated-at.pulse {
+  animation: updated-pulse 0.9s ease;
+}
+@keyframes updated-pulse {
+  0% { color: var(--accent-blue); }
+  100% { color: var(--text-muted); }
+}
+.chip-count--tick {
+  animation: chip-tick 0.5s ease;
+}
+@keyframes chip-tick {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); color: var(--accent-blue); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .refresh-spinner,
+  .updated-at.pulse,
+  .chip-count--tick {
+    animation: none;
+  }
 }
 .refresh-btn {
   flex-shrink: 0;

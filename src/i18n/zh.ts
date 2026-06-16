@@ -12,7 +12,17 @@ export default {
   mode: {
     explore: '探索',
     task: '任务',
-    view: '看板'
+    view: '看板',
+    config: '配置'
+  },
+  config: {
+    comingSoon: '配置页面 —— 即将上线。',
+    team: '团队',
+    model: '模型',
+    skills: '技能',
+    railToggle: '折叠侧边栏',
+    modelSubtitle: '大模型服务地址、密钥与模型。',
+    skillsSubtitle: '教练提示词、分析与模板。'
   },
   form: {
     basicInfo: '基本信息',
@@ -198,6 +208,13 @@ export default {
     composerDisclaimer: 'AI 可能会出错，请仔细核对回复内容。',
     contextOverLimit: '上下文过大（约 {used} / {limit} token）。请精简内容或开启新对话。',
     contextBadgeTitle: '已使用预估 token 数（{model} 上下文上限）',
+    ctxLow: '低',
+    ctxMiddle: '中',
+    ctxHigh: '高',
+    effort: '推理强度',
+    effortHigh: '高',
+    moreModels: '更多模型',
+    modelCtxSuffix: ' 上下文',
     attachmentDownload: '下载文件',
     composerModelSelect: '选择本次对话的模型',
     imageNotRetained: '图片（刷新后不保留）',
@@ -292,6 +309,21 @@ export default {
     imageNeedsVisionModel: '图片需要多模态模型（如 qwen）——请切换模型后再添加图片',
     noDuplicateTemplates: '无新模板可导入（重复项已跳过）'
   },
+  voice: {
+    micTooltip: '使用语音模式',
+    settingsTooltip: '语音设置',
+    deviceFallback: '麦克风 {n}',
+    holdToRecord: '按住录音',
+    cancel: '取消录音',
+    confirm: '停止并转写',
+    transcribing: '转写中…',
+    unsupportedContext: '语音输入需要 HTTPS 或 localhost 环境',
+    errPermission: '麦克风权限被拒绝 — 请在浏览器设置中允许',
+    errNoDevice: '未找到麦克风',
+    errRecorder: '录音失败 — 请重试',
+    errTranscribe: '转写失败 — 请重试',
+    emptyTranscript: '未检测到语音'
+  },
   shortcuts: {
     coach: 'Enter',
     analyze: 'Ctrl+Shift+Enter',
@@ -377,6 +409,9 @@ export default {
     empty: '暂无工单',
     emptyHint: 'n8n 推送首条质检结果后将显示在这里。',
     fetchError: '工单加载失败',
+    retry: '重试',
+    loading: '加载工单中…',
+    updatedAt: '更新于 {time}',
     rowDetail: '质检报告',
     openInJira: '在 JIRA 中打开',
     closeDetail: '关闭',
@@ -400,8 +435,16 @@ export default {
     presetCustom: '自定义区间',
     from: '起始',
     to: '截止',
-    summaryTitle: '时段质量',
+    summaryTitle: '任务质量',
     trendTitle: '团队趋势',
+    modelTitle: '质量趋势建模',
+    modelFormula: '质量分 = 工单平均分，并以 5 张“记忆工单”锚定团队基线（A=100 · B=80 · C=60 · D=10 · 格式异常=0）— 预测沿工单量加权趋势线推进，每步衰减 ×0.7；阴影带为近期波动所支持的范围。',
+    modelTickets: '张工单',
+    modelTrendUp: '质量上升',
+    modelTrendDown: '质量下降',
+    modelTrendFlat: '趋势平稳',
+    modelPerBucket: '周期',
+    toggleTrend: '展开/收起趋势',
     allTeamsRow: '全部团队',
     periodEmpty: '该时段内暂无质检工单。'
   },

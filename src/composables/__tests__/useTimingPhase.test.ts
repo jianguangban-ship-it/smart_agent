@@ -54,12 +54,22 @@ describe('useTimingPhase — calendar presets', () => {
     expect(range.value.label).toBe('Last 7 days')
   })
 
-  it('last 30 days → weekly buckets', () => {
+  it('last 30 days → weekly buckets labeled with their full date span', () => {
     setPhaseKind('calendar')
     setPreset('last30')
     expect(range.value.label).toBe('Last 30 days')
-    expect(buckets.value.length).toBeGreaterThanOrEqual(4)
-    expect(buckets.value.length).toBeLessThanOrEqual(6)
+    // Start-date-only labels read like 5 scattered single days; each column
+    // must announce the span it covers, including the short final stub.
+    expect(buckets.value.map(b => b.label)).toEqual([
+      '4/15–4/21', '4/22–4/28', '4/29–5/5', '5/6–5/12', '5/13–5/14',
+    ])
+  })
+
+  it('a single-day stub week is labeled as a bare date, not a self-range', () => {
+    setPhaseKind('calendar')
+    setPreset('custom')
+    setCustomRange('2026-01-01', '2026-01-15') // 15 days: 2 full weeks + 1-day stub
+    expect(buckets.value.map(b => b.label)).toEqual(['1/1–1/7', '1/8–1/14', '1/15'])
   })
 
   it('custom range (9-day span) → daily buckets', () => {

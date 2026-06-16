@@ -32,25 +32,33 @@ beforeEach(() => {
   setExploreModel('alpha')
 })
 
-describe('ExploreChat model picker', () => {
-  it('renders a select listing the two configured models', () => {
+describe('ExploreChat model picker (Claude-style menu)', () => {
+  it('shows the active model as the top menu item', async () => {
     const wrapper = mountChat()
-    const opts = wrapper.findAll('.composer-model-select option')
-    expect(opts.map(o => (o.element as HTMLOptionElement).value)).toEqual(['alpha', 'beta'])
+    await wrapper.find('.cmodel-btn').trigger('click')
+    expect(wrapper.find('.cmodel-item--model.is-active .cmodel-item-name').text()).toBe('alpha')
   })
 
-  it('changing the select updates the Explore model selection', async () => {
+  it('lists Model 2 in the More-models flyout and selecting it switches the model', async () => {
     const wrapper = mountChat()
-    await wrapper.find('.composer-model-select').setValue('beta')
+    await wrapper.find('.cmodel-btn').trigger('click')
+    await wrapper.find('.cmodel-more').trigger('click') // open flyout
+    const names = wrapper.findAll('.cmodel-flyout .cmodel-item-name').map(n => n.text())
+    expect(names).toContain('beta')
+    const betaItem = wrapper.findAll('.cmodel-flyout .cmodel-item--model')
+      .find(b => b.find('.cmodel-item-name').text() === 'beta')!
+    await betaItem.trigger('click')
     expect(getExploreModel()).toBe('beta')
   })
 
-  it('drops Model 2 from the options when it is unset', () => {
+  it('omits Model 2 from the flyout when it is unset', async () => {
     setModel2('')
     setExploreModel('alpha')
     const wrapper = mountChat()
-    const opts = wrapper.findAll('.composer-model-select option')
-    expect(opts.map(o => (o.element as HTMLOptionElement).value)).toEqual(['alpha'])
+    await wrapper.find('.cmodel-btn').trigger('click')
+    await wrapper.find('.cmodel-more').trigger('click')
+    const names = wrapper.findAll('.cmodel-flyout .cmodel-item-name').map(n => n.text())
+    expect(names).not.toContain('beta')
   })
 })
 

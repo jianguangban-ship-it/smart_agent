@@ -1,4 +1,5 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { refDebounced } from '@vueuse/core'
 import type { QualityTicket } from '@/types/quality'
 import { range, buckets, type PhaseBucket } from '@/composables/useTimingPhase'
 
@@ -10,6 +11,14 @@ const lastFetched = ref<number>(0)
 export const filterTeam = ref<string>('')
 export const filterStatus = ref<string>('')
 export const searchText = ref<string>('')
+// Search filtering lags typing by 250ms so the O(n) scan in filteredTickets
+// doesn't run per keystroke; the input itself stays bound to searchText and
+// remains instant. Team/status selects are discrete picks — no debounce.
+const debouncedSearch = refDebounced(searchText, 250)
+
+// A "refresh" is a fetch happening while stale rows are still on screen —
+// the grid keeps showing them (stale-while-revalidate) and only dims.
+const isRefreshing = computed(() => loading.value && tickets.value.length > 0)
 
 async function fetchTickets() {
   loading.value = true
@@ -34,7 +43,7 @@ async function fetchTickets() {
 }
 
 const filteredTickets = computed(() => {
-  const q = searchText.value.trim().toLowerCase()
+  const q = debouncedSearch.value.trim().toLowerCase()
   return tickets.value.filter(t => {
     if (filterTeam.value && t.team_key !== filterTeam.value) return false
     if (filterStatus.value && t.status !== filterStatus.value) return false
@@ -91,9 +100,9 @@ function tally(target: StatusCounts, status: string): void {
 }
 
 /**
- * Pure aggregation over the (already date-filtered) ticket set.
- * Describes the whole period independent of the grid's team/status/search
- * filters. A ticket is assigned to the first bucket whose [from, to] window
+ * Pure aggregation over a (already date-filtered) ticket set. Called twice:
+ * once on the full period (chips bar) and once on the filtered set (trend
+ * matrix). A ticket is assigned to the first bucket whose [from, to] window
  * contains its `timestamp` (event_time / latest verdict — snapshot model).
  */
 export function summarize(list: QualityTicket[], bkts: PhaseBucket[]): PeriodSummary {
@@ -146,11 +155,34 @@ export function summarize(list: QualityTicket[], bkts: PhaseBucket[]): PeriodSum
   }
 }
 
-const summary = computed<PeriodSummary>(() => summarize(tickets.value, buckets.value))
+// v10.189: ONE summary, over the filtered set — the Mission Quality chips,
+// the per-team trend, and the ticket list all describe the same tickets.
+// (v10.187 briefly kept a second whole-period summary for the chips; the raw
+// period total still reaches the bar via its totalCount prop.)
+const filteredSummary = computed<PeriodSummary>(() => summarize(filteredTickets.value, buckets.value))
+
+// v10.194: the panel is kept mounted across mode switches (v-show in App.vue,
+// same pattern as Task mode) so leaving View never pays the virtual-scroller
+// pool unmount at production row counts. While another mode is on screen the
+// grid is "inactive": tab-focus auto-refresh is suppressed, and returning to
+// View refetches if the data went stale meanwhile.
+const gridActive = ref(true)
+
+export function setGridActive(active: boolean): void {
+  const wasActive = gridActive.value
+  gridActive.value = active
+  // Re-entering View after the data went stale — same 30s rule as the
+  // tab-focus refresh. lastFetched === 0 means the onMounted fetch hasn't
+  // happened yet; that fetch owns the initial load.
+  if (active && !wasActive && lastFetched.value > 0 && Date.now() - lastFetched.value > 30_000) {
+    fetchTickets()
+  }
+}
 
 // Auto-refresh when the tab becomes visible — keeps the grid fresh without
 // the cost of websockets. Manual refresh button covers the focused-tab case.
 function onVisibilityChange() {
+  if (!gridActive.value) return
   if (document.visibilityState === 'visible') {
     // Only refetch if it's been more than 30s since the last successful fetch
     // (avoids hammering when the user alt-tabs frequently).
@@ -186,8 +218,10 @@ export function useQualityGrid() {
     tickets,
     filteredTickets,
     teamOptions,
-    summary,
+    filteredSummary,
     loading,
+    isRefreshing,
+    lastFetched,
     error,
     filterTeam,
     filterStatus,

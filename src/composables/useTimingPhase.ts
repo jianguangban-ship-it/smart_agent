@@ -175,7 +175,16 @@ function weeklyBuckets(from: Date, to: Date): PhaseBucket[] {
   while (start.getTime() <= end) {
     const next = addDays(start, 7)
     const bEnd = next.getTime() - 1 <= end ? new Date(next.getTime() - 1) : to
-    out.push({ label: fmtMD(start), from: start, to: bEnd })
+    // v10.188: label the full span ("5/13–5/19"), not just the start date —
+    // start-only labels read as single days and hide that a trailing stub
+    // week may cover fewer than 7 days. A one-day stub stays a bare date.
+    const startLabel = fmtMD(start)
+    const endLabel = fmtMD(bEnd)
+    out.push({
+      label: startLabel === endLabel ? startLabel : `${startLabel}–${endLabel}`,
+      from: start,
+      to: bEnd,
+    })
     start = next
   }
   return out

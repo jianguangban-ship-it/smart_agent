@@ -723,6 +723,7 @@ export function useLLM() {
     requestTaskCoach: (p: WebhookPayload) => taskCoach.request(p),
     cancelTaskCoach: taskCoach.cancel,
     retryTaskCoach: taskCoach.retry,
+    regenerateTaskCoach: taskCoach.regenerate,
     clearTaskCoach: () => { taskCoach.clear(); activeSkill.value = null; ignoredSkillId.value = null },
 
     // Explore channel

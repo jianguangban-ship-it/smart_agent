@@ -8,3 +8,9 @@ dist
 docs
 *.stackdump
 *.xmind
+# Local STT verification tool (v10.181) — Python venv + model weights are
+# ~1 GB and must never enter the docker build context. The image doesn't
+# need tools/ at all (Dockerfile COPYs selectively).
+tools/
+# Design reference snapshots
+*.png

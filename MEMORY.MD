@@ -1489,15 +1489,159 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
 - `:::file name="…"` cards were already named (AI-supplied). All naming intent comes from the model via the
   prompt's "Naming" section in `response-format.md`.
 
-## v10.179 — rehype-highlight `languages` REPLACES the default set (highlighting gotcha)
-- Syntax highlighting was silently dead for python/cpp/js/etc.: `markdown.ts` passed
-  `rehypeHighlight({ languages: { cmake, makefile } })`. In rehype-highlight v7 the `languages` map
-  **overrides** lowlight's `common` bundle instead of extending it — so only the two custom langs tokenized;
-  everything else got an `hljs language-*` class but **no token spans** (looked highlighted, wasn't). This was
-  the long-standing "pre-existing, unrelated" `formatCoach.test.ts` hljs failure.
-- Fix: `import { common } from 'lowlight'` and spread it back — `languages: { ...common, cmake, makefile }`.
-  Any time you add a custom highlight.js language, you MUST spread `common` too or you nuke all the defaults.
-- Side effect to watch: tests that assert a literal code string (e.g. `self.m = m`) break once highlighting
-  works, because token spans split the text. Assert a contiguous sub-slice (`.m = m`) instead.
-- The `===COACH_TURN===` coach divider is GONE by design (multi-turn = separate ChatMessage[] entries since the
-  Coach chat-UI redesign). Dead CSS `.coach-response-divider` lingers but nothing emits the marker.
+## v10.179 — Voice dictation (Explore) — STT routing + browser-audio constraints
+- STT must be brokered: browser → `POST /api/llm/transcribe` (base64 JSON) → server re-encodes to multipart →
+  GWM llmproxy faster-whisper. Use `audio/transcriptions` (preserves spoken language); `audio/translations`
+  FORCES English — the user-quoted path was translations, deliberately not used. `STT_PATH`/`STT_MODEL` env-overridable.
+- `getUserMedia` needs a SECURE CONTEXT — on the plain-HTTP prod origin `navigator.mediaDevices` is undefined
+  (same trap as `navigator.clipboard`/copyText). Everything voice gates on `isVoiceSupported()`; mic renders
+  disabled with an HTTPS-explainer tooltip. Enabling in prod = HTTPS deploy or `InsecureOriginsAllowedForUrls`.
+- Hold-to-record release is a one-shot `window` pointerup listener, NOT setPointerCapture — the mic button
+  unmounts when the recording bar swaps in, which silently drops capture.
+- Always stop all `MediaStream` tracks AND `AudioContext.close()` on every exit path, or the tab mic indicator
+  stays lit. `useVoiceRecorder.dispose()` is the single teardown; VoiceControls calls it onBeforeUnmount.
+- jsdom tests: MediaRecorder/AudioContext mocked as REAL classes + ctor spies (the vi.fn().mockImplementation
+  ctor trap from MEMORY would mimic graceful degradation and pass silently).
+
+## v10.180 — GWM llmproxy audio endpoints: probed reality (2026-06-10)
+- `/v1/audio/transcriptions` does NOT exist on llmproxy (FastAPI 404). `/v1/audio/translations` is the only
+  registered STT path — but it returns 500 on EVERY real request (all 3 STT models, all file sizes/params).
+  Voice dictation is blocked on GWM IT; our route + UI are verified correct (probes used the real key + WAV).
+- When IT fixes the 500: verify Chinese audio → Chinese text on translations. sense-voice-small (ASR-only,
+  cannot translate) is mounted on the same path, so it's probably a generic STT mount — but UNVERIFIED.
+- `GET /v1/models` works for catalog checks. STT catalog: whisper-large-v3-turbo, whisper-large-v3,
+  sense-voice-small. TTS catalog (Phase-2 voice mode): cosyvoice3, cosyvoice2-05b, xtts-v2, kokoro-82m.
+- Probe recipe (PowerShell): SAPI Huihui TTS → 16 kHz WAV → curl -k --noproxy '*' -F file/model. Reuse for any
+  upstream-vs-our-code triage; the FastAPI-style error bodies ({"detail":...}) prove requests reach the backend.
+- Error toast now appends the server diagnostic via `STTError.detail` (sttClient.ts) — "(STT upstream HTTP 500)"
+  in the UI means upstream broken, "(STT upstream HTTP 404)" means STT_PATH misconfigured.
+
+## v10.181 — STT decoupling + tools/local-stt (faster-whisper verification server)
+- `STT_BASE_URL`/`STT_API_KEY` in server/routes/transcribe.ts default to LLMPROXY_* but make STT independently
+  pluggable; empty STT_API_KEY = no Authorization header. deploy/.env on this machine currently points STT at
+  the local server (delete the v10.181 toggle block to return to GWM).
+- `tools/local-stt/` = FastAPI + faster-whisper (small/int8/cpu), port 8100, venv at tools/local-stt/.venv
+  (gitignored). Serves transcriptions AND translations, BOTH language-preserving (alias mirrors GWM's STT_PATH).
+  Run: `.venv\Scripts\uvicorn server:app --host 127.0.0.1 --port 8100` from tools/local-stt.
+- HF model download on this machine: do NOT use HF_ENDPOINT=hf-mirror.com (FileMetadataError — mirror redirect
+  drops HF metadata headers). Plain huggingface.co works through the system Clash proxy (HTTP(S)_PROXY already
+  set in the shell). No Docker on this machine; Python 3.14 has ctranslate2 cp314 wheels — pip route works.
+
+## v10.182 — GWM STT cracked: custom JSON dialect, not a broken upstream
+- GWM llmproxy `/v1/audio/translations` is NOT OpenAI-compatible. It wants JSON
+  `{ "model": "...", "audio_url": "data:<mime>;base64,<b64>" }` and answers
+  `{ object, model, text, items }`. Multipart (the OpenAI spec shape) crashes its JSON parse → bare 500 that
+  looks exactly like a dead backend. Diagnostic trick that cracked it: POST without a file → the pydantic 422
+  echoed our multipart body as `input` ("should be a valid dictionary"); POST `{}` as JSON → 422 enumerated the
+  required fields. Reusable lesson: read FastAPI 422 bodies before declaring an upstream broken.
+- Language IS preserved (simplified Chinese out) despite the "translations" path name; webm/opus accepted;
+  both whisper-large-v3 and -turbo work.
+- `STT_FORMAT` in transcribe.ts: `gwm-json` (default) | `openai-multipart` (tools/local-stt, Speaches, OpenAI).
+  gwm-json passes the SPA's base64 straight through (no decode) and strips mime params (";codecs=opus") from
+  the data URL. deploy/.env is back on GWM defaults; the local fallback is a commented 3-line block.
+
+## v10.183–v10.186 — View mode UX/perceived-performance package
+- View mode (QualityGridPanel) now does stale-while-revalidate properly: full-screen `.state-error` ONLY when
+  `tickets.length === 0`; failed refetch over data = slim `.stale-error` notice bar + Retry, rows stay visible;
+  `isRefreshing` (loading && data present) dims `.grid-body` via `grid--refreshing`. Skeleton shimmer rows
+  (QualityRowSkeleton.vue, mirrors the 8-col grid template) render only during `initialLoading`.
+- Search is debounced 250ms via `refDebounced` from @vueuse/core inside useQualityGrid — the input stays bound
+  to the raw `searchText` ref. GOTCHA for tests: the filter refs are module singletons AND the searchText reset
+  itself goes through the debounce; afterEach must reset under fake timers + nextTick + advance(300), or the
+  next test silently filters by the previous query.
+- Keyboard nav: `useGridKeyboardNav.ts` = one delegated keydown on `.grid`; position re-resolved from the event
+  target's `[data-index]` each keystroke (vue-virtual-scroller recycles row DOM — never cache elements/tickets);
+  Enter activates `items[index]` and skips events from inside `<a>`. QualityRow's own @keydown.enter was
+  REMOVED on purpose (would double-fire + hijack the JIRA link) — don't re-add it.
+- TrendMatrix collapse animates with `grid-template-rows: 0fr→1fr` + always-mounted content + `inert` when
+  closed. AgentCheckModal memoizes renderMarkdown in a module-scope content-keyed LRU (plain `<script>` block
+  so it survives mode-switch unmounts); `src/utils/markdown.ts` untouched (shared with LLM streaming).
+
+## v10.187 — Trend matrix is FILTERED, chips bar is whole-period
+- `useQualityGrid` exposes TWO summaries: `summary` (raw tickets — PERIOD QUALITY chips, stable reference)
+  and `filteredSummary` (filteredTickets — TrendMatrix follows team/status/search exactly like the list).
+  This split is a deliberate user decision (2026-06-11); don't "simplify" them back into one.
+- TrendMatrix drops the synthetic Σ all-teams row when `matrix.length === 1` (it would be an identical
+  duplicate of the only row — common whenever the team filter is active).
+
+## v10.188 — Weekly trend bucket labels are date RANGES
+- `weeklyBuckets()` in useTimingPhase labels columns "5/13–5/19" (en dash); a one-day stub is a bare date.
+  Start-date-only labels caused a user bug report ("Last 30 days doesn't show 30 days") even though bucket
+  coverage was complete — if a trend column covers a span, its label must SAY the span.
+- Bucket labels double as `summarize()` cell keys — they only need to be unique within one bucket array,
+  and TrendMatrix renders them verbatim, so label format changes are safe and need no downstream edits.
+
+## v10.189 — Mission Quality bar is filtered too (supersedes the v10.187 two-summary split)
+- The v10.187 "two summaries, don't merge them" note is OBSOLETE: the user reversed it after using it —
+  `useQualityGrid` now exposes ONLY `filteredSummary`; chips, trend, and list all describe the filtered set.
+  The raw period total survives solely as the bar's `totalCount` prop ("showing X of Y").
+- `summary-empty` ("no tickets in this period") gates on `totalCount`, NOT `summary.total` — with a filtered
+  summary, total===0 just means the filters matched nothing, which is the list's empty state to report.
+- Title i18n `view.summaryTitle`: 'Mission quality' / '任务质量' (was Period quality / 时段质量).
+
+## v10.190 — Quality Trend Modelling tab; predictSeries() is the formula seam
+- The trend board is now a 2-page tab strip in QualityGridPanel (PER-TEAM TREND / Quality Trend Modelling,
+  modelling tab red per the user's design snapshot); the v10.186 collapse + header live in the PANEL now,
+  TrendMatrix is table-only. Tab choice persists at localStorage `view-trend-tab`.
+- **`predictSeries(history, horizon)` in `src/composables/useQualityModel.ts` is a PROVISIONAL linear model
+  awaiting the user's real math formula — when it arrives, replace ONLY that function** (bucket-score history
+  in, horizon forecast scores out). `STATUS_SCORE` (A=100/B=75/C=50/D=25/格式异常=0, 未知 excluded) is equally
+  provisional. The user explicitly said the formula comes later.
+- Chart is hand-rolled SVG (no chart library in the project — intranet npm makes adding one costly); per-team
+  colors are an HSL hash of team_key. Both pages read the FILTERED ticket set (v10.189 semantics).
+
+## v10.191 — Quality model formula ADOPTED (supersedes the v10.190 "awaiting formula" note)
+- `predictSeries()` is no longer a provisional seam: the user's formula advice (coach export, 2026-06-11)
+  chose Model 1 weighted average Q = Σ(nᵢ·wᵢ)/N with Option B weights — STATUS_SCORE is now
+  A=100/B=80/C=60/D=20/格式异常=0 (未知 still unscored) — and its Model 3 prediction IS the existing OLS
+  regression. `trendSlope()` exposes m (↑/↓/→ indicator in the chart; flat band |m|<0.5).
+- The advice's Model 2 "critical failure" formula was REJECTED as dimensionally broken
+  ((100−10·n_D−2·n_C)/N×100 explodes for small N); Option B's 60→20 C→D gap covers its intent. If severity
+  weighting ever comes back, fix the formula shape first (e.g. per-item deductions without the ×100/N mix).
+
+## v10.192 — Production-scale perf validated; WAL-sidecar swap trap
+- View-mode perf is VALIDATED at production scale (1,155 tickets / 18 teams) and 10× headroom: every
+  per-filter-change hot path (filter scan, summarize, buildSeries+predict) is <4ms; `GET /api/tickets`
+  ~0.3s at the full 2.3MB payload. No pagination/optimization needed unless history grows ~10×.
+  Re-measure with `npx tsx tools/bench/view-bench.ts` (read-only; honors QUALITY_DB_PATH).
+- **SQLite WAL swap trap**: replacing `data/quality.db` while leaving the previous DB's `quality.db-wal`/
+  `-shm` sidecars in place makes SQLite read through the STALE WAL — the app silently serves the old
+  database's snapshot (here: 11 dev seed tickets instead of 1,155 prod rows). When swapping the DB file,
+  always delete/move the `-wal` and `-shm` siblings with it, with the server stopped.
+
+## v10.193 — vue-virtual-scroller itemsLimit freeze (production-scale only)
+- RecycleScroller (v3) THROWS "Rendered items limit reached" when its visible range exceeds the
+  module-level `itemsLimit` config (default 1000) — which happens whenever the viewport measures
+  0/unbounded ("renders all items at once") with 1000+ rows loaded. The throw aborts Vue's flush:
+  the app silently stops re-rendering while watchers keep firing (symptom: clicks "work", UI dead).
+- Fixed via `src/main-scroller-config.ts` (`applyScrollerConfig()`, limit 100k, called in main.ts AND
+  imported by the regression test) + a 240px min-height floor on `.grid-body`. Any future virtualized
+  list must keep its dataset under the configured limit or reuse this config.
+- Class of bug invisible below 1000 rows — dev/seed data can never catch it; only the prod-DB test did.
+
+## v10.194 — View panel is kept alive (v-show), never unmounted on mode switch
+- vue-virtual-scroller v3 has NO pool-trimming API: every row view ever rendered lives until unmount,
+  so unmounting a churned grid at prod scale costs ~1s+. QualityGridPanel is therefore lazy-mounted
+  once and hidden with `v-show` (like Task mode). DO NOT revert it to `v-if` — the lag will return.
+- `setGridActive()` in useQualityGrid gates the 30s tab-focus auto-refresh while View is hidden and
+  stale-refetches on re-entry. Any new "is View visible?" logic should go through it.
+- Vue PROD builds swallow watcher errors (no dev rethrow) — a flush-aborting bug can freeze dev while
+  prod merely logs to console. "Works in docker" does NOT clear this bug class; check the console.
+
+## v10.196 — ECharts is the project's chart stack now
+- Charts use Apache ECharts 6 with TREE-SHAKEN imports (`echarts/core` + needed charts/components +
+  `SVGRenderer`) and a PURE option-builder module per chart (`qualityModelChart.ts` pattern): all chart
+  semantics in a testable function, the component only owns init/setOption/resize/dispose. Reuse this
+  pattern for any future chart; do NOT hand-roll SVG again (v10.190's reason — no chart lib — is gone).
+- SVGRenderer chosen deliberately: DevTools-inspectable DOM, no canvas in jsdom; tests mock `echarts/core`
+  and assert the option object. Theme colors come from `getComputedStyle` CSS vars at render time.
+- echarts/zrender/tslib are pure-JS with no install scripts — safe with the GWM `--ignore-scripts` docker
+  build; first intranet build after this change confirms Nexus mirrors them.
+
+## v10.199 — Quality model v2 ADOPTED (supersedes the v10.191 formula notes)
+- The model is now: shrunk bucket score `(sum + 5·baseline)/(n + 5)` (baseline = team's window mean),
+  D=10 (not 20), count-weighted least squares, fit-anchored damped forecast (×0.7/step), ±1.96·se·√(1+k/N)
+  band (null <3 points). Everything one-line explainable — that constraint is the user's hard requirement
+  for ANY future model change; reject opaque methods (Holt-Winters was explicitly rejected for this).
+- `forecastSeries(history, counts, horizon)` replaced `predictSeries`; `trendSlope` takes counts.
+  Hover shows the hovered team's band (chart.on mouseover → re-render with hoveredKey).

@@ -12,7 +12,17 @@ export default {
   mode: {
     explore: 'Explore',
     task: 'Task',
-    view: 'View'
+    view: 'View',
+    config: 'Config'
+  },
+  config: {
+    comingSoon: 'Configuration — coming soon.',
+    team: 'Team',
+    model: 'Model',
+    skills: 'Skills',
+    railToggle: 'Toggle sidebar',
+    modelSubtitle: 'LLM provider, key, and models.',
+    skillsSubtitle: 'Coaching prompts, analysis, and template chips.'
   },
   form: {
     basicInfo: 'Basic Information',
@@ -198,6 +208,13 @@ export default {
     composerDisclaimer: 'AI can make mistakes. Please double-check responses.',
     contextOverLimit: 'Context too large (~{used} / {limit} tokens). Shorten your message or start a new chat.',
     contextBadgeTitle: 'Estimated tokens used of the {model} context limit',
+    ctxLow: 'Low',
+    ctxMiddle: 'Middle',
+    ctxHigh: 'High',
+    effort: 'Effort',
+    effortHigh: 'High',
+    moreModels: 'More models',
+    modelCtxSuffix: ' context',
     attachmentDownload: 'Download file',
     composerModelSelect: 'Select model for this chat',
     imageNotRetained: 'image (not kept after reload)',
@@ -292,6 +309,21 @@ export default {
     imageNeedsVisionModel: 'Images need a vision model (e.g. qwen) — switch the model to attach images',
     noDuplicateTemplates: 'No new templates to import (duplicates skipped)'
   },
+  voice: {
+    micTooltip: 'Use voice mode',
+    settingsTooltip: 'Voice settings',
+    deviceFallback: 'Microphone {n}',
+    holdToRecord: 'Hold to record',
+    cancel: 'Cancel recording',
+    confirm: 'Stop and transcribe',
+    transcribing: 'Transcribing…',
+    unsupportedContext: 'Voice input needs HTTPS or localhost',
+    errPermission: 'Microphone access denied — allow it in browser settings',
+    errNoDevice: 'No microphone found',
+    errRecorder: 'Recording failed — try again',
+    errTranscribe: 'Transcription failed — please try again',
+    emptyTranscript: 'No speech detected'
+  },
   shortcuts: {
     coach: 'Enter',
     analyze: 'Ctrl+Shift+Enter',
@@ -377,6 +409,9 @@ export default {
     empty: 'No tickets yet',
     emptyHint: 'Tickets will appear here once n8n posts the first quality-check report.',
     fetchError: 'Failed to load tickets',
+    retry: 'Retry',
+    loading: 'Loading tickets…',
+    updatedAt: 'Updated {time}',
     rowDetail: 'Quality report',
     openInJira: 'Open in JIRA',
     closeDetail: 'Close',
@@ -400,8 +435,16 @@ export default {
     presetCustom: 'Custom range',
     from: 'From',
     to: 'To',
-    summaryTitle: 'Period quality',
+    summaryTitle: 'Mission quality',
     trendTitle: 'Per-team trend',
+    modelTitle: 'Quality Trend Modelling',
+    modelFormula: 'Score = ticket average steadied by 5 memory tickets at the team baseline (A=100 · B=80 · C=60 · D=10 · 格式异常=0) — forecast follows the count-weighted trend, eased ×0.7 per step; the band is the range the recent scatter supports.',
+    modelTickets: 'tickets',
+    modelTrendUp: 'Improving',
+    modelTrendDown: 'Declining',
+    modelTrendFlat: 'Stable',
+    modelPerBucket: 'bucket',
+    toggleTrend: 'Toggle trend board',
     allTeamsRow: 'All teams',
     periodEmpty: 'No tickets checked in this period.'
   },

@@ -51,11 +51,38 @@
   </Transition>
 </template>
 
+<script lang="ts">
+import { renderMarkdown } from '@/utils/markdown'
+
+/**
+ * v10.186: content-keyed LRU over renderMarkdown — reopening a ticket skips
+ * the full unified + DOMPurify pipeline. Keyed by the raw agentCheck string
+ * (not issueKey) so refetched/updated tickets stay correct automatically:
+ * same content hits, changed content misses. Module scope (plain script
+ * block): survives the modal unmounting on app-mode switches.
+ */
+const MD_CACHE_MAX = 50
+const mdCache = new Map<string, string>()
+function renderMarkdownCached(text: string): string {
+  const hit = mdCache.get(text)
+  if (hit !== undefined) {
+    mdCache.delete(text) // LRU bump to most-recent
+    mdCache.set(text, hit)
+    return hit
+  }
+  const html = renderMarkdown(text)
+  mdCache.set(text, html)
+  if (mdCache.size > MD_CACHE_MAX) {
+    mdCache.delete(mdCache.keys().next().value!)
+  }
+  return html
+}
+</script>
+
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from '@/i18n'
 import { useFocusTrap } from '@/composables/useFocusTrap'
-import { renderMarkdown } from '@/utils/markdown'
 import { formatTime } from '@/utils/formatTime'
 import StatusBadge from './StatusBadge.vue'
 import type { QualityTicket } from '@/types/quality'
@@ -77,7 +104,7 @@ watch(() => props.ticket, async (val) => {
 })
 
 const renderedAgentCheck = computed(() =>
-  props.ticket ? renderMarkdown(props.ticket.agentCheck) : ''
+  props.ticket ? renderMarkdownCached(props.ticket.agentCheck) : ''
 )
 </script>
 

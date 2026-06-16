@@ -9,7 +9,7 @@
       <h1 class="header-title brand-eax" aria-label="EAX">
         <span class="brand-e">E</span><span class="brand-a">A</span><span class="brand-x">X</span>
       </h1>
-      <span class="header-version">v10.179</span>
+      <span class="header-version">v10.221</span>
     </div>
     <div class="header-right">
       <!-- Cross-mode "reply ready" chip: a background-mode stream finished -->
@@ -101,11 +101,6 @@
           <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
       </button>
-
-      <!-- Settings Gear -->
-      <button class="settings-btn" @click="$emit('openSettings')" :title="t('settings.title')" :aria-label="t('settings.title')">
-        {{ ICONS.settings }}
-      </button>
     </div>
   </header>
 </template>
@@ -114,7 +109,6 @@
 import { useI18n } from '@/i18n'
 import { useProductionMode, setUrlMode } from '@/config/webhook'
 import { useTheme } from '@/composables/useTheme'
-import { ICONS } from '@/config/icons'
 import { appMode, setMode, validModes } from '@/composables/useAppMode'
 import SprintIndicator from '@/components/header/SprintIndicator.vue'
 
@@ -123,7 +117,6 @@ const isProd = useProductionMode
 const { isDark, toggleTheme } = useTheme()
 
 defineProps<{ isAiBusy?: boolean; readyMode?: 'task' | 'explore' | null }>()
-defineEmits<{ openSettings: [] }>()
 
 function openHelp() {
   window.open('https://wiki.gwm.cn/pages/viewpage.action?pageId=506263489#', '_blank', 'noopener')
@@ -340,26 +333,6 @@ function openHelp() {
   color: var(--accent-blue);
   background-color: var(--bg-tertiary);
 }
-.settings-btn {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: var(--icon-sm);
-  width: clamp(24px, calc(2.14px + 1.444vw), 40px);
-  height: clamp(24px, calc(2.14px + 1.444vw), 40px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.settings-btn:hover {
-  color: var(--text-primary);
-  background-color: var(--bg-tertiary);
-}
-
-
 @media (max-width: 768px) {
   .app-header {
     flex-direction: column;
@@ -383,6 +356,7 @@ function openHelp() {
 }
 .mode-btn.mode-explore.active { background: #a78bfa; color: #fff; }
 .mode-btn.mode-task.active    { background: #34d399; color: #fff; }
+.mode-btn.mode-config.active  { background: #fb923c; color: #fff; }
 
 /* Cross-mode "reply ready" chip */
 .reply-chip {

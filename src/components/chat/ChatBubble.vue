@@ -1,28 +1,15 @@
 <template>
   <div class="chat-msg" :class="[`chat-${message.role}`, `layout-${layout}`]">
-    <!-- Avatar column (bubble layout only — stacked is avatar-less, pure-Claude) -->
-    <div v-if="layout === 'bubble'" class="msg-avatar-col">
-      <img
-        v-if="message.role === 'assistant'"
-        :src="agentAvatar"
-        class="msg-avatar"
-        :class="{ 'avatar-thinking': message.isStreaming }"
-        alt="Coach"
-      />
-      <div v-else class="msg-avatar-user">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0" />
-        </svg>
-      </div>
-  </div>
+    <!-- No avatars in either layout (pure-Claude look — alignment + serif/bubble
+         convey who's talking; matches Explore). -->
 
     <!-- Bubble -->
-    <div class="msg-bubble" :class="[`bubble-${message.role}`]">
+    <div class="msg-bubble" :class="[`bubble-${message.role}`, { 'bubble-editing': editing }]">
       <!-- Explore (stacked) goes pure-Claude: the role label is sr-only so the
            speaker is still announced to screen readers but carries no visual
            chrome — alignment + serif/bubble convey who's talking. Task (bubble)
            keeps the visible label + avatar. -->
-      <span class="msg-role-label" :class="[`role-${message.role}`, { 'sr-only': layout === 'stacked' }]">
+      <span class="msg-role-label" :class="[`role-${message.role}`, 'sr-only']">
         {{ message.role === 'assistant' ? t('coach.agentLabel') : t('coach.userLabel') }}
         <span class="msg-time">{{ timeLabel }}</span>
         <span v-if="hashId" class="msg-hash">#{{ hashId }}</span>
@@ -76,7 +63,7 @@
              Task mode (which has its own bouncing-dots indicator) is untouched. -->
         <Transition name="orb-fade">
           <div
-            v-if="layout === 'stacked' && message.isStreaming && !message.content"
+            v-if="message.isStreaming && !message.content"
             class="thinking-orb-row"
           >
             <span class="thinking-orb" aria-hidden="true" />
@@ -87,7 +74,7 @@
              first token has landed (firstTokenMs set) — mirrors Claude's
              time-to-first-token label above the answer. -->
         <div
-          v-if="layout === 'stacked' && message.firstTokenMs != null"
+          v-if="message.firstTokenMs != null"
           class="msg-elapsed"
         >{{ t('coach.thoughtFor').replace('{s}', elapsedLabel) }}</div>
         <div
@@ -168,7 +155,7 @@
           {{ message.content }}
         </div>
         <!-- Hover meta-row: date + Retry / Edit / Copy (Explore/stacked only). -->
-        <div v-if="layout === 'stacked' && !editing && message.content" class="msg-user-meta">
+        <div v-if="!editing && message.content" class="msg-user-meta">
           <span class="msg-user-date">{{ dateLabel }}</span>
           <button type="button" class="msg-icon-btn" :title="t('coach.msgRetry')" :aria-label="t('coach.msgRetry')" @click="emit('retry', message.id)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -212,7 +199,6 @@ import { useArtifact } from '@/composables/useArtifact'
 const { t, isZh } = useI18n()
 const { addToast } = useToast()
 const { open: openArtifact } = useArtifact()
-const agentAvatar = '/agent_avy.png'
 
 const props = withDefaults(defineProps<{
   message: ChatMessage
@@ -411,44 +397,9 @@ function downloadAttachment(a: Attachment) {
   margin-bottom: var(--space-4);
 }
 
-/* User messages: avatar on the right */
+/* User messages hug the right edge (single bubble child, no avatar column) */
 .chat-user {
   flex-direction: row-reverse;
-}
-
-/* Avatar column */
-.msg-avatar-col {
-  flex-shrink: 0;
-}
-.msg-avatar {
-  width: var(--avatar-size);
-  height: var(--avatar-size);
-  border-radius: 50%;
-  object-fit: cover;
-  background-color: var(--bg-tertiary);
-}
-.msg-avatar-user {
-  width: var(--avatar-size);
-  height: var(--avatar-size);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--accent-blue);
-  color: white;
-}
-.msg-avatar-user svg {
-  width: var(--icon-md);
-  height: var(--icon-md);
-}
-
-/* Breathing halo for streaming */
-.avatar-thinking {
-  animation: breathe 2s ease-in-out infinite;
-}
-@keyframes breathe {
-  0%, 100% { box-shadow: 0 0 0 0 var(--green-glow); }
-  50% { box-shadow: 0 0 8px 4px var(--green-subtle); }
 }
 
 /* Bubble */
@@ -462,6 +413,19 @@ function downloadAttachment(a: Attachment) {
 /* Agent bubble: transparent, no card */
 .bubble-assistant {
   background: transparent;
+}
+
+/* Task mode: assistant fills the full available width */
+.layout-bubble .bubble-assistant {
+  max-width: 100%;
+  flex: 1;
+}
+
+/* Task mode: while editing a user message, stretch the bubble to full width so
+   the textarea is comfortable (mirrors Explore's stretched edit area). */
+.layout-bubble .bubble-editing {
+  max-width: 100%;
+  flex: 1;
 }
 
 /* User bubble: transparent */

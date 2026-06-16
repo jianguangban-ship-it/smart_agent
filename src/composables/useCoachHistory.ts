@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { zipSync, strToU8 } from 'fflate'
 import type { CoachHistoryRecord, CoachChannel, ToolEvent, Attachment } from '@/types/api'
 
 const LS_KEY = 'coach-history'
@@ -273,23 +274,55 @@ export function sanitizeFilename(name: string): string {
   return cleaned || 'chat'
 }
 
+// Content builders — shared by the single-file exporters and the per-chat zip.
+export function recordsToJson(records: CoachHistoryRecord[]): string {
+  return JSON.stringify(records, null, 2)
+}
+export function recordsToMarkdown(records: CoachHistoryRecord[]): string {
+  return records.map(r => {
+    const roleLabel = r.role === 'user' ? 'USER' : 'COACH'
+    return `### ${roleLabel} — ${formatTime(r.timestamp)} (#${r.id})\n\n${r.content}\n\n<!-- ====== RECORD BOUNDARY ====== -->`
+  }).join('\n\n')
+}
+
 export function exportAsJson(records: CoachHistoryRecord[], baseName?: string): void {
-  const json = JSON.stringify(records, null, 2)
-  const blob = new Blob([json], { type: 'application/json' })
+  const blob = new Blob([recordsToJson(records)], { type: 'application/json' })
   downloadBlob(blob, `${baseName ?? `coach-history-${todayStr()}`}.json`)
 }
 
 export function exportAsMarkdown(records: CoachHistoryRecord[], baseName?: string): void {
-  const lines = records.map(r => {
-    const roleLabel = r.role === 'user' ? 'USER' : 'COACH'
-    return `### ${roleLabel} — ${formatTime(r.timestamp)} (#${r.id})\n\n${r.content}\n\n<!-- ====== RECORD BOUNDARY ====== -->`
-  })
-  const md = lines.join('\n\n')
-  const blob = new Blob([md], { type: 'text/markdown' })
+  const blob = new Blob([recordsToMarkdown(records)], { type: 'text/markdown' })
   downloadBlob(blob, `${baseName ?? `coach-history-${todayStr()}`}.md`)
 }
 
 export function exportRecords(records: CoachHistoryRecord[], format: 'json' | 'markdown' | 'both', baseName?: string): void {
   if (format === 'json' || format === 'both') exportAsJson(records, baseName)
   if (format === 'markdown' || format === 'both') exportAsMarkdown(records, baseName)
+}
+
+/** One chat → one file inside the export zip, named by the chat's title. */
+export interface SessionExport {
+  name: string
+  records: CoachHistoryRecord[]
+}
+
+/**
+ * Export several chats as a single .zip — one file per chat, each named by its
+ * (sanitized) chat title. Same-titled chats get a "(2)", "(3)" … suffix so no
+ * file overwrites another. `both` adds a .md and a .json per chat.
+ */
+export function exportSessionsZip(sessions: SessionExport[], format: 'json' | 'markdown' | 'both'): void {
+  const files: Record<string, Uint8Array> = {}
+  const used = new Set<string>()
+  for (const s of sessions) {
+    const base = sanitizeFilename(s.name)
+    let name = base
+    let n = 2
+    while (used.has(name)) name = `${base} (${n++})`
+    used.add(name)
+    if (format === 'markdown' || format === 'both') files[`${name}.md`] = strToU8(recordsToMarkdown(s.records))
+    if (format === 'json' || format === 'both') files[`${name}.json`] = strToU8(recordsToJson(s.records))
+  }
+  const zipped = zipSync(files)
+  downloadBlob(new Blob([zipped], { type: 'application/zip' }), `coach-history-${todayStr()}.zip`)
 }

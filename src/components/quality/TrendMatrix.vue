@@ -1,12 +1,7 @@
 <template>
-  <div class="trend-wrap" v-if="summary.total > 0">
-    <div class="trend-head">
-      <span class="trend-title">{{ t('view.trendTitle') }}</span>
-      <button type="button" class="collapse-btn" @click="open = !open">
-        {{ open ? '−' : '+' }}
-      </button>
-    </div>
-    <div v-if="open" class="trend-scroll">
+  <!-- v10.190: header + collapse moved up to QualityGridPanel's trend board
+       (shared with QualityTrendModelling); this component is the table only. -->
+  <div class="trend-scroll" v-if="summary.total > 0">
       <table class="trend-table">
         <thead>
           <tr>
@@ -38,19 +33,17 @@
           </tr>
         </tbody>
       </table>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from '@/i18n'
 import { colorForStatus } from '@/types/quality'
 import type { PeriodSummary, MatrixRow, MatrixCell, StatusCounts } from '@/composables/useQualityGrid'
 
 const props = defineProps<{ summary: PeriodSummary }>()
 const { t } = useI18n()
-const open = ref(true)
 
 const CANONICAL = ['A', 'B', 'C', 'D', '格式异常', '未知']
 
@@ -92,36 +85,16 @@ const allRow = computed<MatrixRow>(() => {
   return { team_key: '*', team: 'all', cells, total }
 })
 
-const rows = computed<MatrixRow[]>(() => [...props.summary.matrix, allRow.value])
+// Single-team matrix (team filter active): the Σ row would be an identical
+// duplicate of the only row — skip it.
+const rows = computed<MatrixRow[]>(() =>
+  props.summary.matrix.length > 1
+    ? [...props.summary.matrix, allRow.value]
+    : props.summary.matrix
+)
 </script>
 
 <style scoped>
-.trend-wrap {
-  padding: 0 var(--space-5) var(--space-3);
-}
-.trend-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) 0;
-}
-.trend-title {
-  font-size: var(--font-sm);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-}
-.collapse-btn {
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  cursor: pointer;
-  line-height: 1;
-}
 .trend-scroll {
   overflow-x: auto;
 }

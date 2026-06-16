@@ -6,16 +6,19 @@ import { appMode } from '@/composables/useAppMode'
 import type { AppMode } from '@/composables/useAppMode'
 
 // Per-mode review state — each mode tracks its own workflow independently.
-// View mode is read-only so its 'draft' is never advanced, but the shape must include it.
+// View and Config are read-only so their 'draft' is never advanced, but the
+// shape must include every AppMode.
 const modeReviewStatus = reactive<Record<AppMode, ReviewStatus>>({
   explore: 'draft',
   task: 'draft',
-  view: 'draft'
+  view: 'draft',
+  config: 'draft'
 })
 const modeCheckedItems = reactive<Record<AppMode, Set<string>>>({
   explore: new Set(),
   task: new Set(),
-  view: new Set()
+  view: new Set(),
+  config: new Set()
 })
 
 const reviewStatus = ref<ReviewStatus>('draft')

@@ -145,24 +145,35 @@
           <!-- Analyze / Decompose (hidden in free-chat mode). Sparkles icon
                reads as "AI" better than the previous flask. Hotkey hint
                surfaces the existing Ctrl+Shift+Enter binding. -->
+          <!-- Analyze / Cancel — one slot, two states (mirrors Send/Stop):
+               idle = Analyze (emits analyze); running = red Cancel (emits
+               cancelAnalyze). The action bar is now the sole cancel surface
+               during analysis, so the in-panel Cancel was removed (v10.207). -->
           <button
-            v-show="appMode !== 'explore'"
+            v-if="appMode !== 'explore' && !isAnalyzeLoading"
             class="action-btn action-analyze"
             :class="{ dimmed: hasAiResponse }"
             :disabled="!canCoachSubmit || isSubmitting || isCoachLoading || (appMode === 'task' && !hasCoachResponse)"
             :title="t('form.aiAnalyze') + ' (Ctrl+Shift+Enter)'"
             @click="$emit('analyze')"
           >
-            <svg v-if="isSubmitting && currentAction === 'analyze'" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
-              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
-              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
-            </svg>
-            <svg v-else class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <!-- Sparkles: a big four-point star + a small one -->
               <path d="M12 3 L13.6 8.4 L19 10 L13.6 11.6 L12 17 L10.4 11.6 L5 10 L10.4 8.4 Z" />
               <path d="M18 16 L18.7 18.3 L21 19 L18.7 19.7 L18 22 L17.3 19.7 L15 19 L17.3 18.3 Z" />
             </svg>
             <span class="action-label">{{ t('form.aiAnalyze') }}</span>
+          </button>
+          <button
+            v-else-if="appMode !== 'explore' && isAnalyzeLoading"
+            class="action-btn action-stop"
+            :title="t('settings.cancel')"
+            @click="$emit('cancelAnalyze')"
+          >
+            <svg class="action-icon" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+            <span class="action-label">{{ t('settings.cancel') }}</span>
           </button>
           <!-- Create JIRA — always rendered (in Task mode) and held in a
                reserved slot via `.invisible-slot`; it fades in once an
@@ -244,6 +255,7 @@ defineEmits<{
   create: []
   reset: []
   cancelCoach: []
+  cancelAnalyze: []
   projectChange: []
   clearError: []
   suggestLinks: []
