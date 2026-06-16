@@ -75,11 +75,7 @@
 
     <!-- Right content — sub-page area. -->
     <section class="config-content">
-      <!-- Team — placeholder for now. -->
-      <div v-show="activeSubPage === 'team'" class="config-placeholder">
-        <h1 class="config-placeholder-title">{{ t('config.team') }}</h1>
-        <p class="config-placeholder-hint">{{ t('config.comingSoon') }}</p>
-      </div>
+      <TeamConfig v-show="activeSubPage === 'team'" :active="activeSubPage === 'team'" />
       <ModelConfig v-show="activeSubPage === 'model'" :active="activeSubPage === 'model'" />
       <SkillsConfig v-show="activeSubPage === 'skills'" :active="activeSubPage === 'skills'" />
     </section>
@@ -91,6 +87,7 @@ import { ref } from 'vue'
 import { useI18n } from '@/i18n'
 import ModelConfig from '@/components/config/ModelConfig.vue'
 import SkillsConfig from '@/components/config/SkillsConfig.vue'
+import TeamConfig from '@/components/config/TeamConfig.vue'
 
 // `active` mirrors the View panel's prop shape (gates work while another mode is
 // on screen). Unused for now.

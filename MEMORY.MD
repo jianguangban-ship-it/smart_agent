@@ -1645,3 +1645,42 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   for ANY future model change; reject opaque methods (Holt-Winters was explicitly rejected for this).
 - `forecastSeries(history, counts, horizon)` replaced `predictSeries`; `trendSlope` takes counts.
   Hover shows the hovered team's band (chart.on mouseover → re-render with hoveredKey).
+
+## v10.222 — Config-mode Team editor (per-team code gate, server write-back)
+- `team-members.json` + `components.json` are now editable in-app (Config → Team), persisted via the
+  server back to the SAME files the prod volume maps (`…/data:/app/dist/config`). They were read-only
+  static JSON before. On-disk edits and in-app edits are interchangeable.
+- Per-team EDIT-CODE gate: network stays open on the intranet, but editing a team requires that team's
+  code (`team-codes.json`, `"*"` = ops master). Codes live in the DATA volume (next to the SQLite db,
+  default `…/quality-db/team-codes.json`, `TEAM_CODES_PATH`), NEVER under dist/config (web-served).
+  Missing entry ⇒ team is LOCKED. Plaintext is intentional (ops-managed, `.gitignore`d).
+- Writes are PER-TEAM scoped (`PUT /api/config/team/:key`, header `x-team-code`): the server re-verifies
+  the code against `:key` and only splices that key into each full map — a person with HW's code cannot
+  touch DKKF. Backup-before-write goes to `<CONFIG_DIR>/../backups` (out of the web root).
+- Live updates are free: `runtimeTeamMembers` / `runtimeComponentsByProject` are reactive refs already
+  consumed by BasicInfoSection's Assignee dropdown + useForm's component datalist — `useConfigWrite.saveTeam`
+  splices the saved key in (new object identity) so the rest of the app updates with NO reload.
+- CONFIG_DIR resolves dist/config (prod) else public/config (dev `dev:all`); `SMART_AGENT_CONFIG_DIR`
+  override. Cross-team "Move to" is a session queue in useConfigWrite (remove from source draft + queue
+  incoming on target; each side saved under its own code).
+
+## v10.223 — Team-editor config-dir resolution (dev vs prod)
+- The Config Team editor writes runtime JSON to a dir resolved by `resolveConfigDir()` in
+  `server/config-store.ts`. There are THREE copies and only the served one matters:
+  dev → `public/config` (Vite serves it), prod → `dist/config` (Docker `NODE_ENV=production`, mounted
+  volume). `deploy/config/` is NEVER read by the running app — it's a manual seed for the prod host volume.
+- BUG fixed here: the old heuristic wrote `dist/config` whenever a stale `dist/` existed on disk, but
+  dev serves `public/config`, so edits "vanished" on hard reload (live ref still updated mid-session).
+  Rule now: `SMART_AGENT_CONFIG_DIR` override → else `NODE_ENV==='production'` → dist/config → else
+  prefer public/config. If you ever see "edit saved but reload shows old data," check served-vs-written dir.
+
+## v10.224 — Docker deploy: team-codes + volume seeding
+- Prod team-codes.json lives in the DB volume at host `/usr/local/smart_agent/quality-db/team-codes.json`
+  (= container `/app/data/team-codes.json`, now explicit `TEAM_CODES_PATH` in compose). NOT in the
+  config/dist volume — that one is web-served. `deploy/team-codes.json` is the gitignored artifact ops copies.
+- IMPORTANT: the config volume `/usr/local/smart_agent/data` (→ /app/dist/config) must be SEEDED with the
+  four deploy/config/*.json before first run. The Team editor READS and WRITES them there; an empty
+  volume makes saves 500 and dropdowns fall back to baked-in src/config defaults. deploy/config/*.json is
+  only the seed — the running container never reads deploy/config/ directly.
+- The honored .dockerignore is the REPO ROOT one (BuildKit ignores deploy/.dockerignore for a root build
+  context). Don't ignore `deploy/` wholesale there — the Dockerfile COPYs deploy/mcp-servers.json.

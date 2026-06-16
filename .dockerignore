@@ -14,3 +14,12 @@ docs
 tools/
 # Design reference snapshots
 *.png
+# Secrets / local runtime state — keep out of the build daemon context.
+# (The Dockerfile COPYs selectively, so these never reached the image; this
+# also stops them being sent to the daemon at all.)
+.env
+.env.*
+deploy/.env
+deploy/.env.*
+data/
+team-codes.json

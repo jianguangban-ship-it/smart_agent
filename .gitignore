@@ -26,3 +26,7 @@ bash.exe.stackdump
 tools/local-stt/.venv/
 tools/local-stt/models/
 *.stackdump
+# Per-team edit codes for the Config-mode Team editor — secret, ops-managed.
+# The committed sample (deploy/team-codes.sample.json) shows the shape.
+# Default dev location is <root>/data/team-codes.json (already covered by data/).
+team-codes.json

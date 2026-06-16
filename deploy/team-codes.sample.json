@@ -1,0 +1,6 @@
+{
+  "_comment": "Per-team edit codes for the Config-mode Team editor. Copy this to the path the server reads (default: alongside the SQLite db, e.g. /usr/local/smart_agent/quality-db/team-codes.json, or set TEAM_CODES_PATH). NEVER place it under dist/config — that dir is web-served. Keys are project keys from projects.json; '*' is an ops master code that unlocks any team. A team with no entry (and no '*') cannot be unlocked in the UI.",
+  "HW": "change-me-hw",
+  "DKKF": "change-me-swdev",
+  "*": "change-me-ops-master"
+}

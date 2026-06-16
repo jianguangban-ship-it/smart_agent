@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs'
 import { ticketRoutes } from './routes/tickets.js'
 import { llmRoutes } from './routes/llm.js'
 import { transcribeRoutes } from './routes/transcribe.js'
+import { configRoutes } from './routes/config.js'
 import { initMCP } from './mcp/client.js'
 import { db } from './db.js'
 import type { TicketBody } from './schemas.js'
@@ -30,6 +31,7 @@ db()
 app.register(ticketRoutes, { prefix: '/api' })
 app.register(llmRoutes, { prefix: '/api' })
 app.register(transcribeRoutes, { prefix: '/api' })
+app.register(configRoutes, { prefix: '/api' })
 
 // In production the same container serves the SPA build. In dev, Vite owns the
 // UI and proxies /api here — so this block is a no-op when dist/ is absent.

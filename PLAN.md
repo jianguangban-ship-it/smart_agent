@@ -9951,3 +9951,129 @@ Companion to the v10.192 view-bench: `tools/bench/ingest-bench.ts` (run: `npx ts
 | GET full window after burst (1,206 rows) | 81ms |
 
 Live behaviour checks (user-confirmed): refresh keeps stale rows + dims + spinner, "Updated HH:MM" pulse, chip ticks, skeleton on throttled reload, search instant at 1,206 rows. The auto-refresh/failure-path legs were preempted by the discovery of the v10.193 itemsLimit freeze — which the realtime test existed to find, so: mission accomplished.
+
+
+---
+
+## v10.222 — Config mode: Team page editor (members + components, per-team code gate)
+
+### Design rationale
+
+The team roster (`team-members.json`) and per-team component list (`components.json`) were
+host-only static JSON — editing meant SSH + hand-edit + container restart. The Config-mode **Team**
+sub-page was a "coming soon" placeholder. This ships a polished in-app editor so any team keeps its own
+roster and components current, persisted to the real JSON (shared, live across the app).
+
+Decisions: **server write-back** (the prod volume `…/data:/app/dist/config` makes those files the
+host-editable store); **Members + Components** both editable (components "belong to the team
+information"); **master–detail** layout; **open intranet network but per-team edit-code gate** — a
+code unlocks only its own team's members + components; `"*"` is an ops master code. Codes live
+server-side only (data volume, never web-served). Safety net: timestamped backup + shape validation on
+every write. Live updates are free — `runtimeTeamMembers` / `runtimeComponentsByProject` are reactive
+refs already consumed by Basic Info's Assignee dropdown and the component datalist, so a save updates
+them with no reload.
+
+### Changes
+
+1. **`server/config-store.ts`** (new) — `CONFIG_DIR` (dist/config in prod, public/config in dev;
+   `SMART_AGENT_CONFIG_DIR` override) + `CODES_PATH` (data volume; `TEAM_CODES_PATH` override),
+   atomic write, backup-with-prune (out of web root), `verifyTeamCode` (per-team + `"*"` master;
+   missing entry ⇒ locked), shape validators, and `saveTeam` (splice one key into each full map).
+2. **`server/routes/config.ts`** (new, registered in `server/index.ts`) — `POST /api/config/team/:key/unlock`
+   (UX pre-check) and `PUT /api/config/team/:key` (header `x-team-code`; re-verifies code against `:key`
+   so the boundary is enforced server-side; validates shape + duplicate ids → 400; 401 before schema).
+3. **`src/composables/useConfigWrite.ts`** (new) — `unlockTeam`/`lockTeam` (session-scoped unlock state),
+   `saveTeam` (splices live runtime refs on success), and the cross-team **Move** queue
+   (`queueMove`/`getPendingMoves`/`clearPendingMoves`).
+4. **`src/components/config/TeamConfig.vue`** (new; replaces the placeholder in `ConfigPanel.vue`) —
+   master–detail: searchable team list (member/component counts, unlock dot, incoming `+N` badge);
+   detail with lock bar (inline password prompt, shake on wrong code), Members/Components tabs, inline
+   editing, role `<datalist>`, **Move to…** per-row, add-member with validation, component chips, dirty
+   tracking + sticky Save/Discard, toasts.
+5. **i18n** — `config.*` keys (en + zh, bilingual).
+6. **Ops** — `deploy/config/README.md` documents the editor + `team-codes.json`; `deploy/team-codes.sample.json`
+   added; real codes file `.gitignore`d.
+7. **Tests** — `server/__tests__/config-route.test.ts` (9 tests: unlock pass/fail/master/locked,
+   scoped write isolates other teams, backup written, wrong code untouched-file, bad shape 400, dup id 400).
+
+### Modified / new files
+
+| File | Change |
+|------|--------|
+| `server/config-store.ts` | NEW — paths, read/write/backup, code verify, validators, saveTeam |
+| `server/routes/config.ts` | NEW — unlock + per-team write |
+| `server/index.ts` | register `configRoutes` |
+| `server/__tests__/config-route.test.ts` | NEW — 9 route tests |
+| `src/composables/useConfigWrite.ts` | NEW — unlock/save + move queue + live-ref sync |
+| `src/components/config/TeamConfig.vue` | NEW — master–detail editor |
+| `src/components/config/ConfigPanel.vue` | placeholder → `<TeamConfig>` |
+| `src/i18n/en.ts`, `src/i18n/zh.ts` | `config.*` strings |
+| `deploy/config/README.md` | editor + team-codes docs |
+| `deploy/team-codes.sample.json`, `.gitignore` | sample + ignore real codes |
+| `src/components/layout/AppHeader.vue` | v10.221 → v10.222 |
+| `PLAN.md` | This entry |
+
+---
+
+## v10.223 — Fix: Team editor wrote the wrong config dir in dev (edits vanished on reload)
+
+### Bug
+
+Removing a member in Config → Team updated the in-memory list but the person reappeared after a hard
+reload. `resolveConfigDir()` in `server/config-store.ts` chose `dist/config` whenever a `dist/` existed
+on disk, so the save wrote `dist/config`. But `dev:all` serves `/config/*` via **Vite from
+`public/config`** — so the reload re-fetched the stale `public/config` copy. Prod was never affected
+(Docker serves + mounts the volume at `dist/config`). `deploy/config/` is unrelated — it's a manual prod
+seed the running app never reads.
+
+### Fix
+
+`resolveConfigDir()` is now `NODE_ENV`-aware: prod (`NODE_ENV=production`, set in `deploy/Dockerfile:32`)
+→ `dist/config`; dev → prefer `public/config` (what Vite serves), falling back to `dist/config` only if
+`public/config` is absent. Explicit `SMART_AGENT_CONFIG_DIR` still wins.
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `server/config-store.ts` | `resolveConfigDir()` NODE_ENV-aware; dev prefers `public/config` |
+| `deploy/config/README.md` | clarify dev vs prod write dir + that `deploy/config` is only a seed |
+| `src/components/layout/AppHeader.vue` | v10.222 → v10.223 |
+| `PLAN.md`, `MEMORY.MD` | this entry + learning note |
+
+---
+
+## v10.224 — Docker deployment: team-codes.json + deploy-file audit
+
+### Changes
+
+Wires the Team-editor's per-team codes into Docker and fixes deploy-doc gaps found while double-checking.
+
+1. **`deploy/team-codes.json`** (new, gitignored) — real codes (`<KEY>2026` for all 21 teams + `"*":
+   "ADMIN2026"`), generated from `public/config/projects.json`. Ops copies it to
+   `/usr/local/smart_agent/quality-db/team-codes.json` (the `/app/data` volume; `TEAM_CODES_PATH` default).
+2. **`deploy/docker-compose.yml`** — explicit `TEAM_CODES_PATH: /app/data/team-codes.json`; volume
+   comments now spell out (a) the config volume must be SEEDED with the four `deploy/config/*.json`
+   (the editor reads *and* writes them — empty volume ⇒ saves 500 / fallback to defaults), and (b)
+   team-codes.json belongs in the db volume (not web-served).
+3. **`deploy/config/README.md`** — added "First-time deployment — seed the host volumes" (config files +
+   team-codes) and corrected the Edit workflow: the running container reads the **mounted** host files at
+   `/usr/local/smart_agent/data`, not `deploy/config/` (those are only the seed); in-app editing writes
+   there directly; team-codes rotate without a restart (read fresh per request).
+4. **`.dockerignore`** (root, the one BuildKit actually honors) — added `.env*`, `deploy/.env*`, `data/`,
+   and `team-codes.json` so secrets/local state aren't sent to the build daemon. `deploy/` is still not
+   ignored wholesale (the build needs `deploy/mcp-servers.json`). `deploy/.dockerignore` is inert for a
+   root build context and left only as documentation.
+
+No server/client logic changed — `TEAM_CODES_PATH` was already supported.
+
+### Modified files
+
+| File | Change |
+|------|--------|
+| `deploy/team-codes.json` | NEW (gitignored) real codes artifact |
+| `deploy/docker-compose.yml` | explicit `TEAM_CODES_PATH` + seeding/codes volume comments |
+| `deploy/config/README.md` | seeding steps + corrected edit workflow |
+| `.dockerignore` | exclude secrets/local state from build context |
+| `src/components/layout/AppHeader.vue` | v10.223 → v10.224 |
+| `PLAN.md`, `MEMORY.MD` | this entry + note |
