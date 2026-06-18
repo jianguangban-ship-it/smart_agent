@@ -1,6 +1,45 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyBaseLogger } from 'fastify'
 import { upsertTicket, listTickets, rowToTicket } from '../db.js'
 import { requireApiKey } from '../auth.js'
+import { audit } from '../logs/log-bus.js'
+import { emitTicketsChanged, onTicketsChanged } from '../events.js'
+
+// Emit the `ticket.write` audit event for a POST /api/tickets response — this is
+// n8n's quality-grid write (the AI verdict for a ticket), NOT the user's create
+// action (that's the client-side `jira.create` ping). Called from the onResponse
+// hook in index.ts (which has both the body and the final status code):
+//   201/200 → OK  (a real issueKey was accepted into the grid)
+//   400     → NOK (the `未知KEY` sentinel / pattern reject — no real ticket id),
+//                  logged at warn so it stands out.
+export function auditTicketResponse(
+  log: FastifyBaseLogger,
+  code: number,
+  body: Partial<TicketBody> | undefined,
+  ip?: string
+): void {
+  if (code !== 201 && code !== 200 && code !== 400) return
+  const action = body?.action === 'update' ? 'update' : 'create'
+  const ok = code === 201 || code === 200
+  const issueKey = body?.issueKey ?? '—'
+  const points = typeof body?.points === 'number' ? body.points : undefined
+  audit(log, 'ticket.write', {
+    level: ok ? 'info' : 'warn',
+    source: 'n8n',
+    ip,
+    team_key: body?.team_key,
+    msg: `ticket.write ${issueKey} · ${body?.team_key ?? '?'}${body?.status ? ` · ${body.status}` : ''} · ${ok ? 'OK' : 'NOK'}`,
+    detail: {
+      outcome: ok ? 'OK' : 'NOK',
+      issueKey,
+      project: body?.project,
+      team_key: body?.team_key,
+      points,
+      action,
+      actionTime: body?.timestamp,  // n8n ISO time
+      verdict: body?.status         // AI quality grade (A/B/C/D/…)
+    }
+  })
+}
 import {
   TICKET_BODY_SCHEMA,
   TICKET_RESPONSE_201,
@@ -22,7 +61,11 @@ export async function ticketRoutes(app: FastifyInstance) {
       }
     }
   }, async (req, reply) => {
+    // The JIRA audit event is emitted from the onResponse hook in index.ts so
+    // that the OK (201/200) and NOK (400 — sentinel key, no real ticket id)
+    // cases are handled uniformly with access to the status code.
     const result = upsertTicket(req.body)
+    emitTicketsChanged({ issueKey: req.body.issueKey, result }) // wake the View dashboard
     reply
       .code(result === 'created' ? 201 : 200)
       .send({ issueKey: req.body.issueKey, result })
@@ -33,5 +76,30 @@ export async function ticketRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { team_key?: string; status?: string; from?: string; to?: string } }>('/tickets', async (req) => {
     const rows = listTickets(req.query)
     return rows.map(rowToTicket)
+  })
+
+  // GET /api/tickets/stream — SSE "tickets changed" ping so the dashboard
+  // refreshes in near-real-time (the client refetches, coalesced) instead of
+  // polling. Reuses the SSE shape from routes/llm.ts (X-Accel-Buffering off so
+  // the GWM proxy flushes immediately; reply.raw close guard to unsubscribe).
+  app.get('/tickets/stream', async (req, reply) => {
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    })
+    reply.raw.write('retry: 3000\n\n') // EventSource reconnect backoff
+
+    const unsubscribe = onTicketsChanged(info => {
+      if (reply.raw.writableEnded) return
+      reply.raw.write(`data: ${JSON.stringify({ type: 'changed', ...info })}\n\n`)
+    })
+    const heartbeat = setInterval(() => {
+      if (!reply.raw.writableEnded) reply.raw.write(': ping\n\n')
+    }, 25_000)
+
+    reply.raw.on('close', () => { clearInterval(heartbeat); unsubscribe() })
+    return new Promise<void>(() => { /* closed via 'close' */ })
   })
 }

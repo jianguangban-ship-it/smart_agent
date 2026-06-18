@@ -20,6 +20,7 @@ export default {
     team: 'Team',
     model: 'Model',
     skills: 'Skills',
+    activity: 'Activity',
     railToggle: 'Toggle sidebar',
     modelSubtitle: 'LLM provider, key, and models.',
     skillsSubtitle: 'Coaching prompts, analysis, and template chips.',
@@ -58,6 +59,22 @@ export default {
     saveAuthFailed: 'Code rejected — unlock the team again.',
     confirmDiscard: 'Discard unsaved changes?',
     movedQueued: 'Queued — unlock {team} and save to complete the move.'
+  },
+  logs: {
+    title: 'Activity Log',
+    subtitle: 'Live audit events and server warnings/errors. Read-only.',
+    live: 'Live',
+    offline: 'Offline',
+    filter_all: 'All',
+    filter_audit: 'Audit',
+    filter_warn: 'Warn',
+    filter_error: 'Error',
+    search: 'Search activity…',
+    pause: 'Pause',
+    resume: 'Resume',
+    clear: 'Clear',
+    loadOlder: '↑ Load older',
+    empty: 'No activity yet.'
   },
   form: {
     basicInfo: 'Basic Information',

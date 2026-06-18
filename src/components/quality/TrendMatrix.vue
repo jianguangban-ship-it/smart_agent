@@ -11,15 +11,15 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.team_key" :class="{ 'all-row': row.team_key === '*' }">
+          <tr v-for="row in displayRows" :key="row.team_key" :class="{ 'all-row': row.team_key === '*' }">
             <td class="team-col" :title="row.team">
               {{ row.team_key === '*' ? t('view.allTeamsRow') : row.team_key }}
             </td>
             <td v-for="(cell, i) in row.cells" :key="i">
-              <div class="bar" :title="tooltip(cell)" :aria-label="tooltip(cell)">
+              <div class="bar" :title="cell.tooltip" :aria-label="cell.tooltip">
                 <template v-if="cell.total > 0">
                   <span
-                    v-for="seg in segments(cell)"
+                    v-for="seg in cell.segments"
                     :key="seg.status"
                     class="seg"
                     :style="{ width: seg.pct + '%', backgroundColor: seg.color }"
@@ -91,6 +91,25 @@ const rows = computed<MatrixRow[]>(() =>
   props.summary.matrix.length > 1
     ? [...props.summary.matrix, allRow.value]
     : props.summary.matrix
+)
+
+// Precompute each cell's stacked-bar segments + tooltip ONCE per summary change,
+// instead of calling segments()/tooltip() per cell on every render (~900 calls).
+interface DisplaySeg { status: string; color: string; pct: number }
+interface DisplayCell { total: number; segments: DisplaySeg[]; tooltip: string }
+interface DisplayRow { team_key: string; team: string; total: number; cells: DisplayCell[] }
+
+const displayRows = computed<DisplayRow[]>(() =>
+  rows.value.map(row => ({
+    team_key: row.team_key,
+    team: row.team,
+    total: row.total,
+    cells: row.cells.map(cell => ({
+      total: cell.total,
+      segments: cell.total > 0 ? segments(cell) : [],
+      tooltip: tooltip(cell),
+    })),
+  }))
 )
 </script>
 

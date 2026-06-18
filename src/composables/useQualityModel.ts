@@ -1,5 +1,6 @@
 import type { QualityTicket } from '@/types/quality'
 import type { PhaseBucket } from '@/composables/useTimingPhase'
+import { bucketBounds, bucketIndexOf } from '@/utils/bucketIndex'
 
 // Quality Trend Modelling data layer — model v2 (v10.199, user-approved
 // redesign; supersedes the v10.191 plain-mean + raw-OLS model, which the
@@ -164,12 +165,12 @@ export function buildSeries(
 
   const teams = new Map<string, Agg>()
   const all = mkAgg('all')
+  const bounds = bucketBounds(buckets)
 
   for (const tk of tickets) {
     const score = STATUS_SCORE[tk.status]
     if (score === undefined) continue
-    const ts = new Date(tk.timestamp).getTime()
-    const idx = buckets.findIndex(b => ts >= b.from.getTime() && ts <= b.to.getTime())
+    const idx = bucketIndexOf(new Date(tk.timestamp).getTime(), bounds)
     if (idx === -1) continue
 
     let agg = teams.get(tk.team_key)

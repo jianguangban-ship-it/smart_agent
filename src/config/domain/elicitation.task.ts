@@ -133,6 +133,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       hintEn: 'Operational safety before deployment',
       hintZh: '部署前的运维安全保障'
     }
+  ],
+  'pmo-manager': [
+    {
+      questionEn: 'What are the milestones, owners, and target dates?',
+      questionZh: '里程碑、负责人和目标日期是什么？',
+      hintEn: 'Schedule and accountability',
+      hintZh: '进度与责任归属'
+    },
+    {
+      questionEn: 'What cross-team dependencies or risks could affect delivery?',
+      questionZh: '哪些跨团队依赖或风险可能影响交付？',
+      hintEn: 'Dependency and risk management',
+      hintZh: '依赖与风险管理'
+    }
   ]
 }
 

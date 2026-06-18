@@ -2,6 +2,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import type { QualityTicket } from '@/types/quality'
 import { range, buckets, type PhaseBucket } from '@/composables/useTimingPhase'
+import { bucketBounds, bucketIndexOf } from '@/utils/bucketIndex'
 
 const tickets = ref<QualityTicket[]>([])
 const loading = ref(false)
@@ -110,12 +111,7 @@ export function summarize(list: QualityTicket[], bkts: PhaseBucket[]): PeriodSum
   const teamMap = new Map<string, TeamSummary>()
   const matrixMap = new Map<string, MatrixRow>()
   const bucketLabels = bkts.map(b => b.label)
-
-  const cellFor = (row: MatrixRow, label: string): MatrixCell => {
-    let c = row.cells.find(x => x.bucketLabel === label)
-    if (!c) { c = { bucketLabel: label, counts: {}, total: 0 }; row.cells.push(c) }
-    return c
-  }
+  const bounds = bucketBounds(bkts)
 
   for (const tk of list) {
     const status = tk.status
@@ -134,10 +130,11 @@ export function summarize(list: QualityTicket[], bkts: PhaseBucket[]): PeriodSum
       row = { team_key: tk.team_key, team: tk.team || tk.team_key, cells: bkts.map(b => ({ bucketLabel: b.label, counts: {}, total: 0 })), total: 0 }
       matrixMap.set(tk.team_key, row)
     }
-    const ts = new Date(tk.timestamp).getTime()
-    const bucket = bkts.find(b => ts >= b.from.getTime() && ts <= b.to.getTime())
-    if (bucket) {
-      const cell = cellFor(row, bucket.label)
+    // Binary-search the containing bucket; row.cells is built from the same
+    // ordered `bkts`, so the cell index equals the bucket index (no .find).
+    const idx = bucketIndexOf(new Date(tk.timestamp).getTime(), bounds)
+    if (idx !== -1) {
+      const cell = row.cells[idx]
       tally(cell.counts, status)
       cell.total++
       row.total++
@@ -168,9 +165,41 @@ const filteredSummary = computed<PeriodSummary>(() => summarize(filteredTickets.
 // View refetches if the data went stale meanwhile.
 const gridActive = ref(true)
 
+// --- real-time push (SSE) ------------------------------------------------
+// While the grid is active, listen for "tickets changed" pings from the server
+// (emitted on each n8n upsert) and refetch — coalesced so a burst of writes
+// triggers a single refresh. The stream is open ONLY while View is on screen,
+// so hidden modes pay nothing. The visibility/30s refresh below is the fallback
+// if the stream drops.
+let _es: EventSource | null = null
+let _coalesce: ReturnType<typeof setTimeout> | null = null
+
+function scheduleRefresh(): void {
+  if (_coalesce) return
+  _coalesce = setTimeout(() => { _coalesce = null; fetchTickets() }, 2000)
+}
+
+function openStream(): void {
+  if (_es || typeof EventSource === 'undefined') return
+  try {
+    _es = new EventSource('/api/tickets/stream')
+    _es.onmessage = () => scheduleRefresh()
+    // EventSource auto-reconnects on error; nothing to do here.
+  } catch {
+    _es = null
+  }
+}
+
+function closeStream(): void {
+  _es?.close()
+  _es = null
+  if (_coalesce) { clearTimeout(_coalesce); _coalesce = null }
+}
+
 export function setGridActive(active: boolean): void {
   const wasActive = gridActive.value
   gridActive.value = active
+  if (active) openStream(); else closeStream()
   // Re-entering View after the data went stale — same 30s rule as the
   // tab-focus refresh. lastFetched === 0 means the onMounted fetch hasn't
   // happened yet; that fetch owns the initial load.
@@ -203,7 +232,9 @@ export function useQualityGrid() {
         () => fetchTickets()
       )
     }
-    fetchTickets()
+    // Only fetch on mount if the grid is the active view (with the async-mounted
+    // panel this is true when entering View; avoids a cold-load fetch otherwise).
+    if (gridActive.value) fetchTickets()
   })
   onUnmounted(() => {
     _wired--
@@ -211,6 +242,7 @@ export function useQualityGrid() {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       _stopRangeWatch?.()
       _stopRangeWatch = null
+      closeStream()
     }
   })
 

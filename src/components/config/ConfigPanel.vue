@@ -71,6 +71,22 @@
         </svg>
         <span class="rail-label">{{ t('config.skills') }}</span>
       </button>
+
+      <!-- Activity (live log) -->
+      <button
+        type="button"
+        role="tab"
+        class="rail-item"
+        :class="{ active: activeSubPage === 'logs' }"
+        :aria-selected="activeSubPage === 'logs'"
+        :title="t('config.activity')"
+        @click="select('logs')"
+      >
+        <svg class="rail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12h4l2 6 4-14 2 8h6" />
+        </svg>
+        <span class="rail-label">{{ t('config.activity') }}</span>
+      </button>
     </nav>
 
     <!-- Right content — sub-page area. -->
@@ -78,6 +94,7 @@
       <TeamConfig v-show="activeSubPage === 'team'" :active="activeSubPage === 'team'" />
       <ModelConfig v-show="activeSubPage === 'model'" :active="activeSubPage === 'model'" />
       <SkillsConfig v-show="activeSubPage === 'skills'" :active="activeSubPage === 'skills'" />
+      <LogsPanel v-if="logsVisited" v-show="activeSubPage === 'logs'" :active="activeSubPage === 'logs'" />
     </section>
   </div>
 </template>
@@ -88,6 +105,7 @@ import { useI18n } from '@/i18n'
 import ModelConfig from '@/components/config/ModelConfig.vue'
 import SkillsConfig from '@/components/config/SkillsConfig.vue'
 import TeamConfig from '@/components/config/TeamConfig.vue'
+import LogsPanel from '@/components/logs/LogsPanel.vue'
 
 // `active` mirrors the View panel's prop shape (gates work while another mode is
 // on screen). Unused for now.
@@ -95,15 +113,19 @@ defineProps<{ active?: boolean }>()
 
 const { t } = useI18n()
 
-type SubPage = 'team' | 'model' | 'skills'
-const SUB_PAGES: SubPage[] = ['team', 'model', 'skills']
+type SubPage = 'team' | 'model' | 'skills' | 'logs'
+const SUB_PAGES: SubPage[] = ['team', 'model', 'skills', 'logs']
 
 // Active sub-page (persisted) — restored on reload like Explore's rail state.
 const LS_SUBPAGE = 'config_sub_page'
 const storedSub = localStorage.getItem(LS_SUBPAGE) as SubPage | null
 const activeSubPage = ref<SubPage>(storedSub && SUB_PAGES.includes(storedSub) ? storedSub : 'team')
+// LogsPanel is lazily mounted on first visit (it opens an SSE connection only
+// while active), so it costs nothing until the user opens Activity.
+const logsVisited = ref(activeSubPage.value === 'logs')
 function select(page: SubPage) {
   activeSubPage.value = page
+  if (page === 'logs') logsVisited.value = true
   localStorage.setItem(LS_SUBPAGE, page)
 }
 

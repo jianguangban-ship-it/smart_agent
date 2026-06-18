@@ -158,6 +158,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       hintEn: 'Defines operational behavior under failure',
       hintZh: '定义故障下的运维行为'
     }
+  ],
+  'pmo-manager': [
+    {
+      questionEn: 'What is the project scope, and what is explicitly out of scope?',
+      questionZh: '项目范围是什么？哪些明确不在范围内？',
+      hintEn: 'Prevents scope ambiguity',
+      hintZh: '避免范围歧义'
+    },
+    {
+      questionEn: 'Who are the stakeholders, and what are the key deliverables and deadlines?',
+      questionZh: '利益相关方是谁？关键交付物和截止日期是什么？',
+      hintEn: 'Aligns expectations and timeline',
+      hintZh: '对齐预期与时间线'
+    }
   ]
 }
 

@@ -153,7 +153,7 @@
             v-if="appMode !== 'explore' && !isAnalyzeLoading"
             class="action-btn action-analyze"
             :class="{ dimmed: hasAiResponse }"
-            :disabled="!canCoachSubmit || isSubmitting || isCoachLoading || (appMode === 'task' && !hasCoachResponse)"
+            :disabled="!canCoachSubmit || isSubmitting || isCoachLoading || (appMode === 'task' && !hasCoachResponse) || jiraCreated"
             :title="t('form.aiAnalyze') + ' (Ctrl+Shift+Enter)'"
             @click="$emit('analyze')"
           >
@@ -182,7 +182,7 @@
             v-show="appMode === 'task'"
             class="action-btn action-create"
             :class="{ 'invisible-slot': !hasAiResponse }"
-            :disabled="!hasAiResponse || isSubmitting || isCoachLoading || !canCoachSubmit"
+            :disabled="!hasAiResponse || isSubmitting || isCoachLoading || isAnalyzeLoading || !canCoachSubmit || jiraCreated"
             :title="t('form.confirmCreate') + ' (Ctrl+Shift+C)'"
             @click="$emit('create')"
           >
@@ -247,6 +247,7 @@ defineProps<{
   analyzeHadError?: boolean
   analyzeWasCancelled?: boolean
   analyzeBackoffSecs?: number
+  jiraCreated?: boolean
 }>()
 
 defineEmits<{

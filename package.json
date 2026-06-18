@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "server": "tsx watch --env-file-if-exists=deploy/.env server/index.ts",
     "dev:all": "concurrently -k -r -n vite,server -c blue,green \"npm:dev\" \"npm:server\"",
     "build": "vue-tsc -b && vite build",

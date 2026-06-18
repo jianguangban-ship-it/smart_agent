@@ -118,13 +118,23 @@ export function isStringArray(v: unknown): v is string[] {
 // ── The one mutation the route needs ────────────────────────────────────────
 // Splice this team's roster + components into the two full maps and persist
 // both. Returns what was written so the client can sync its live refs.
+export interface MemberRef { id: string; name: string }
+
 export function saveTeam(
   key: string,
   members: TeamMember[],
   components: string[]
-): { members: TeamMember[]; components: string[] } {
+): { members: TeamMember[]; components: string[]; added: MemberRef[]; removed: MemberRef[] } {
   const membersMap = readJson<Record<string, TeamMember[]>>(MEMBERS_FILE)
   const componentsMap = readJson<Record<string, string[]>>(COMPONENTS_FILE)
+
+  // Member delta (for the audit event) — computed before overwriting. Names come
+  // from the NEW roster for adds and the PREVIOUS roster for removes.
+  const prev = membersMap[key] ?? []
+  const prevIds = new Set(prev.map(m => m.id))
+  const nextIds = new Set(members.map(m => m.id))
+  const added: MemberRef[] = members.filter(m => !prevIds.has(m.id)).map(m => ({ id: m.id, name: m.name }))
+  const removed: MemberRef[] = prev.filter(m => !nextIds.has(m.id)).map(m => ({ id: m.id, name: m.name }))
 
   backup(MEMBERS_FILE)
   membersMap[key] = members
@@ -134,5 +144,5 @@ export function saveTeam(
   componentsMap[key] = components
   writeJsonAtomic(COMPONENTS_FILE, componentsMap)
 
-  return { members, components }
+  return { members, components, added, removed }
 }

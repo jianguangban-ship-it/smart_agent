@@ -91,6 +91,9 @@ describe('QualityTrendModelling (ECharts wiring)', () => {
     await nextTick()
     const calls = setOption.mock.calls.length
     await wrapper.setProps({ tickets: TICKETS.slice(0, 3) })
+    // The model build is now debounced (~120ms) and off the synchronous path;
+    // wait out the debounce so the recompute → render fires.
+    await new Promise(r => setTimeout(r, 150))
     await nextTick()
     expect(setOption.mock.calls.length).toBeGreaterThan(calls)
   })

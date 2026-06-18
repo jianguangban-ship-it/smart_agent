@@ -9,7 +9,7 @@
       <h1 class="header-title brand-eax" aria-label="EAX">
         <span class="brand-e">E</span><span class="brand-a">A</span><span class="brand-x">X</span>
       </h1>
-      <span class="header-version">v10.224</span>
+      <span class="header-version">v10.230</span>
     </div>
     <div class="header-right">
       <!-- Cross-mode "reply ready" chip: a background-mode stream finished -->

@@ -83,6 +83,10 @@ describe('PUT /api/config/team/:key', () => {
     expect(members.DKKF).toEqual(MEMBERS.DKKF) // untouched
     expect(readComponents().HW).toEqual(['PIU', 'MCU', 'CSU'])
     expect(readComponents().DKKF).toEqual(['MCAL'])
+    // member delta carries names (for the team.save audit event)
+    const saved = res.json() as { added: { id: string; name: string }[]; removed: { id: string; name: string }[] }
+    expect(saved.added).toEqual([{ id: 'GW002', name: 'Carol' }])
+    expect(saved.removed).toEqual([])
   })
 
   it('writes a timestamped backup before overwriting', async () => {

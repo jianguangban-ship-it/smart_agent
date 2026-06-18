@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import {
   verifyTeamCode, isTeamMemberArray, isStringArray, saveTeam, type TeamMember
 } from '../config-store.js'
+import { audit } from '../logs/log-bus.js'
 
 // The Team-page editor (Config mode) writes here. Network is open on the
 // intranet; the gate is per-team: the caller must supply that team's edit code.
@@ -15,7 +16,13 @@ export async function configRoutes(app: FastifyInstance) {
   app.post<{ Params: { key: string }; Body: { code?: string } }>(
     '/config/team/:key/unlock',
     async (req, reply) => {
-      if (!verifyTeamCode(req.params.key, req.body?.code)) {
+      const ok = verifyTeamCode(req.params.key, req.body?.code)
+      audit(req.log, 'team.unlock', {
+        source: 'ui', ip: req.ip, team_key: req.params.key,
+        msg: `team ${req.params.key} unlock ${ok ? 'ok' : 'rejected'}`,
+        detail: { ok }
+      })
+      if (!ok) {
         reply.code(401).send({ error: 'auth' })
         return
       }
@@ -52,6 +59,14 @@ export async function configRoutes(app: FastifyInstance) {
         ids.add(m.id)
       }
       const saved = saveTeam(req.params.key, members as TeamMember[], components as string[])
+      const names = (list: { name: string }[]) => list.map(m => m.name).join(', ')
+      const addPart = saved.added.length ? ` +${saved.added.length} (${names(saved.added)})` : ''
+      const remPart = saved.removed.length ? ` −${saved.removed.length} (${names(saved.removed)})` : ''
+      audit(req.log, 'team.save', {
+        source: 'ui', ip: req.ip, team_key: req.params.key,
+        msg: `team ${req.params.key} saved ·${addPart}${remPart} · ${saved.components.length} components`,
+        detail: { added: saved.added, removed: saved.removed, memberCount: saved.members.length, componentCount: saved.components.length }
+      })
       reply.send(saved)
     }
   )

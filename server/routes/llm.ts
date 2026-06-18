@@ -15,6 +15,7 @@ import type { BaseMessage, BaseMessageLike } from '@langchain/core/messages'
 import { createReactAgent } from '@langchain/langgraph/prebuilt'
 import { makeChatModel } from '../llm/openai-client.js'
 import { getMCPTools } from '../mcp/client.js'
+import { audit } from '../logs/log-bus.js'
 
 type ChatRole = 'system' | 'user' | 'assistant'
 /** Content is a string (text turn) or OpenAI content parts (multi-modal/vision). */
@@ -58,6 +59,11 @@ export async function requireInternalTokenIfConfigured(req: FastifyRequest, repl
   if (!INTERNAL_API_TOKEN) return
   const provided = req.headers['x-internal-token']
   if (provided !== INTERNAL_API_TOKEN) {
+    audit(req.log, 'auth.fail', {
+      level: 'warn', source: 'ui', ip: req.ip,
+      msg: `auth.fail ${req.method} ${req.url} · bad internal token`,
+      detail: { route: req.url, reason: 'internal_token' }
+    })
     reply.code(401).send({ error: 'auth' })
   }
 }

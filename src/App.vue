@@ -150,6 +150,7 @@
             :task-coach-was-cancelled="taskCoachWasCancelled"
             :task-coach-backoff-secs="taskCoachBackoffSecs"
             :is-analyze-loading="isAnalyzeLoading"
+            :jira-created="!!lastCreatedKey"
             :analyze-stream-speed="analyzeStreamSpeed"
             :analyze-had-error="analyzeHadError"
             :analyze-was-cancelled="analyzeWasCancelled"
@@ -199,7 +200,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, defineAsyncComponent } from 'vue'
 import type { WebhookPayload } from '@/types/api'
 import { useI18n } from '@/i18n'
 import { useForm } from '@/composables/useForm'
@@ -230,6 +231,7 @@ import { useAttachment, inlineAttachments, stripImageContent } from '@/composabl
 import { getContextLimitTokens } from '@/config/llm'
 import { getResponseFormat } from '@/config/skills'
 import { contextUsage, formatTokens } from '@/utils/contextCalculator'
+import { logClientEvent } from '@/utils/auditClient'
 import type { LLMChatMessage } from '@/types/api'
 import { getTemplateContent, effectiveTemplates, setCustomTemplates } from '@/config/templates/index'
 import type { TemplateDefinition } from '@/types/template'
@@ -245,7 +247,9 @@ import TicketHistoryPanel from '@/components/panels/TicketHistoryPanel.vue'
 import BatchPanel from '@/components/panels/BatchPanel.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
 import JsonViewer from '@/components/shared/JsonViewer.vue'
-import QualityGridPanel from '@/components/quality/QualityGridPanel.vue'
+// Async so ECharts + the quality components (~500 KB) are a lazy chunk loaded
+// only on the first View visit — off the cold-load critical path for Explore/Task.
+const QualityGridPanel = defineAsyncComponent(() => import('@/components/quality/QualityGridPanel.vue'))
 import ConfigPanel from '@/components/config/ConfigPanel.vue'
 import ExploreChat from '@/components/chat/ExploreChat.vue'
 import ArtifactPanel from '@/components/chat/ArtifactPanel.vue'
@@ -658,11 +662,28 @@ async function confirmCreate() {
   if (err) {
     errorMessage.value = err
     addToast('error', err)
+    // Activity log: the create is browser→n8n, so the server can only know about
+    // it if the client reports it. Record the failed attempt (NOK).
+    logClientEvent('jira.create', {
+      level: 'warn',
+      msg: `jira.create · ${form.projectKey || '?'} · NOK`,
+      detail: { outcome: 'NOK', error: err, project: getProjectName(), team_key: form.projectKey, issueType: form.issueType }
+    })
   } else {
     addToast('success', t('toast.createSuccess'))
     advanceTo('jira-created')
     const resp = jiraResponse.value as Record<string, unknown> | null
     const key = (resp?.key || (resp?.jira_result as Record<string, unknown>)?.key) as string | undefined
+    // Activity log: record the successful create with the real issue key (OK).
+    logClientEvent('jira.create', {
+      msg: `jira.create ${key ?? '?'} · ${form.projectKey || '?'}${form.estimatedPoints ? ` · ${form.estimatedPoints}pts` : ''} · OK`,
+      detail: {
+        outcome: 'OK', issueKey: key ?? null, project: getProjectName(), team_key: form.projectKey,
+        issueType: form.issueType, points: form.estimatedPoints,
+        assignee: buildAssignee()?.displayName, summary: computedSummary.value,
+        actionTime: new Date().toISOString()
+      }
+    })
     if (key) {
       lastCreatedKey.value = key
       addTicket({

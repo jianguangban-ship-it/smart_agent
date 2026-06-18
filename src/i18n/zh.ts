@@ -20,6 +20,7 @@ export default {
     team: '团队',
     model: '模型',
     skills: '技能',
+    activity: '活动日志',
     railToggle: '折叠侧边栏',
     modelSubtitle: '大模型服务地址、密钥与模型。',
     skillsSubtitle: '教练提示词、分析与模板。',
@@ -58,6 +59,22 @@ export default {
     saveAuthFailed: '编辑码被拒绝 —— 请重新解锁团队。',
     confirmDiscard: '放弃未保存的修改？',
     movedQueued: '已暂存 —— 解锁 {team} 并保存以完成移动。'
+  },
+  logs: {
+    title: '活动日志',
+    subtitle: '实时审计事件与服务端警告/错误。只读。',
+    live: '实时',
+    offline: '已断开',
+    filter_all: '全部',
+    filter_audit: '审计',
+    filter_warn: '警告',
+    filter_error: '错误',
+    search: '搜索活动…',
+    pause: '暂停',
+    resume: '继续',
+    clear: '清空',
+    loadOlder: '↑ 加载更早',
+    empty: '暂无活动。'
   },
   form: {
     basicInfo: '基本信息',

@@ -25,12 +25,14 @@ services:
       LLMPROXY_BASE_URL: ${LLMPROXY_BASE_URL:-https://llmproxy.gwm.cn/v1}
     volumes:
       # Editable runtime configs (projects, team-members, components, summary-options).
-      # SEED this host dir with the four deploy/config/*.json files before first run:
-      # the Config-mode Team editor reads AND writes them here, so an empty volume
-      # makes saves fail and dropdowns fall back to baked-in defaults.
+      # No manual seeding needed: on first boot the entrypoint copies the baked
+      # defaults (built from public/config) into this volume for any missing file.
+      # Thereafter this volume is the live source of truth — the Config-mode Team
+      # editor reads AND writes it, and edits persist across restarts.
       - /usr/local/smart_agent/data:/app/dist/config
       # SQLite DB for the View-mode quality grid + team-codes.json (per-team edit
-      # codes; NOT web-served). Survives container restarts. Drop team-codes.json
-      # (see deploy/team-codes.sample.json) into this host dir to enable editing.
+      # codes; NOT web-served, NOT auto-seeded — it's a secret). Survives restarts.
+      # Drop team-codes.json (see deploy/team-codes.sample.json) into this host dir
+      # to enable in-app editing.
       - /usr/local/smart_agent/quality-db:/app/data
     restart: unless-stopped

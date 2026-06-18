@@ -20,6 +20,8 @@ import taskSkillVVEn from './coach-skill-task-vv-en.md?raw'
 import taskSkillVVZh from './coach-skill-task-vv-zh.md?raw'
 import taskSkillDevopsEn from './coach-skill-task-devops-en.md?raw'
 import taskSkillDevopsZh from './coach-skill-task-devops-zh.md?raw'
+import taskSkillPmoEn from './coach-skill-task-pmo-en.md?raw'
+import taskSkillPmoZh from './coach-skill-task-pmo-zh.md?raw'
 
 const TASK_SKILL_MAP: Record<string, { en: string; zh: string }> = {
   SYS:  { en: taskSkillSysEn, zh: taskSkillSysZh },
@@ -29,6 +31,7 @@ const TASK_SKILL_MAP: Record<string, { en: string; zh: string }> = {
   ME:   { en: taskSkillMeEn, zh: taskSkillMeZh },
   VV:   { en: taskSkillVVEn, zh: taskSkillVVZh },
   Devops:  { en: taskSkillDevopsEn, zh: taskSkillDevopsZh },
+  PMO:  { en: taskSkillPmoEn, zh: taskSkillPmoZh },
 }
 
 // ─── localStorage keys ──────────────────────────────────────────────────────

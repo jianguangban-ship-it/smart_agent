@@ -124,6 +124,11 @@ export function useForm() {
       projectKey: 8, issueType: 8, assignee: 6, estimatedPoints: 4,
       vehicle: 4, product: 4, layer: 6, component: 8, detail: 12,
       descriptionPresent: 14, descriptionLength: 26
+    },
+    'pmo-manager': {
+      projectKey: 8, issueType: 8, assignee: 6, estimatedPoints: 6,
+      vehicle: 4, product: 4, layer: 6, component: 4, detail: 10,
+      descriptionPresent: 14, descriptionLength: 30
     }
   }
 
@@ -184,6 +189,7 @@ export function useForm() {
     ME:     'me-designer',
     VV:     'vv-engineer',
     Devops: 'devops-engineer',
+    PMO:    'pmo-manager',
   }
 
   watch(() => summary.layer, (layer) => {
@@ -227,7 +233,7 @@ export function useForm() {
   }
 
   // Add component to this session's history for the currently selected project.
-  // Persistent changes should go to public/config/components.json or deploy/config/components.json.
+  // Persistent changes should go to public/config/components.json (the single source of truth).
   function addComponentToHistory(comp: string) {
     const key = form.projectKey
     if (!key || !comp) return

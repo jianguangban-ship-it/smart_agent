@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-export type UserRole = '' | 'system-architect' | 'sw-developer' | 'app-developer' |'hw-designer' | 'me-designer' | 'vv-engineer' | 'devops-engineer'
+export type UserRole = '' | 'system-architect' | 'sw-developer' | 'app-developer' |'hw-designer' | 'me-designer' | 'vv-engineer' | 'devops-engineer' | 'pmo-manager'
 
 export interface RoleDefinition {
   id: UserRole
@@ -93,6 +93,17 @@ export const ROLES: RoleDefinition[] = [
     contextZh: '用户是研发运维（DevOps）软件工程师。重点关注：CI/CD 流水线、构建与发布自动化、工具链与环境配置、基础设施即代码、容器化、部署策略、版本与制品管理、监控/可观测性、以及构建与测试环境的可复现性。',
     placeholderEn: 'Describe the DevOps/automation requirement or change. Include: pipeline stages affected, build/release scope, environment or toolchain config, rollback strategy, monitoring/alerting needs, and reproducibility constraints...',
     placeholderZh: '描述研发运维/自动化需求或变更。包含：受影响的流水线阶段、构建/发布范围、环境或工具链配置、回滚策略、监控/告警需求、以及可复现性约束...'
+  },
+  {
+    id: 'pmo-manager',
+    labelEn: 'PMO Manager',
+    labelZh: '项目管理(PMO)',
+    shortEn: 'PMO',
+    shortZh: '项管',
+    contextEn: 'The user is a Project Management Office (PMO) lead. Focus on: project planning and scheduling, scope and milestone definition, cross-team dependency and risk management, resource allocation, deliverable tracking, stakeholder reporting, and process/quality governance. Emphasize clear owners, dependencies, dates, and acceptance criteria; flag vague scope, missing owners, or unmanaged risks.',
+    contextZh: '用户是项目管理办公室（PMO）负责人。重点关注：项目计划与排期、范围与里程碑定义、跨团队依赖与风险管理、资源分配、交付物跟踪、利益相关方汇报、以及流程/质量治理。强调明确的负责人、依赖、日期与验收标准；标记模糊的范围、缺失的负责人或未受控的风险。',
+    placeholderEn: 'Describe the project management task or change. Include: scope and deliverables, milestones and target dates, cross-team dependencies and blockers, owners, risks and mitigations, and reporting/governance needs...',
+    placeholderZh: '描述项目管理任务或变更。包含：范围与交付物、里程碑与目标日期、跨团队依赖与阻塞、负责人、风险与缓解措施、以及汇报/治理需求...'
   }
 ]
 

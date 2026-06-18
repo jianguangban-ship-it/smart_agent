@@ -1684,3 +1684,93 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   only the seed — the running container never reads deploy/config/ directly.
 - The honored .dockerignore is the REPO ROOT one (BuildKit ignores deploy/.dockerignore for a root build
   context). Don't ignore `deploy/` wholesale there — the Dockerfile COPYs deploy/mcp-servers.json.
+
+## v10.225 — Adding a new task layer + its coach skill (the recipe)
+- A task "layer" (SYS/SW/APP/HW/ME/VV/Devops/PMO) maps to a layer-specific coach skill via
+  `TASK_SKILL_MAP` in `src/config/skills/index.ts`. To add a layer's skill: (1) drop
+  `coach-skill-task-<layer>-en.md` + `-zh.md` in `src/config/skills/`, (2) add two `?raw` imports, (3) add
+  a `<LAYER>: { en, zh }` entry keyed EXACTLY to the layer string from summary-options.json. Missing entry
+  ⇒ silent fallback to the SW skill (`getCoachSkillTaskDefault`). Also add the layer to `LAYER_OPTIONS`
+  (constants.ts) fallback. The layer must also be in `summary-options.json` "layers" in BOTH public/config
+  (dev) and the prod volume copy to appear in the dropdown.
+- The "role" system (`useRole.ts` ROLES, `LAYER_ROLE_MAP` in useForm) is largely cosmetic: `getRoleContext`
+  is injected into NO prompt and `getDefaultTaskLevel` returns a constant. A new layer works without a role
+  (the coach prompt is driven by the layer→skill map, not the role).
+
+## v10.226 — Adding a new UserRole (the recipe)
+- Roles live in `src/composables/useRole.ts` (`UserRole` union + `ROLES[]`). A layer auto-selects a role
+  via `LAYER_ROLE_MAP` in `useForm.ts`. Adding a UserRole member BREAKS every exhaustive
+  `Record<UserRole, …>` until you add the key — there are exactly THREE: `ROLE_WEIGHTS` (useForm.ts),
+  and `ROLE_QUESTIONS` in `elicitation.task.ts` + `elicitation.explore.ts`. `roles: UserRole[]` arrays
+  (aspice/standards/vocabulary/traceability/etc.) are NON-exhaustive — optional. `grep -rn 'Record<UserRole' src/`
+  to find the must-fill ones; vue-tsc will flag any missed. PMO done in v10.226.
+
+## v10.227 — Runtime config is ONE source: public/config (+ prod auto-seed)
+- The four runtime JSONs (projects/team-members/components/summary-options) have ONE managed source:
+  `public/config/`. Dev serves it (Vite); the in-app editor writes it (dev); `vite build` bakes it into
+  `dist/config` (image defaults). `deploy/config/` is DELETED. NEVER hand-edit `dist/config` (gitignored
+  build output, shadowed by the prod volume).
+- Prod: `deploy/docker-entrypoint.sh` seeds the `/app/dist/config` volume from baked `/app/config-defaults`
+  on first boot for any MISSING file (idempotent — won't clobber ops/editor edits). No manual seeding.
+  Once seeded, the volume is the live truth; rebuilding the image does NOT update a populated prod volume.
+- `team-codes.json` stays ops-placed in the quality-db volume (secret, not baked/seeded).
+- Canonical layer set is now VV/Devops/PMO (public). The old deploy copy's TEST/SWF were dropped — add to
+  public/config/summary-options.json if ever needed. Supersedes the 3-folder model in earlier entries.
+
+## v10.228 — Activity Log (audit + live stream)
+- Critical actions emit `audit(req.log, evt, {source, ip, team_key, msg, detail})` (server/logs/log-bus.ts):
+  pushes a STRUCTURED entry to a ring buffer + EventEmitter + (for evt/error) the `audit_log` SQLite table.
+  Add new audit points by calling `audit()` at the site — don't tap logs manually.
+- The Fastify logger `stream` is `logTap`: stdout passthrough + cheap `level>=40` precheck; only warn/error
+  are parsed/captured (info/debug skipped → near-zero overhead). audit() logs at info so the tap skips it
+  (no double-ingest). `trustProxy:true` set so `req.ip` is the real client behind the GWM proxy.
+- UI is a lazily-mounted Config sub-page "Activity" (ConfigPanel) using `useLogStream` (SSE via
+  fetch+ReadableStream, reuses llm.ts wire shape) — connects ONLY while the page is `active`. SSE endpoint
+  `GET /api/logs/stream` reuses the llm.ts SSE pattern (X-Accel-Buffering:no, reply.raw close guard).
+- audit_log lives in quality.db (existing /app/data volume — NO new volume). Retention via
+  LOG_RETENTION_ROWS(5000)/LOG_RETENTION_DAYS(90), throttled prune. LOG_RING_SIZE(500) for the live tail.
+
+## v10.228 addendum — what the Activity log captures
+- Logged: team.unlock/save, **jira.create/update (OK/NOK)**, auth.fail (warn), mcp.ready/disabled,
+  server.start, + all non-audit warn/error via the tap. JIRA is captured from n8n's POST /api/tickets
+  callback (helper `auditTicketResponse` in tickets.ts, called from the index.ts onResponse hook): real
+  key 201/200 = OK, sentinel/400 = NOK(warn). NO client code — debugging pairs with the n8n system log.
+- NOT logged (by decision, minimal-burden): per-chat LLM and per-MCP-tool-call. Errors on those paths are
+  still captured.
+- audit() takes an optional `level`; the tap skips lines containing `"evt":` so warn-level audits aren't
+  double-ingested. Add new audit points by calling `audit(log, evt, {level?, source, ip, team_key, msg, detail})`.
+
+## v10.228 follow-up — team-log names + JIRA-create client ping
+- team.save audit now shows member NAMES (saveTeam returns added/removed as {id,name}: names from the new
+  roster for adds, previous roster for removes).
+- JIRA create is browser→n8n (NEVER hits our server), so it's logged via a CLIENT PING: App.vue
+  confirmCreate → logClientEvent('jira.create', …) → POST /api/logs/event (allowlist jira.create/update,
+  size-capped, server stamps source:ui+ip). OK on success (real issue key from jiraResponse), NOK(warn) on
+  failure. The earlier "use n8n /api/tickets callback" approach didn't work — n8n doesn't post on create.
+- The /api/tickets server event was renamed jira.* → `ticket.write` (n8n quality-grid write w/ AI grade),
+  distinct from the user's `jira.create` ping. To log a new client action, add evt to CLIENT_EVT_ALLOW in
+  routes/logs.ts + call logClientEvent.
+
+## v10.229 — Task-mode button sequence (Review→Analysis→Create JIRA)
+- The three Task action buttons live in TaskForm.vue; state flows from App.vue. Gates: Review =
+  `!canCoachSubmit` (requires full Basic Info + Task Summary via canSubmit); Analysis needs
+  `hasCoachResponse` (review done) + not `jiraCreated`; Create needs `hasAiResponse` + not isAnalyzeLoading
+  + not `jiraCreated`. `jiraCreated = !!lastCreatedKey` (App.vue): set on create success, cleared on Reset
+  / re-clicking Review (new iteration). So after a successful create BOTH Analysis and Create lock until
+  reset/new review. When changing this flow, edit the two `:disabled` exprs in TaskForm + the lastCreatedKey
+  lifecycle in App.vue.
+
+## v10.230 — View dashboard: real-time SSE + code-split + compute off-thread
+- View-mode quality grid is now real-time via SSE PUSH (not polling): server/events.ts emits on ticket
+  upsert; GET /api/tickets/stream (SSE); useQualityGrid opens an EventSource ONLY while gridActive and
+  coalesces refetches (~2s). 30s/visibility refresh kept as fallback. To add other live signals, reuse the
+  events.ts emitter pattern.
+- First-load: QualityGridPanel is a defineAsyncComponent + echarts is its own vite manualChunk → main
+  index chunk dropped 1,373→788 KB; echarts/grid/worker load only on first View visit. Don't statically
+  import QualityGridPanel again.
+- Bucket assignment: src/utils/bucketIndex.ts (Vue-free, binary search) replaces the O(m) .find()/.findIndex()
+  in summarize() + buildSeries(); buckets are sorted+non-overlapping (gaps ok). formatTime is memoized;
+  TrendMatrix precomputes cell segments in a computed.
+- useQualityModel.ts is Vue-free (type-only imports) → buildSeries runs in src/workers/qualityModel.worker.ts.
+  QualityTrendModelling drives `series` from a debounced (120ms) id-tagged worker call with a SYNC fallback
+  when Worker is undefined (jsdom/tests). Component tests that change props must wait out the debounce.
