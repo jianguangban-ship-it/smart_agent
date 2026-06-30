@@ -131,6 +131,15 @@ describe('forecastSeries (damped, count-weighted, fit-anchored)', () => {
     expect(forecast[0]).toBe(87) // 80 + 10×0.7
   })
 
+  it('anchors at the window end ("now") when the latest buckets are empty', () => {
+    // v10.237: data ends at index 2 but the window is 5 slots. slope 2,
+    // intercept 50 → fitted "now" = ŷ(4) = 58 (not ŷ(2)=54). Forecast projects
+    // from 58: 58+2·0.7=59.4→59, 58+2·1.19=60.38→60, 58+2·1.533=61.07→61.
+    const { forecast, forecastAnchor } = forecastSeries([50, 52, 54, null, null], [3, 3, 3, 0, 0], 3)
+    expect(forecastAnchor).toBe(58)
+    expect(forecast).toEqual([59, 60, 61])
+  })
+
   it('still clamps to [0, 100]', () => {
     const { forecast } = forecastSeries([0, 0, 5], [1, 1, 1], 3)
     expect(forecast.every(v => v >= 0 && v <= 100)).toBe(true)

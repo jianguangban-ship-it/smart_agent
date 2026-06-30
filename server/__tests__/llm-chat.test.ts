@@ -262,4 +262,41 @@ describe('POST /api/llm/chat (v10.131, Phase L1)', () => {
     })
     expect(res.statusCode).toBe(400)
   })
+
+  // v10.236: optional traceability context (team_key/project/assignee) for the
+  // Activity log. Accepted and additive; an unknown sub-field is rejected.
+  it('accepts an optional traceability context and still streams', async () => {
+    agentStreamMock.mockResolvedValueOnce(fakeAgentStream([aiTextChunk('ok')]))
+    const res = await app.inject({
+      method: 'POST', url: '/api/llm/chat',
+      payload: {
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: 'hi' }],
+        context: { team_key: 'DKKF', project: 'IDC_PDSW', assignee: 'Li Yunlong' }
+      }
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.trimEnd().endsWith('data: [DONE]')).toBe(true)
+  })
+
+  it('includes teamInformation in the upstream-error log', async () => {
+    const lines: string[] = []
+    const { llmRoutes } = await import('../routes/llm')
+    const logApp = Fastify({ logger: { level: 'info', stream: { write: (s: string) => { lines.push(s) } } } })
+    await logApp.register(llmRoutes, { prefix: '/api' })
+    await logApp.ready()
+    agentStreamMock.mockRejectedValueOnce(new Error('boom'))
+    await logApp.inject({
+      method: 'POST', url: '/api/llm/chat',
+      payload: {
+        model: 'm', messages: [{ role: 'user', content: 'hi' }],
+        context: { team_key: 'DKKF', project: 'IDC_PDSW', assignee: 'Li Yunlong' }
+      }
+    })
+    await logApp.close()
+    const joined = lines.join('\n')
+    expect(joined).toContain('llm/chat upstream error')
+    expect(joined).toContain('"team_key":"DKKF"')
+    expect(joined).toContain('Li Yunlong')
+  })
 })

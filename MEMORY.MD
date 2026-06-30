@@ -1761,10 +1761,11 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
   lifecycle in App.vue.
 
 ## v10.230 — View dashboard: real-time SSE + code-split + compute off-thread
-- View-mode quality grid is now real-time via SSE PUSH (not polling): server/events.ts emits on ticket
+- View-mode quality grid was real-time via SSE PUSH (not polling): server/events.ts emits on ticket
   upsert; GET /api/tickets/stream (SSE); useQualityGrid opens an EventSource ONLY while gridActive and
-  coalesces refetches (~2s). 30s/visibility refresh kept as fallback. To add other live signals, reuse the
-  events.ts emitter pattern.
+  coalesces refetches (~2s). 30s/visibility refresh kept as fallback. **SUPERSEDED by v10.231 —
+  the SSE stream + events.ts + 30s gate were all removed; do NOT reuse the events.ts pattern (file
+  deleted). View now refreshes only on tab focus / mode return.**
 - First-load: QualityGridPanel is a defineAsyncComponent + echarts is its own vite manualChunk → main
   index chunk dropped 1,373→788 KB; echarts/grid/worker load only on first View visit. Don't statically
   import QualityGridPanel again.
@@ -1774,3 +1775,274 @@ the norm in coach output. The `mathRendering.test.ts` bilingual section guards t
 - useQualityModel.ts is Vue-free (type-only imports) → buildSeries runs in src/workers/qualityModel.worker.ts.
   QualityTrendModelling drives `series` from a debounced (120ms) id-tagged worker call with a SYNC fallback
   when Worker is undefined (jsdom/tests). Component tests that change props must wait out the debounce.
+
+## v10.231 — Remove View-mode SSE; refresh on tab focus / mode return only
+- The v10.230 SSE push (persistent EventSource + 25s heartbeat) and the 30s staleness gate caused
+  sustained CPU/network load on GWM workstations (worst case: workstation froze, all apps closed).
+- REMOVED: server/events.ts (deleted), GET /api/tickets/stream route, emitTicketsChanged call in
+  POST /api/tickets, and the client SSE block (_es/_coalesce/openStream/closeStream) in useQualityGrid.ts.
+- View now auto-refreshes ONLY on user intent: browser tab focus (visibilitychange→visible) and returning
+  to View mode (setGridActive). No staleness throttle — every focus/return fires one /api/tickets GET.
+  The `lastFetched > 0` guard in setGridActive is KEPT (avoids a double fetch racing the onMounted load).
+- Manual Refresh button unchanged. lastFetched ref kept (still feeds the "Updated HH:MM" label).
+
+## v10.232 — Config Skills page laid out as 2×2 grid
+- SkillsConfig.vue: the 4 editors (Task Coach | Analyze · Response Format | Template Chips) are wrapped in
+  a `.skills-grid` (2 cols) and the page root uses `.config-form--wide` (1280px vs the default 820px).
+  Styles live in src/styles/config-forms.css; `align-items:start` lets the Template Chips <details> expand
+  without stretching its row-neighbor. Collapses to 1 col under 960px. Layout-only — no logic changed.
+
+## v10.233 — Config "Project" sub-page (placeholder)
+- New ConfigPanel sub-page Project, inserted between Team and Model: SUB_PAGES = ['team','project','model',
+  'skills','logs']. Component src/components/config/ProjectConfig.vue is a self-contained centered placeholder
+  (folder SVG + config.project + reused config.comingSoon). Rail icon is an SVG folder (rail is all-SVG, no
+  emoji). i18n key config.project (en 'Project' / zh '项目'). Real content TBD (likely PROJECT_CONFIG editor
+  from src/config/projects.ts).
+
+## v10.234 — Fixed the real 60s auto-poll in View mode (range-watch Object.is bug)
+- v10.231 removed SSE + the 30s gate but MISSED a third refresh path: useQualityGrid watched
+  `() => [range.from.getTime(), range.to.getTime()]` (a single getter returning a fresh array). `range`
+  (useTimingPhase) depends on `now` (useSprint, 60s tick), so every minute the getter returned a new array
+  reference; Vue's single-source watch uses Object.is → fired every 60s even when the window was unchanged →
+  fetchTickets() every minute. Fix: array-of-getters `watch([() => from, () => to], …)` so Vue compares
+  each number by value. Lesson: NEVER `watch(() => [a,b], cb)` for change-detection — the fresh array always
+  triggers; use an array of getters or a stable string key. Regression test: useQualityGrid.rangewatch.test.ts.
+
+## v10.235 — SW-EN coach skill brought to canonical parity
+- ralph-loop plugin can't improve EAX answer precision (it's a Claude Code Stop-hook dev-loop, not an
+  embeddable runtime component — no CLI session / test oracle in EAX). Chose prompt/skill improvement instead.
+- Fixed the biggest gap: coach-skill-task-sw-en.md was a 13-line generic stub vs the 134-line sw-zh canonical
+  SW01 template. Ported sw-zh → sw-en at full parity (role+codename, boundary gating, BSW/MCAL checklist,
+  worked example, FAIL list). Discipline prompts load as ?raw via TASK_SKILL_MAP in src/config/skills/index.ts
+  (mapped: SYS/SW/APP/HW/ME/VV/Devops/PMO; test+swf md files are unmapped/dead). See [[project_coach_prompt_canonical_format]].
+- Still thin (canonical-upgrade backlog): SYS/APP/HW/VV/Devops ×en/zh — add boundary + worked example + FAIL list.
+
+## v10.236 — Activity logs carry team_key/assignee/project (traceability)
+- Shared client-side selection store src/composables/useSelectionContext.ts (selectionContext ref +
+  setSelectionContext + selectionContextFields). Fed by App.vue's form watcher (projectKey/assignee). NOT a
+  server global — would leak across workstations; context travels per-request.
+- auditClient.logClientEvent now merges the selection into EVERY client event's detail as defaults → all
+  jira.create/update OK+NOK logs carry team/project/assignee with one choke-point change.
+- /api/llm/chat gained optional `context` (LLMRequestBody + server REQUEST_BODY_SCHEMA additionalProperties:false);
+  client sends it; server logs `teamInformation` + top-level `team_key` on the request AND upstream-error logs.
+  Explore/gateway path only (Task/analyze direct path untouched — see [[feedback_task_mode_no_mcp]]).
+- ticket.write (auditTicketResponse) detail += assignee/displayName. System events (mcp.ready/auth.fail) stay
+  blank (no team). LogsPanel renders detail generically + a team_key tag from the top-level field.
+
+## v10.237 — Trend forecast anchors at the window end, not the last data bucket
+- Latent bug: forecastSeries projected from fit.lastX (last bucket WITH data) but qualityModelChart plotted
+  forecasts at bucketsLength+k (slots after ALL history buckets). When the latest selected bucket(s) were
+  empty (fresh week / quiet team / PI-last-90 at a boundary), the first damped step stretched into one long
+  straight dashed ramp and +1/+2/+3 were time-shifted. Fix: anchor = intercept + slope·(history.length−1)
+  ("now"); identical when the last bucket has data. Added ModelSeries.forecastAnchor; chart adds a "now"
+  vertex only when the last bucket is empty so the dashed line bends correctly. Stays one-line explainable —
+  see [[feedback_model_explainability_constraint]]. Note: the 6/16-empty-weeks screenshot was a SEPARATE
+  stale-data cause (old local quality.db), fixed by loading quality-end-2026.06.25.db, not by this change.
+
+## v10.238 — Config Project page: product-coding matrix editor
+- Filled the v10.233 Project placeholder with an authenticated product-coding matrix (project-format.jpg).
+  NEW dataset, unrelated to PROJECT_CONFIG (JIRA project↔team). Mirrors the Team editor end-to-end:
+  served editable JSON `project-matrix.json` (public/config → config-defaults → volume), code gate via
+  verifyTeamCode with the reserved key `projects` (or `*` master) in team-codes.json, routes
+  POST /api/config/projects/unlock + PUT /api/config/projects in server/routes/config.ts.
+- Columns: 产品线 (dropdown X-line/Y-Line/Z-Line, English only), 6 text code fields, and 综合编码 = those 6
+  joined by "-" (DERIVED via compositeCode in src/config/projectMatrix.ts, never stored — can't drift; 产品线
+  excluded). Seeded with the 13 image rows. Client: runtimeProjectMatrix (useRuntimeConfig) +
+  useProjectMatrixWrite.ts (sessionStorage `projects_code`). Deploy: added project-matrix.json to the
+  entrypoint seed loop. See [[feedback_update_deploy_files_for_new_features]].
+
+## v10.239 — Project audit delta + projects edit code + codes-leak fix
+- projects.unlock/projects.save were already audited in v10.238. Enriched: server saveProjectMatrix now reads
+  the previous matrix and returns an added/removed composite-code delta (server compositeCode helper); the
+  projects.save audit logs +N/−N (codes) like team.save. lockProjects is client-only (no server log).
+- Added "projects":"PROJECTS2026" to data/team-codes.json (a non-team gate group; "*" master also unlocks).
+  verifyTeamCode('projects', code) gates the Project editor.
+- SECURITY FIX: deleted public/config/team-codes.json — it was a full copy of the real edit codes under the
+  web root (fetchable at /config/team-codes.json in dev), unused by the server (reads data/team-codes.json via
+  CODES_PATH). Codes must live ONLY in the data volume, never public/ or dist/config. See
+  [[feedback_update_deploy_files_for_new_features]].
+
+## v10.240 — Project matrix: quick filter + Comments column
+- Added a search box to ProjectConfig (rowMatchesQuery in src/config/projectMatrix.ts: case-insensitive match
+  over 产品线 + 6 code fields + composite + comments; empty = all). Table iterates {row, idx} pairs so v-model
+  edits and removeRow target the real draft index regardless of filtering; addRow clears the filter.
+- New persisted `comments` column (备注) at the right end — NOT part of 综合编码. Added to ProjectMatrixRow,
+  emptyRow, the 13 seed rows, project-matrix.json, and made OPTIONAL in both validators (server
+  isProjectMatrixArray + client validateProjectMatrix) for backward-compat with rows lacking it.
+
+## v10.241 — Project matrix CSV export/import
+- New pure util src/utils/projectMatrixCsv.ts: projectMatrixToCsv(rows, headerLabels) + parseProjectMatrixCsv
+  (own RFC-4180 parseCsv, BOM-tolerant). Columns follow the page design; the derived 综合编码 is emitted on
+  export and IGNORED on import (recomputed). Import maps columns by header ALIAS (zh label / en label / field
+  key) so either-language CSVs work; product line normalized to PRODUCT_LINE_OPTIONS (unknown → '').
+- ProjectConfig toolbar: Export CSV (always; prepends a UTF-8 BOM for Excel; reuses downloadFile from
+  exportFormats.ts), Import CSV (unlocked only) loads into the DRAFT — user reviews then Saves through the
+  existing projects auth + projects.save audit (no new server endpoint; replace semantics).
+
+## v10.242 — Project matrix duplicate composite-code validation
+- 综合编码 must be unique. src/config/projectMatrix.ts: isBlankComposite (all 6 code fields empty → ignored)
+  + duplicateCompositeRows(rows)→{indices,codes}. Composite excludes 产品线, so rows differing only in
+  product line still collide (same composite). ProjectConfig: duplicate rows get .pc-dup → reds 产品线 select
+  + 6 code inputs + composite cell (Comments excluded), error banner lists codes, Save disabled, import toasts
+  the dup error (rows still load so the user can fix). Blank rows never flag.
+- Server guard (defense in depth): config-store.duplicateComposites + PUT /api/config/projects returns 400
+  {error:'duplicate'} so the uniqueness rule holds even if the disabled Save button is bypassed.
+
+## v10.243 — Wire Composite-Code into Task Summary
+- Task Summary merged Vehicle+Product into one Composite-Code sourced from the Project matrix. SummaryState:
+  vehicle/product → compositeCode; title is now 4-part [CompositeCode][Layer][Component][Detail]. ROLE_WEIGHTS:
+  each role's vehicle+product weights merged into one compositeCode weight = their sum (100-pt total preserved);
+  qualityScore counts it once. New CompositeCodeCombobox.vue (Assignee-style searchable select; options from
+  runtimeProjectMatrix non-blank rows, search over code/产品线/项目号, static `· N` count label). Coach skills
+  (mapped disciplines + analyze-skill) summary spec swept five-part → four-part; sub-task inheritance "first
+  four/前四段" → "first three/前三段". n8n payload unchanged (sends only `summary`), so the change is contained.
+
+## v10.244 — Composite-Code: font parity + scoped duplicate highlight
+- CompositeCodeCombobox `.combobox-input` font var(--font-mono) → var(--font-sans) (+ dropped from placeholder),
+  left padding 10px→8px, so the field matches its sibling TASK SUMMARY inputs (Layer/Component/Detail). Dropdown
+  `.option-code` stays mono (code-list readability).
+- ProjectConfig duplicate highlight scoped to the Composite-Code column only: the `.pc-dup` red now applies to
+  `.pc-composite` (the composite cell) alone; 产品线 + the 6 code inputs no longer redden. The check is a
+  vertical scan down that column — duplicateCompositeRows/error-banner/Save-block unchanged.
+
+## v10.245 — FUSA (Functional Safety) layer + role + coach skills
+- New Task-mode Layer element FUSA (after VV) for the chassis-control Functional-Safety team. Added to
+  public/config/summary-options.json layers + LAYER_OPTIONS fallback (constants.ts). Prod loads the
+  mounted summary-options.json, so ops must add "FUSA" there too (constant is only a load-failure fallback).
+- New role fusa-engineer (FUSA Engineer / 功能安全工程师). Adding a role still requires updating EVERY
+  exhaustive Record<UserRole,…> or tsc fails: UserRole union + ROLES (useRole.ts), LAYER_ROLE_MAP +
+  ROLE_WEIGHTS (useForm.ts, sums to 100, traceability/description-heavy like system-architect),
+  ROLE_QUESTIONS in BOTH elicitation.task.ts and elicitation.explore.ts.
+- New coach-skill-task-fusa-{en,zh}.md (canonical sw-zh format, codename FS01) covering full ISO 26262
+  scope: HARA/ASIL/safety goals, FSR/TSR + safety mechanisms (FTTI, ASIL decomposition/FFI), analyses
+  (FMEA/FMEDA/FTA/DFA, SPFM/LFM/PMHF), process work products (DIA/safety case/confirmation measures).
+  Wired into TASK_SKILL_MAP; activeTaskSkillFile auto-derives coach-skill-task-fusa-<lang>.md from the
+  layer code, so the file names must match the layer key lowercased.
+
+## v10.246 — Explore chat management: Claude-style sidebar Recents (Step 1 of 3)
+- Explore left rail now shows New chat + a scrollable Recents list of past chats (clickable to
+  open/continue), replacing the separate History tab. Built on existing plumbing:
+  getSessionGroups(recordsForChannel('explore')).grouped (newest-first), title =
+  getSessionName(id) ?? firstUserPreview; click → continue-session → restoreExploreCoachMessages
+  (which re-points the explore session so new turns append). Active row highlighted via new export
+  currentExploreSessionId (= sessionByChannel.value.explore) in useCoachHistory.ts.
+- SCOPE GUARD: CoachHistoryTab.vue is NOT removed — Task mode (CoachPanel) still uses it with
+  channel='task'. Only Explore's usage + the Explore `replay` emit/handler were removed. The Explore
+  History tab's search/bulk-delete/export are intentionally gone for now: per-chat delete returns in
+  Step 2 (three-dot menu: Star/Rename/Add-to-project[future]/Delete, see three-dot-feature.jpg),
+  global search in Step 3.
+
+## v10.247 — Explore chat management: per-chat ⋯ menu (Step 2 of 3)
+- Each Recents row (ExploreChat.vue) now has a ⋯ button (shown on hover / active / menu-open) opening
+  a menu teleported to <body> (positioned at the button so the rail's overflow-y can't clip it;
+  transparent backdrop + Escape close). Menu: Star/Unstar, Rename (inline input → setSessionName),
+  Add to project (rendered DISABLED — kept for future), Delete.
+- New star store in useCoachHistory.ts: starredSessions (localStorage 'coach-starred-sessions') +
+  isSessionStarred/toggleSessionStar; recents sort starred-first then newest. deleteSession(id)
+  removes a whole chat; pruneOrphanStars wired into deleteRecords + clearHistory. Delete of the ACTIVE
+  chat emits new-chat to reset the conversation.
+- Step 3 (search) still pending per Ethan's later requirements.
+
+## v10.248 — Fix: unreliable ⋯ menu clicks in Explore Recents
+- The v10.247 ⋯ menu used a full-screen teleported backdrop to close on outside-click; while open it
+  covered every ⋯ button, so the next click hit the backdrop (close-only) and the menu "needed many
+  clicks" / switching chats ate a click. Replaced with a window pointerdown listener (added/removed
+  via watch(menuOpenId), cleaned up on unmount) that IGNORES .recent-menu and .recent-more, so one
+  click reliably opens/switches/toggles. openMenu now clamps x to the viewport and flips the menu
+  above the button near the bottom edge. LESSON: never use a full-screen backdrop catcher over
+  controls that themselves need to stay clickable — use a scoped outside-pointer listener instead.
+
+## v10.249 — ⋯ click bug REAL fix (opacity overlay) + Claude sidebar font
+- The v10.248 backdrop removal did NOT fix the "click ⋯ many times" bug. Real root cause: .recent-more
+  hid via `opacity: 0`, which keeps the element IN LAYOUT and HIT-TESTABLE — it permanently overlaid the
+  right edge of every recents row, stealing/confusing clicks. Fix = reveal via `display: none → flex`
+  (like Claude's `hidden group-hover:flex`), so the ⋯ isn't hit-testable until shown; active chat's ⋯
+  stays visible. LESSON: to hide an interactive overlay, use `display:none` (or `visibility:hidden`/
+  `pointer-events:none`), NEVER `opacity:0` alone — opacity:0 still intercepts pointer events.
+- Also matched the Explore sidebar to Claude's reference (claude-reference/*.html): 14px titles + New
+  chat (was fluid --font-sm ~10-15px), 32px rows, border-radius 9px, px-3, active row = solid
+  --bg-tertiary (not blue tint), "Recents" header muted/non-uppercase. Claude titles are `text-sm`=14px.
+- Added a deterministic ExploreChat test: single click opens the teleported .recent-menu (4 items) and
+  clicking another row's ⋯ switches with exactly one menu open.
+
+## v10.250 — Explore sidebar: vertical ⋮, icon dead-zone, width, rename prefill
+- The v10.249 display-toggle helped but the icon itself stayed a dead zone: clicking the area AROUND
+  the ⋯ opened the menu, clicking ON the dots did nothing. Root cause: the inline <svg>/<circle> became
+  the click's event.target, so the button's @click missed. FIX: `.recent-more svg { pointer-events:none }`
+  so the whole 28px button is one target (also keeps onDocPointerDown's closest('.recent-more') reliable).
+  LESSON: icons inside clickable buttons should have pointer-events:none, or icon clicks land on the
+  SVG node, not the button.
+- Also: ⋯ made vertical (⋮, cy=6/12/18); rail widened 168→280px so full chat names show (collapsed
+  still 52px); Rename now prefills the current effective title (custom name ?? first-message preview)
+  and selects it, instead of opening blank.
+
+## v10.251 — Explore chat search command palette (Step 3 of 3, done)
+- New ChatSearchModal.vue: Claude-style command palette opened from a magnifier added LEFT of the
+  sidebar toggle (new .rail-top row, shared .rail-iconbtn style). Top-centered modal (built on the
+  HotkeyModal/useFocusTrap overlay pattern), autofocused input + ✕, keyboard nav (↑/↓ highlight,
+  Enter/click select, Esc/✕/backdrop close). Each row: chat icon + title + right label = "Enter" on
+  the highlighted row else a time bucket (Today/Yesterday/Past week/Past month/Older via timeBucketLabel).
+- ExploreChat wires it: searchItems computed from recentSessions, haystack = title + all message text
+  (so search matches content too), newest-first; onSearchSelect reuses the existing continue-session
+  path. Props open/items; emits update:open/select. This completes the 3-step Explore chat management
+  (sidebar recents → ⋯ menu → search).
+
+## v10.252 — Search palette polish: "Enter" = active chat + hover darken
+- ChatSearchModal: new `activeId` prop (ExploreChat passes currentExploreSessionId). On open, the
+  keyboard selection + "Enter" badge default to the active chat's row (so Enter returns the user to the
+  chat that was open before search), falling back to the first result. Hover decoupled from selection:
+  removed @mouseenter highlight, added CSS .search-result:hover darken — matches the screenshot where a
+  hovered row darkens but only the active row keeps "Enter". Typing selects the top match (watch(query)→0).
+
+## v10.253 — Explore rail: "Chats" nav + New-chat polish
+- Added a "Chats" nav item under New chat (speech-bubbles icon). Clicking switches the Explore main
+  area to a placeholder page (.explore-chats-page, "Chats — coming soon") via a new activeView ref
+  ('chat' | 'chats'); the chat scroll+composer are v-if==='chat'; onNewChat/onContinue/send reset to
+  'chat'. Page content deferred per Ethan ("details coming soon").
+- New-chat polish (per UX-Newchat-Chats-design-claude.jpg): + icon now in a circular .rail-item-icon
+  badge that brightens on hover; a right-aligned .rail-shortcut ("Ctrl+⇧+O") reveals on hover. Both
+  rail items' icons intensify on row hover/active. Ctrl+Shift+O wired (onGlobalKeydown, which replaced
+  onKeydownEsc and also still closes the ⋯ menu on Escape) → starts a new chat in Explore.
+- Rail-item active state changed from blue tint to neutral --bg-tertiary (matches Claude + the recents
+  active style).
+
+## v10.254 — Chats page: full list + select-mode bulk actions
+- New ChatsPage.vue (rendered when ExploreChat activeView==='chats', replacing the v10.253 placeholder).
+  Full list of all Explore chats (title + relative date), search (title + message text). "Select chats"
+  mode adds checkboxes + a bulk bar: DownloadRaw / Select all / Move to project (disabled placeholder,
+  future) / Delete / Cancel. Emits select(sessionId)+new-chat → ExploreChat onContinue/onNewChat.
+- REUSE per Ethan ("reuse export-format of download Raw"): DownloadModal + exportRecords/exportSessionsZip
+  /sanitizeFilename for DownloadRaw; ConfirmDialog + deleteSession for Delete. Data from
+  getSessionGroups(recordsForChannel('explore')); title = getSessionName ?? firstUserPreview. "Shared"
+  badge omitted (no sharing). Relative date helper: Today/Yesterday/N days ago (<7d) else Intl month-day.
+- Test gotcha: i18n default lang in tests is NOT English — target buttons by stable classes
+  (.chats-btn-select/-selectall/-download/-danger/-newchat), never by rendered text.
+
+## v10.255 — Fix: Create-JIRA re-gating on a 2nd authoring cycle
+- Task action buttons gate Review → Analysis → Create JIRA, each on the prior's response
+  (hasCoachResponse=coachMessages>0; hasAiResponse=!!analyzeResponse; jiraCreated=!!lastCreatedKey).
+  All gating lives in TaskForm.vue :disabled; canCoachSubmit (App.vue) = the WHOLE task form complete.
+- BUG (2nd cycle): App.vue handleCoachRequest's "new iteration" reset (when reviewStatus!=='draft')
+  cleared resetWorkflow()+lastCreatedKey but NOT analyzeResponse. So after create #1, editing the
+  description + clicking Review again left Create JIRA enabled off the STALE first-cycle analysis.
+  FIX: also clearAnalyzeResponse() + localStorage.removeItem(LS_ANALYZE_RESPONSE) in that block →
+  Create JIRA re-gates behind a fresh Analysis each cycle. No TaskForm gating conditions changed.
+
+## v10.256 — Fix: page scroll in Task Analysis tab
+- Task → Analysis tab scrolled the WHOLE page instead of the panel. Root cause: PanelShell .panel-body
+  (the scroller, flex:1 overflow-y:auto) was missing min-height:0. With default min-height:auto +
+  CoachPanel's max-height:2500px, the body inflated to content height, overflowed the bounded column,
+  and the scroll escaped to the page. The ancestors were already fixed (grid minmax(0,1fr), .col-left
+  overflow:hidden, .panel min-height:0 via .col-left>:deep(*)); the innermost body was the missed level.
+  FIX: .panel-body { min-height:0; overscroll-behavior:contain }. Resizable panels unaffected (their
+  bodyStyle sets inline min-height which overrides). LESSON: every level of a nested flex scroll chain
+  needs min-height:0 — a single missing level lets content inflate and the scroll chains to the page.
+
+## v10.257 — Gate Create JIRA behind the human review checklist
+- Task sequence is complete form → Review → Analysis → Create JIRA; the human review checklist
+  (ReviewStatusBar in TaskForm, items from getTaskChecklist) was informational only. Now Create JIRA
+  also requires useReviewWorkflow.allChecked (every checklist item ticked). allChecked is true for an
+  empty checklist so it only gates Task mode (always non-empty) and resets each cycle via resetWorkflow.
+- Wiring: TaskForm Create button :disabled += `|| !allChecked` (+ tooltip form.createNeedsChecklist when
+  hasAiResponse && !allChecked); App.vue handleCreateClick guards `!allChecked.value` too (covers the
+  Ctrl+Shift+C hotkey). Full human checkpoint: Analysis done → tick checklist → Create enables.

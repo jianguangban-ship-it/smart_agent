@@ -34,6 +34,22 @@
         <span class="rail-label">{{ t('config.team') }}</span>
       </button>
 
+      <!-- Project -->
+      <button
+        type="button"
+        role="tab"
+        class="rail-item"
+        :class="{ active: activeSubPage === 'project' }"
+        :aria-selected="activeSubPage === 'project'"
+        :title="t('config.project')"
+        @click="select('project')"
+      >
+        <svg class="rail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+        <span class="rail-label">{{ t('config.project') }}</span>
+      </button>
+
       <!-- Model -->
       <button
         type="button"
@@ -92,6 +108,7 @@
     <!-- Right content — sub-page area. -->
     <section class="config-content">
       <TeamConfig v-show="activeSubPage === 'team'" :active="activeSubPage === 'team'" />
+      <ProjectConfig v-show="activeSubPage === 'project'" :active="activeSubPage === 'project'" />
       <ModelConfig v-show="activeSubPage === 'model'" :active="activeSubPage === 'model'" />
       <SkillsConfig v-show="activeSubPage === 'skills'" :active="activeSubPage === 'skills'" />
       <LogsPanel v-if="logsVisited" v-show="activeSubPage === 'logs'" :active="activeSubPage === 'logs'" />
@@ -105,6 +122,7 @@ import { useI18n } from '@/i18n'
 import ModelConfig from '@/components/config/ModelConfig.vue'
 import SkillsConfig from '@/components/config/SkillsConfig.vue'
 import TeamConfig from '@/components/config/TeamConfig.vue'
+import ProjectConfig from '@/components/config/ProjectConfig.vue'
 import LogsPanel from '@/components/logs/LogsPanel.vue'
 
 // `active` mirrors the View panel's prop shape (gates work while another mode is
@@ -113,8 +131,8 @@ defineProps<{ active?: boolean }>()
 
 const { t } = useI18n()
 
-type SubPage = 'team' | 'model' | 'skills' | 'logs'
-const SUB_PAGES: SubPage[] = ['team', 'model', 'skills', 'logs']
+type SubPage = 'team' | 'project' | 'model' | 'skills' | 'logs'
+const SUB_PAGES: SubPage[] = ['team', 'project', 'model', 'skills', 'logs']
 
 // Active sub-page (persisted) — restored on reload like Explore's rail state.
 const LS_SUBPAGE = 'config_sub_page'

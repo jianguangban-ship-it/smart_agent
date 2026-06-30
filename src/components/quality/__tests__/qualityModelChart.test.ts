@@ -20,13 +20,15 @@ const ALL: ModelSeries = {
   history: [80, 80, 60],
   counts: [10, 12, 8],
   forecast: [50, 40, 30],
+  forecastAnchor: 60, // last bucket has data → unused by the chart
   band: { lower: [40, 28, 18], upper: [60, 52, 42] },
 }
 const DKKF: ModelSeries = {
   team_key: 'DKKF', team: 'Team DKKF',
-  history: [60, null, 100], // gap in the middle bucket
+  history: [60, null, 100], // gap in the middle bucket; last bucket populated
   counts: [3, 0, 5],
   forecast: [100, 100, 100],
+  forecastAnchor: 100, // last bucket has data → unused by the chart
   band: { lower: [90, 88, 86], upper: [100, 100, 100] },
 }
 const THIN: ModelSeries = {
@@ -34,6 +36,7 @@ const THIN: ModelSeries = {
   history: [70, null, null],
   counts: [2, 0, 0],
   forecast: [], // too thin to fit
+  forecastAnchor: null,
   band: null,
 }
 
@@ -86,6 +89,23 @@ describe('buildChartOption', () => {
     const fc = series.find(s => s.name === 'DKKF' && s.lineStyle.type === 'dashed')!
     // anchor at index 2 (last history value 100), then the forecast slots
     expect(fc.data).toEqual([null, null, 100, 100, 100, 100])
+  })
+
+  it('adds a "now" vertex when the latest bucket is empty, so the forecast bends at the window end', () => {
+    // v10.237: data ends at index 1 but the window is 3 buckets. The dashed
+    // line connects the last data point (72) → the fitted "now" anchor (74) →
+    // the +1/+2/+3 forecast, instead of one straight ramp to +1.
+    const SPARSE: ModelSeries = {
+      team_key: 'SP', team: 'Sparse',
+      history: [70, 72, null],
+      counts: [3, 3, 0],
+      forecast: [75, 76, 77],
+      forecastAnchor: 74,
+      band: null,
+    }
+    const series = buildChartOption([SPARSE], SLOTS, BUCKETS, THEME, LABELS).series as LineSeries[]
+    const fc = series.find(s => s.lineStyle.type === 'dashed')!
+    expect(fc.data).toEqual([null, 72, 74, 75, 76, 77])
   })
 
   it('forecast lines connect across null buckets; history keeps real gaps', () => {

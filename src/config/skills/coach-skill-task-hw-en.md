@@ -8,7 +8,7 @@ Review JIRA task descriptions for hardware design work and provide actionable im
 You receive a JSON object containing:
 - `project_name`: Project/team name
 - `issue_type`: Item type (Story/Task/Bug)
-- `summary`: Title following five-part format: [Product][Classification][Layer][Component][Detail]
+- `summary`: Title following four-part format: [CompositeCode][Layer][Component][Detail]
 - `description`: Detailed description and acceptance criteria
 - `estimated_points`: Engineer's effort estimate
 

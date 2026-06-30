@@ -93,6 +93,13 @@ export function buildChartOption(
       if (lastIdx !== -1) {
         const forecastData: Array<number | null> = Array.from({ length: slotCount }, () => null)
         forecastData[lastIdx] = s.history[lastIdx]
+        // When the latest bucket(s) are empty (data ends before the window end),
+        // add a vertex at "now" so the dashed line bends there (following the
+        // fitted trend across the empty weeks) instead of one long straight
+        // ramp to +1. No-op when the last bucket has data (lastIdx === end).
+        if (lastIdx < bucketsLength - 1 && s.forecastAnchor !== null) {
+          forecastData[bucketsLength - 1] = s.forecastAnchor
+        }
         s.forecast.forEach((v, k) => { forecastData[bucketsLength + k] = v })
         chartSeries.push({
           name,

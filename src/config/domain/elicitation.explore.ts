@@ -145,6 +145,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       hintZh: '确保客观评估'
     }
   ],
+  'fusa-engineer': [
+    {
+      questionEn: 'What hazard and safety goal (with ASIL) is in scope, and what is the safe state?',
+      questionZh: '涉及哪个危害与安全目标（含 ASIL）？安全状态是什么？',
+      hintEn: 'Frames the safety concept from the HARA',
+      hintZh: '从 HARA 出发界定安全概念'
+    },
+    {
+      questionEn: 'What safety mechanism and analysis (FMEDA/FTA/DFA) will demonstrate it?',
+      questionZh: '用什么安全机制与分析（FMEDA/FTA/DFA）来论证？',
+      hintEn: 'Links mechanism to quantified evidence',
+      hintZh: '将安全机制与量化证据关联'
+    }
+  ],
   'devops-engineer': [
     {
       questionEn: 'What environments and toolchain versions must this run reproducibly on?',

@@ -1,8 +1,13 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import {
-  verifyTeamCode, isTeamMemberArray, isStringArray, saveTeam, type TeamMember
+  verifyTeamCode, isTeamMemberArray, isStringArray, saveTeam, type TeamMember,
+  isProjectMatrixArray, saveProjectMatrix, duplicateComposites, type ProjectMatrixRow
 } from '../config-store.js'
 import { audit } from '../logs/log-bus.js'
+
+// Single gate key for the whole Project matrix (it isn't per-team). Reuses the
+// team-codes.json mechanism: a "projects" entry, or the "*" ops master.
+const PROJECTS_GATE = 'projects'
 
 // The Team-page editor (Config mode) writes here. Network is open on the
 // intranet; the gate is per-team: the caller must supply that team's edit code.
@@ -66,6 +71,61 @@ export async function configRoutes(app: FastifyInstance) {
         source: 'ui', ip: req.ip, team_key: req.params.key,
         msg: `team ${req.params.key} saved ·${addPart}${remPart} · ${saved.components.length} components`,
         detail: { added: saved.added, removed: saved.removed, memberCount: saved.members.length, componentCount: saved.components.length }
+      })
+      reply.send(saved)
+    }
+  )
+
+  // POST /api/config/projects/unlock — UX pre-check for the Project matrix editor.
+  app.post<{ Body: { code?: string } }>(
+    '/config/projects/unlock',
+    async (req, reply) => {
+      const ok = verifyTeamCode(PROJECTS_GATE, req.body?.code)
+      audit(req.log, 'projects.unlock', {
+        source: 'ui', ip: req.ip,
+        msg: `projects unlock ${ok ? 'ok' : 'rejected'}`,
+        detail: { ok }
+      })
+      if (!ok) {
+        reply.code(401).send({ error: 'auth' })
+        return
+      }
+      reply.send({ ok: true })
+    }
+  )
+
+  // PUT /api/config/projects — header x-team-code; body { rows }. onRequest gate
+  // mirrors the team route (401 before body schema could 400).
+  app.put<{ Body: { rows?: unknown } }>(
+    '/config/projects',
+    {
+      onRequest: async (req: FastifyRequest, reply: FastifyReply) => {
+        const code = req.headers['x-team-code']
+        if (!verifyTeamCode(PROJECTS_GATE, code)) {
+          reply.code(401).send({ error: 'auth' })
+        }
+      }
+    },
+    async (req, reply) => {
+      const { rows } = req.body ?? {}
+      if (!isProjectMatrixArray(rows)) {
+        reply.code(400).send({ error: 'validation' })
+        return
+      }
+      // Composite codes must be unique (server-side guard mirroring the editor).
+      const dups = duplicateComposites(rows as ProjectMatrixRow[])
+      if (dups.length > 0) {
+        reply.code(400).send({ error: 'duplicate', detail: dups })
+        return
+      }
+      const saved = saveProjectMatrix(rows as ProjectMatrixRow[])
+      const codes = (list: string[]) => list.join(', ')
+      const addPart = saved.added.length ? ` +${saved.added.length} (${codes(saved.added)})` : ''
+      const remPart = saved.removed.length ? ` −${saved.removed.length} (${codes(saved.removed)})` : ''
+      audit(req.log, 'projects.save', {
+        source: 'ui', ip: req.ip,
+        msg: `projects matrix saved ·${addPart}${remPart} · ${saved.rows.length} rows`,
+        detail: { added: saved.added, removed: saved.removed, rowCount: saved.rows.length }
       })
       reply.send(saved)
     }

@@ -114,6 +114,12 @@ const bodyStyle = computed(() => {
 .panel-body {
   padding: var(--space-3);
   flex: 1;
+  /* min-height:0 lets this flex scroller shrink to the bounded column height so
+     it scrolls INTERNALLY (without it, a tall body — e.g. the Task Analysis tab —
+     inflates past the column and the scroll escapes to the whole page).
+     overscroll-behavior:contain stops wheel chaining to the page at top/bottom. */
+  min-height: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background-color: var(--bg-secondary);

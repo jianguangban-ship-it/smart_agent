@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-export type UserRole = '' | 'system-architect' | 'sw-developer' | 'app-developer' |'hw-designer' | 'me-designer' | 'vv-engineer' | 'devops-engineer' | 'pmo-manager'
+export type UserRole = '' | 'system-architect' | 'sw-developer' | 'app-developer' |'hw-designer' | 'me-designer' | 'vv-engineer' | 'fusa-engineer' | 'devops-engineer' | 'pmo-manager'
 
 export interface RoleDefinition {
   id: UserRole
@@ -82,6 +82,17 @@ export const ROLES: RoleDefinition[] = [
     contextZh: '用户是验证确认工程师。重点关注：需求的可测试性、验证方法（评审/分析/仿真/测试/演示）、测试覆盖率、通过/失败标准、测试环境搭建（HIL/SIL/MIL）、以及从测试用例到需求的追溯性。',
     placeholderEn: 'Describe the test case, verification activity, or validation finding. Include: verification method (test/analysis/review/demo), pass/fail criteria, test environment (HIL/SIL), preconditions, and linked requirement ID...',
     placeholderZh: '描述测试用例、验证活动或确认发现。包含：验证方法（测试/分析/评审/演示）、通过/失败标准、测试环境（HIL/SIL）、前置条件、以及关联的需求ID...'
+  },
+  {
+    id: 'fusa-engineer',
+    labelEn: 'FUSA Engineer',
+    labelZh: '功能安全工程师',
+    shortEn: 'FUSA',
+    shortZh: '功安',
+    contextEn: 'The user is a Functional Safety (FuSa) Engineer for automotive chassis control systems (IBC/ESC/EPS/EPB/EMB), working to ISO 26262. Focus on: the safety lifecycle from HARA → safety goals → ASIL → FSR/TSR; safety mechanisms (fault detection + reaction within the FTTI) and safe states; ASIL decomposition and freedom-from-interference; safety analyses (FMEA/FMEDA/FTA/DFA) and their metrics (SPFM/LFM/PMHF); and process work products (DIA, safety plan, safety case, confirmation measures — review/audit/assessment) with bidirectional traceability. Reject claims of safety that lack analysis evidence or requirement links.',
+    contextZh: '用户是汽车底盘控制系统（IBC/ESC/EPS/EPB/EMB）的功能安全（FuSa）工程师，遵循 ISO 26262。重点关注：安全生命周期 HARA → 安全目标 → ASIL → FSR/TSR；安全机制（在 FTTI 内的故障探测与故障反应）与安全状态；ASIL 分解与免于干扰（FFI）；安全分析（FMEA/FMEDA/FTA/DFA）及其指标（SPFM/LFM/PMHF）；以及流程工作产物（DIA、安全计划、安全案例、确认措施——评审/审核/评估）与双向可追溯性。对缺乏分析证据或需求链接的“安全”结论予以驳回。',
+    placeholderEn: 'Describe the functional-safety task or change. Include: the safety goal / ASIL and safe state, the FSR/TSR it derives from or refines, the safety mechanism (detection + reaction within FTTI), supporting analysis (FMEDA SPFM/LFM/PMHF, FTA, DFA), and confirmation measures + traceability to parent safety requirements...',
+    placeholderZh: '描述功能安全任务或变更。包含：安全目标/ASIL 与安全状态、其派生或细化的 FSR/TSR、安全机制（FTTI 内的探测与反应）、支撑分析（FMEDA SPFM/LFM/PMHF、FTA、DFA）、以及确认措施与对上级安全需求的追溯...'
   },
   {
     id: 'devops-engineer',

@@ -6,7 +6,7 @@
 - `project_key`: 项目空间键值
 - `project_name`: 项目空间名称
 - `issue_type`: 任务类型 (Story/Task/Bug)
-- `summary`: 原始标题（遵循五段式规则：[车型][产品][分层][组件][任务概括]）
+- `summary`: 原始标题（遵循四段式规则：[综合编码][分层][组件][任务概括]）
 - `description`: 详细描述与验收标准
 - `estimated_points`: 工程师的人工预估值
 

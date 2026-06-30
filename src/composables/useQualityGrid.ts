@@ -161,62 +161,25 @@ const filteredSummary = computed<PeriodSummary>(() => summarize(filteredTickets.
 // v10.194: the panel is kept mounted across mode switches (v-show in App.vue,
 // same pattern as Task mode) so leaving View never pays the virtual-scroller
 // pool unmount at production row counts. While another mode is on screen the
-// grid is "inactive": tab-focus auto-refresh is suppressed, and returning to
-// View refetches if the data went stale meanwhile.
+// grid is "inactive": tab-focus refresh is suppressed, and returning to
+// View always refetches.
 const gridActive = ref(true)
-
-// --- real-time push (SSE) ------------------------------------------------
-// While the grid is active, listen for "tickets changed" pings from the server
-// (emitted on each n8n upsert) and refetch — coalesced so a burst of writes
-// triggers a single refresh. The stream is open ONLY while View is on screen,
-// so hidden modes pay nothing. The visibility/30s refresh below is the fallback
-// if the stream drops.
-let _es: EventSource | null = null
-let _coalesce: ReturnType<typeof setTimeout> | null = null
-
-function scheduleRefresh(): void {
-  if (_coalesce) return
-  _coalesce = setTimeout(() => { _coalesce = null; fetchTickets() }, 2000)
-}
-
-function openStream(): void {
-  if (_es || typeof EventSource === 'undefined') return
-  try {
-    _es = new EventSource('/api/tickets/stream')
-    _es.onmessage = () => scheduleRefresh()
-    // EventSource auto-reconnects on error; nothing to do here.
-  } catch {
-    _es = null
-  }
-}
-
-function closeStream(): void {
-  _es?.close()
-  _es = null
-  if (_coalesce) { clearTimeout(_coalesce); _coalesce = null }
-}
 
 export function setGridActive(active: boolean): void {
   const wasActive = gridActive.value
   gridActive.value = active
-  if (active) openStream(); else closeStream()
-  // Re-entering View after the data went stale — same 30s rule as the
-  // tab-focus refresh. lastFetched === 0 means the onMounted fetch hasn't
-  // happened yet; that fetch owns the initial load.
-  if (active && !wasActive && lastFetched.value > 0 && Date.now() - lastFetched.value > 30_000) {
+  // lastFetched === 0 means the onMounted fetch hasn't happened yet;
+  // that fetch owns the initial load — avoid a double call.
+  if (active && !wasActive && lastFetched.value > 0) {
     fetchTickets()
   }
 }
 
-// Auto-refresh when the tab becomes visible — keeps the grid fresh without
-// the cost of websockets. Manual refresh button covers the focused-tab case.
+// Refetch whenever the user returns to this browser tab (alt-tab, tab switch,
+// window restore). No staleness gate — tab focus signals intent to see fresh data.
 function onVisibilityChange() {
   if (!gridActive.value) return
-  if (document.visibilityState === 'visible') {
-    // Only refetch if it's been more than 30s since the last successful fetch
-    // (avoids hammering when the user alt-tabs frequently).
-    if (Date.now() - lastFetched.value > 30_000) fetchTickets()
-  }
+  if (document.visibilityState === 'visible') fetchTickets()
 }
 
 let _wired = 0
@@ -226,9 +189,14 @@ export function useQualityGrid() {
     _wired++
     if (_wired === 1) {
       document.addEventListener('visibilitychange', onVisibilityChange)
-      // Re-fetch whenever the timing phase window changes (server-side range).
+      // Re-fetch only when the timing window's start/end actually change (preset
+      // switch, sprint boundary, day rollover). MUST be an array of getters, not
+      // a single getter returning an array: a getter returning a fresh [a,b] is
+      // never Object.is-equal to the previous array, so it would fire on every
+      // 60s `now` tick (the useSprint clock, which `range` depends on) and
+      // silently re-poll the server. See v10.234.
       _stopRangeWatch = watch(
-        () => [range.value.from.getTime(), range.value.to.getTime()],
+        [() => range.value.from.getTime(), () => range.value.to.getTime()],
         () => fetchTickets()
       )
     }
@@ -242,7 +210,6 @@ export function useQualityGrid() {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       _stopRangeWatch?.()
       _stopRangeWatch = null
-      closeStream()
     }
   })
 

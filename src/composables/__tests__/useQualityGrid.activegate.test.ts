@@ -1,9 +1,8 @@
 // v10.194: the View panel stays mounted across mode switches (v-show — same
 // pattern as Task mode) so leaving View never pays the virtual-scroller pool
-// unmount (~1s+ at production scale). That makes "is the grid actually the
-// visible mode?" a first-class state: the 30s tab-focus auto-refresh must not
-// fire while another mode is on screen, and returning to View refetches if
-// the data went stale meanwhile.
+// unmount (~1s+ at production scale). "Is the grid actually the visible mode?"
+// is first-class state: tab-focus refresh is suppressed while another mode is
+// on screen; returning to View always refetches (no staleness gate).
 
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest'
 
@@ -59,39 +58,26 @@ afterEach(() => {
 })
 
 describe('grid active gate (panel kept alive across mode switches)', () => {
-  it('tab-focus auto-refresh is suppressed while the grid is not the visible mode', async () => {
+  it('tab-focus refresh is suppressed while the grid is not the visible mode', async () => {
     mountGrid()
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledTimes(1) // the onMounted fetch
 
     setGridActive(false) // user switched to Task/Explore
-    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000) // data goes stale
     fireVisibilityChange()
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledTimes(1) // still just the initial fetch
   })
 
-  it('returning to View refetches when the data is stale (>30s)', async () => {
+  it('returning to View always refetches', async () => {
     mountGrid()
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     setGridActive(false)
-    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000)
-    setGridActive(true) // back to View after a minute
+    setGridActive(true) // back to View
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('returning to View quickly does NOT refetch (data still fresh)', async () => {
-    mountGrid()
-    await flushPromises()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-
-    setGridActive(false)
-    setGridActive(true) // immediate bounce
-    await flushPromises()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('activation before any fetch ever happened defers to the onMounted fetch', async () => {
@@ -103,12 +89,11 @@ describe('grid active gate (panel kept alive across mode switches)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1) // only the mount fetch, no double
   })
 
-  it('tab-focus auto-refresh still works while the grid IS the visible mode', async () => {
+  it('tab-focus refresh fires while the grid IS the visible mode', async () => {
     mountGrid()
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
-    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000)
     fireVisibilityChange()
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledTimes(2)

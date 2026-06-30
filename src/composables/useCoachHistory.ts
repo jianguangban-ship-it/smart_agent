@@ -78,6 +78,40 @@ export function setSessionName(id: string, name: string): void {
   saveNames()
 }
 
+// ─── Starred sessions (chat-log pin) ─────────────────────────────────────────
+// User-pinned chats, keyed by sessionId. Starred chats sort to the top of the
+// Recents list. Stored separately so it survives independent of names.
+
+const LS_STARRED = 'coach-starred-sessions'
+
+function loadStarred(): Record<string, true> {
+  try {
+    const raw = localStorage.getItem(LS_STARRED)
+    return raw ? (JSON.parse(raw) as Record<string, true>) : {}
+  } catch {
+    return {}
+  }
+}
+
+export const starredSessions = ref<Record<string, true>>(loadStarred())
+
+function saveStarred(): void {
+  localStorage.setItem(LS_STARRED, JSON.stringify(starredSessions.value))
+}
+
+export function isSessionStarred(id: string): boolean {
+  return starredSessions.value[id] === true
+}
+
+/** Toggle a session's starred (pinned) state. */
+export function toggleSessionStar(id: string): void {
+  const next = { ...starredSessions.value }
+  if (next[id]) delete next[id]
+  else next[id] = true
+  starredSessions.value = next
+  saveStarred()
+}
+
 // ─── Singleton state (module-level ref) ─────────────────────────────────────
 
 export const coachHistory = ref<CoachHistoryRecord[]>(loadFromStorage())
@@ -90,6 +124,10 @@ const sessionByChannel = ref<Record<CoachChannel, string | null>>({ task: null, 
 
 // Back-compat single ref used elsewhere (task-channel session).
 export const currentSessionId = ref<string | null>(null)
+
+/** Active Explore-channel session id — drives the sidebar Recents highlight.
+ *  Reactive: updated by startNewSession / setSessionId / restore (_restoreInto). */
+export const currentExploreSessionId = computed(() => sessionByChannel.value.explore)
 
 export function startNewSession(channel: CoachChannel = 'task'): void {
   const existingIds = new Set(
@@ -198,6 +236,13 @@ export function deleteRecords(ids: Set<string>): void {
   coachHistory.value = coachHistory.value.filter(r => !ids.has(r.id))
   saveToStorage(coachHistory.value)
   pruneOrphanNames()
+  pruneOrphanStars()
+}
+
+/** Delete a whole chat (all records sharing the sessionId). */
+export function deleteSession(sessionId: string): void {
+  const ids = new Set(getSessionRecords(sessionId).map(r => r.id))
+  if (ids.size) deleteRecords(ids)
 }
 
 /** Drop custom names whose session no longer has any records. */
@@ -217,6 +262,23 @@ function pruneOrphanNames(): void {
   }
 }
 
+/** Drop stars whose session no longer has any records. */
+function pruneOrphanStars(): void {
+  const liveSessions = new Set(
+    coachHistory.value.map(r => r.sessionId).filter(Boolean) as string[]
+  )
+  const next: Record<string, true> = {}
+  let changed = false
+  for (const id of Object.keys(starredSessions.value)) {
+    if (liveSessions.has(id)) next[id] = true
+    else changed = true
+  }
+  if (changed) {
+    starredSessions.value = next
+    saveStarred()
+  }
+}
+
 export function clearHistory(): void {
   coachHistory.value = []
   localStorage.removeItem(LS_KEY)
@@ -224,6 +286,8 @@ export function clearHistory(): void {
   currentSessionId.value = null
   sessionNames.value = {}
   localStorage.removeItem(LS_SESSION_NAMES)
+  starredSessions.value = {}
+  localStorage.removeItem(LS_STARRED)
 }
 
 // ─── Search & Filter ────────────────────────────────────────────────────────

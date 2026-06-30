@@ -115,6 +115,76 @@ export function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every(x => typeof x === 'string')
 }
 
+// ── Project matrix (Config → Project) ───────────────────────────────────────
+// Product-coding rows; 综合编码 is derived client-side and never stored. Served
+// as project-matrix.json (web-served config volume), gated by the 'projects'
+// edit code. Mirror the team save: validate → backup → atomic write.
+const PROJECT_MATRIX_FILE = 'project-matrix.json'
+const PROJECT_LINE_OPTIONS = new Set(['X-line', 'Y-Line', 'Z-Line', ''])
+const PROJECT_FIELDS = ['customerCode', 'projectNo', 'yearInfo', 'companyCode', 'serialNo', 'productTypeCode'] as const
+
+export interface ProjectMatrixRow {
+  productLine: string
+  customerCode: string
+  projectNo: string
+  yearInfo: string
+  companyCode: string
+  serialNo: string
+  productTypeCode: string
+  comments?: string
+}
+
+export function isProjectMatrixArray(v: unknown): v is ProjectMatrixRow[] {
+  return Array.isArray(v) && v.every(r => {
+    if (!r || typeof r !== 'object') return false
+    const row = r as Record<string, unknown>
+    if (typeof row.productLine !== 'string' || !PROJECT_LINE_OPTIONS.has(row.productLine)) return false
+    if (row.comments !== undefined && typeof row.comments !== 'string') return false
+    return PROJECT_FIELDS.every(f => typeof row[f] === 'string')
+  })
+}
+
+export function readProjectMatrix(): ProjectMatrixRow[] {
+  return readJson<ProjectMatrixRow[]>(PROJECT_MATRIX_FILE)
+}
+
+/** 综合编码 — the 6 code fields joined by "-" (mirrors src/config/projectMatrix). */
+export function compositeCode(row: ProjectMatrixRow): string {
+  return PROJECT_FIELDS.map(f => row[f]).join('-')
+}
+
+/** Composite codes that appear on more than one non-blank row (each listed once).
+ *  Empty (all-6-blank) rows are ignored. Mirrors the client duplicate check. */
+export function duplicateComposites(rows: ProjectMatrixRow[]): string[] {
+  const counts = new Map<string, number>()
+  for (const row of rows) {
+    if (PROJECT_FIELDS.every(f => row[f].trim() === '')) continue
+    const code = compositeCode(row)
+    counts.set(code, (counts.get(code) ?? 0) + 1)
+  }
+  return [...counts].filter(([, n]) => n > 1).map(([code]) => code)
+}
+
+/**
+ * Persist the whole matrix (atomic, backed up). Computes the added/removed
+ * composite-code delta vs the previous file (for the projects.save audit event),
+ * mirroring saveTeam's member delta. Returns what was written + the delta.
+ */
+export function saveProjectMatrix(
+  rows: ProjectMatrixRow[]
+): { rows: ProjectMatrixRow[]; added: string[]; removed: string[] } {
+  let prev: ProjectMatrixRow[] = []
+  try { prev = readProjectMatrix() } catch { /* first write — no previous file */ }
+  const prevCodes = new Set(prev.map(compositeCode))
+  const nextCodes = new Set(rows.map(compositeCode))
+  const added = [...nextCodes].filter(c => !prevCodes.has(c))
+  const removed = [...prevCodes].filter(c => !nextCodes.has(c))
+
+  backup(PROJECT_MATRIX_FILE)
+  writeJsonAtomic(PROJECT_MATRIX_FILE, rows)
+  return { rows, added, removed }
+}
+
 // ── The one mutation the route needs ────────────────────────────────────────
 // Splice this team's roster + components into the two full maps and persist
 // both. Returns what was written so the client can sync its live refs.

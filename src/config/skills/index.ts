@@ -18,6 +18,8 @@ import taskSkillMeEn from './coach-skill-task-me-en.md?raw'
 import taskSkillMeZh from './coach-skill-task-me-zh.md?raw'
 import taskSkillVVEn from './coach-skill-task-vv-en.md?raw'
 import taskSkillVVZh from './coach-skill-task-vv-zh.md?raw'
+import taskSkillFusaEn from './coach-skill-task-fusa-en.md?raw'
+import taskSkillFusaZh from './coach-skill-task-fusa-zh.md?raw'
 import taskSkillDevopsEn from './coach-skill-task-devops-en.md?raw'
 import taskSkillDevopsZh from './coach-skill-task-devops-zh.md?raw'
 import taskSkillPmoEn from './coach-skill-task-pmo-en.md?raw'
@@ -30,6 +32,7 @@ const TASK_SKILL_MAP: Record<string, { en: string; zh: string }> = {
   HW:   { en: taskSkillHwEn, zh: taskSkillHwZh },
   ME:   { en: taskSkillMeEn, zh: taskSkillMeZh },
   VV:   { en: taskSkillVVEn, zh: taskSkillVVZh },
+  FUSA: { en: taskSkillFusaEn, zh: taskSkillFusaZh },
   Devops:  { en: taskSkillDevopsEn, zh: taskSkillDevopsZh },
   PMO:  { en: taskSkillPmoEn, zh: taskSkillPmoZh },
 }

@@ -10338,3 +10338,570 @@ green (baseline 3 known-red formatCoach).
 `src/composables/useQualityModel.ts`, `src/utils/bucketIndex.ts`, `src/utils/formatTime.ts`,
 `src/components/quality/{TrendMatrix,QualityTrendModelling}.vue`, `src/workers/qualityModel.worker.ts`,
 `src/App.vue`, `vite.config.ts`, `AppHeader.vue` (v10.229→v10.230), `PLAN.md`, `MEMORY.MD`.
+
+## v10.231 — Remove SSE stream; simplify View-mode refresh to tab-focus only
+
+### Why
+The SSE EventSource connection (persistent HTTP keep-alive + 25 s heartbeat) and the automatic 30 s staleness check together caused sustained CPU/network load on GWM workstations. In worst cases this made the workstation unresponsive and closed all applications.
+
+### Design
+Replaced two automatic mechanisms with a single user-intent-based trigger:
+
+| Before | After |
+|---|---|
+| SSE EventSource open while View is on screen (auto-reconnects, heartbeat every 25 s) | **Removed** |
+| Tab-focus refetch if data > 30 s old | Tab-focus refetch on every focus (no staleness gate) |
+| Mode-switch refetch if data > 30 s old | Mode-switch refetch on every return to View |
+
+Refresh now only fires when the user actively focuses the browser tab (alt-tab, tab switch, window restore) or explicitly returns to View mode inside EAX — never automatically in the background.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/composables/useQualityGrid.ts` | Remove SSE block (`_es`, `_coalesce`, `scheduleRefresh`, `openStream`, `closeStream`); drop 30 s staleness gate from `onVisibilityChange` and `setGridActive` |
+| `server/routes/tickets.ts` | Remove `GET /api/tickets/stream` route, `emitTicketsChanged` call, and events import |
+| `server/events.ts` | **Deleted** — no remaining consumers |
+| `src/composables/__tests__/useQualityGrid.activegate.test.ts` | Update tests to reflect always-refetch-on-return behavior; remove stale-data and "quick bounce does not refetch" cases |
+| `src/components/layout/AppHeader.vue` | v10.230 → v10.231 |
+
+## v10.232 — Config → Skills page: 2×2 grid layout
+
+### Why
+The Skills sub-page stacked its four editors (Task Coach Skill, Task Analyze Skill, Response Format Instructions, Template Chip Editor) in a single 820px-wide centered column, leaving the right half of the wide `.config-content` area empty and forcing long vertical scrolling. Relocating them into a 2×2 grid uses the horizontal space and halves the scroll.
+
+### Design
+Layout-only change — no logic, handlers, or state touched. Reading-order mapping:
+
+```
+Row 1:  [ Task Coach Skill ]  [ Task Analyze Skill ]
+Row 2:  [ Response Format  ]  [ Template Chips     ]
+```
+
+- Skills page root gets `config-form--wide` (max-width 820 → 1280px); Model page keeps 820px.
+- The four `.field-group` blocks are wrapped in a `.skills-grid` (`grid-template-columns: 1fr 1fr`, `align-items: start`). Header and sticky Save bar stay full-width outside the grid.
+- `align-items: start` keeps the Response Format cell top-aligned when the Template Chips `<details>` expands.
+- Collapses to one column under 960px.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/config/SkillsConfig.vue` | Root `config-form--wide`; wrap 4 field-groups in `.skills-grid` |
+| `src/styles/config-forms.css` | Add `.config-form--wide`, `.skills-grid`, 960px media query |
+| `src/components/layout/AppHeader.vue` | v10.231 → v10.232 |
+
+## v10.233 — Config: new "Project" sub-page (placeholder)
+
+### Why
+Config mode needed a Project sub-page alongside Team/Model/Skills/Activity. Scaffolded now as a placeholder; real content (likely a PROJECT_CONFIG editor) comes later.
+
+### Design
+- Inserted between Team and Model in the rail (`['team','project','model','skills','logs']`).
+- New `ProjectConfig.vue` — self-contained centered placeholder (folder SVG + title + reused `config.comingSoon`); own scoped styles since ConfigPanel's `.config-placeholder` is scoped.
+- Rail icon is a feather-style **SVG folder** to stay consistent with the all-SVG rail (not an emoji).
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/config/ProjectConfig.vue` | **New** placeholder sub-page |
+| `src/components/config/ConfigPanel.vue` | Import, `SubPage` type + `SUB_PAGES`, rail button (folder SVG), `v-show` render |
+| `src/i18n/en.ts` · `src/i18n/zh.ts` | `config.project` = 'Project' / '项目' |
+| `src/components/layout/AppHeader.vue` | v10.232 → v10.233 |
+
+## v10.234 — Fix the surviving ~60s auto-refresh in View mode (range-watch bug)
+
+### Why
+After v10.231 (SSE + 30s gate removed), the deployed View mode STILL auto-refreshed ~once per minute (timing label + Refresh button twinkled while idle on the page). v10.231 missed a third refresh path.
+
+### Root cause
+`useQualityGrid` watched the timing window as a single getter returning a fresh array:
+`watch(() => [range.value.from.getTime(), range.value.to.getTime()], () => fetchTickets())`.
+`range` (useTimingPhase) reads `now` (useSprint), which ticks every 60s. Each tick re-evaluates the getter, which returns a NEW array literal; Vue's single-source watch compares with `Object.is`, so a fresh array is never equal to the previous one → the callback fired every minute even though from/to were unchanged → `fetchTickets()` every 60s.
+
+### Fix
+Switch to a **multi-source array of getters** so Vue compares each value with `Object.is` (numbers by value); the watch now fires only when `from`/`to` actually change (preset switch, sprint boundary, day rollover):
+`watch([() => range.value.from.getTime(), () => range.value.to.getTime()], () => fetchTickets())`.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/composables/useQualityGrid.ts` | Range watch → array-of-getters; comment explaining the Object.is gotcha |
+| `src/composables/__tests__/useQualityGrid.rangewatch.test.ts` | **New** regression test: 60s clock tick → no refetch; genuine window change → refetch |
+| `src/components/layout/AppHeader.vue` | v10.233 → v10.234 |
+
+## v10.235 — Coach precision: bring SW-EN skill to canonical parity
+
+### Why
+Evaluated the ralph-loop plugin for improving AI answer precision — it's a Claude Code dev-tooling Stop-hook (iterates on a codebase against a test oracle), not embeddable in EAX's streamed-completion pipeline. Category mismatch. Chose the high-ROI alternative: improve the coach-skill prompts (no extra LLM round-trips).
+Biggest defect found: `coach-skill-task-sw-en.md` was a generic 13-line stub while its Chinese twin `sw-zh` is the full 134-line SW01 canonical template — English SW reviewers (the largest discipline) got a far weaker review than Chinese ones.
+
+### Change
+Ported `coach-skill-task-sw-zh.md` → `coach-skill-task-sw-en.md` at canonical parity (faithful English mirror of already-authored content): SW01 role + codename, input-data spec, three core pain points, applicable scope, task-trigger/identity boundary (off-topic gating), full BSW/MCAL/calibration checklist tables, tone + vague-word bans, strict output format, worked example (few-shot anchor), and FAIL-pattern list. `sw-zh` unchanged (source of truth).
+
+### Follow-on (not in this change)
+Thin mapped disciplines SYS/APP/HW/VV/Devops (×en/zh) still need boundary-gating + worked example + FAIL list added; do per-discipline with domain review. (`test`/`swf` md files are unmapped/dead.)
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/config/skills/coach-skill-task-sw-en.md` | Rewrite 13-line stub → canonical parity with sw-zh |
+| `src/components/layout/AppHeader.vue` | v10.234 → v10.235 |
+
+## v10.236 — Activity log: stamp team_key/assignee/project on every entry (traceability)
+
+### Why
+Ethan wants every Activity log entry to record who/which team acted. Real logs showed gaps: `jira.create` NOK lacked assignee/points; `llm/chat` upstream errors had no team context at all (the chat body is only `{model,messages}`).
+
+### Design
+EAX has no login and `useForm`'s `form` is per-instance, so a shared client-side "current selection" feeds traceability. No server global (would leak across workstations) — context travels per-request.
+- New `src/composables/useSelectionContext.ts` — `selectionContext` ref {team_key,project,assignee} + `setSelectionContext`/`selectionContextFields` (non-empty only).
+- `App.vue` form watcher (projectKey/assignee) feeds the store; `jira.create` NOK detail now includes points + assignee.
+- `auditClient.logClientEvent` merges the selection into every client event's detail as defaults (covers jira.create/update OK+NOK with one change).
+- `/api/llm/chat`: optional `context` on the body (`LLMRequestBody` + server `REQUEST_BODY_SCHEMA`); client sends it from the selection; server logs it as `teamInformation` + top-level `team_key` on both the request and upstream-error logs. Explore/gateway path only.
+- `ticket.write` (auditTicketResponse) detail += assignee/displayName (n8n body already carries them).
+- System events (mcp.ready/auth.fail) stay blank — no team context, per chosen scope.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/composables/useSelectionContext.ts` | **New** shared selection store |
+| `src/App.vue` | Feed store from form watcher; NOK detail += points/assignee |
+| `src/utils/auditClient.ts` | Inject selection into every client event detail |
+| `src/composables/useLLM.ts` · `src/types/api.ts` | Send `context` on brokered call |
+| `server/routes/llm.ts` | Schema `context`; request+error logs `teamInformation`/`team_key` |
+| `server/routes/tickets.ts` | `ticket.write` detail += assignee/displayName |
+| `server/__tests__/llm-chat.test.ts` | +2 tests (context accepted; teamInformation in error log) |
+| `src/components/layout/AppHeader.vue` | v10.235 → v10.236 |
+
+## v10.237 — Quality Trend Modelling: anchor forecast at the window end ("now")
+
+### Why
+Latent placement bug found while auditing the chart. `forecastSeries` computed forecast[k] as k damped steps from the last bucket *with data* (`fit.lastX`), but `qualityModelChart` plotted them at fixed slots after *all* history buckets (`bucketsLength + k`). When a series' latest selected bucket(s) were empty (early in a fresh week, a quiet team, PI/last-90 at a week boundary), the two disagreed: the first damped step stretched into one long straight dashed ramp and +1/+2/+3 were time-shifted/under-damped vs their labels. (The 6/16-stale-data screenshot was a separate, data-only cause — fixed by loading the fresh DB.)
+
+### Fix
+Anchor the forecast at the **window's last slot ("now")**: `anchor = intercept + slope·(history.length − 1)` instead of `slope·fit.lastX`. Identical when the last bucket has data; correctly extrapolates the trend to now when trailing buckets are empty, so +1/+2/+3 are a true 1/2/3 steps ahead. Exposed `forecastAnchor` on `ModelSeries`; the chart adds a "now" vertex (only when the last bucket is empty) so the dashed line bends at now instead of a straight ramp. Damping, band, and the divider markLine are unchanged.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/composables/useQualityModel.ts` | Anchor at window end; add `forecastAnchor` to `ModelSeries`/`forecastSeries`/`buildSeries` |
+| `src/components/quality/qualityModelChart.ts` | "now" vertex on the dashed series when latest bucket is empty |
+| `src/composables/__tests__/useQualityModel.test.ts` | +1 trailing-empty test (anchor = ŷ(now)) |
+| `src/components/quality/__tests__/qualityModelChart.test.ts` | fixtures get `forecastAnchor`; +1 sparse-series now-vertex test |
+| `src/components/layout/AppHeader.vue` | v10.236 → v10.237 |
+
+## v10.238 — Config → Project: product-coding matrix editor
+
+### Why
+The Project sub-page was a placeholder (v10.233). Filled it with the authenticated product-coding matrix from project-format.jpg. New dataset, unrelated to the JIRA PROJECT_CONFIG.
+
+### Design
+Mirrors the Team editor (server-shared, code-gated). Columns: 产品线 (dropdown X-line/Y-Line/Z-Line, English only), 客户代号/项目号/年度信息/公司代号/产品流水号/产品类型代号 (text), 综合编码 (read-only, derived = the 6 code fields joined by "-", excludes 产品线). Seeded with the 13 image rows (产品线 defaulted to X-line). Editing gated by the reserved `projects` code (or `*` master) in team-codes.json.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/config/projectMatrix.ts` | **New** — type, PRODUCT_LINE_OPTIONS, compositeCode, 13-row seed |
+| `public/config/project-matrix.json` | **New** — served seed (also baked → config-defaults) |
+| `src/composables/useProjectMatrixWrite.ts` | **New** — unlock/lock/save (sessionStorage `projects_code`) |
+| `src/composables/useRuntimeConfig.ts` | Load + validate `/config/project-matrix.json`; `runtimeProjectMatrix` |
+| `server/config-store.ts` | `isProjectMatrixArray`, `readProjectMatrix`, `saveProjectMatrix` |
+| `server/routes/config.ts` | `POST /api/config/projects/unlock`, `PUT /api/config/projects` (gate `verifyTeamCode('projects')`) |
+| `src/components/config/ProjectConfig.vue` | Placeholder → matrix editor (lock bar, table, dropdown, auto composite, add/del row, save bar) |
+| `src/i18n/en.ts` · `zh.ts` | `config.proj*` column headers + labels |
+| `deploy/docker-entrypoint.sh` · `team-codes.sample.json` | Seed `project-matrix.json`; document the `projects` gate code |
+| `server/__tests__/config-route.test.ts` · `src/config/__tests__/projectMatrix.test.ts` | +9 tests (auth, validation, save, composite) |
+| `src/components/layout/AppHeader.vue` | v10.237 → v10.238 |
+
+## v10.239 — Project page: richer audit log + `projects` edit code + codes-leak fix
+
+### Why
+Follow-ups to v10.238: make Project "maintaining actions" fully traceable in Activity, add the editing auth code to team-codes.json, and fix a found security leak.
+
+### Changes
+- **Audit delta:** `projects.unlock`/`projects.save` were already audited (v10.238). Enriched `saveProjectMatrix` to compute the added/removed **composite-code** delta vs the previous file (new server `compositeCode` helper) and return it; the `projects.save` audit now logs `+N/−N (codes)` in msg + detail, mirroring the Team editor's member delta.
+- **Auth code:** added `"projects": "PROJECTS2026"` to `data/team-codes.json` (a new non-team gate group; the `*` master also unlocks it). `deploy/team-codes.sample.json` already documents it.
+- **Security:** deleted `public/config/team-codes.json` — it was a full copy of the real edit codes under the web root (fetchable at `/config/team-codes.json` in dev) and unused by the server (which reads `data/team-codes.json`). Added a ⚠️ note to `public/config/README.md`.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `server/config-store.ts` | `compositeCode` helper; `saveProjectMatrix` returns added/removed delta |
+| `server/routes/config.ts` | `projects.save` audit msg/detail + response carry the delta |
+| `data/team-codes.json` | + `"projects": "PROJECTS2026"` |
+| `public/config/team-codes.json` | **deleted** (web-served codes leak) |
+| `public/config/README.md` | ⚠️ never web-serve codes; `projects` gate |
+| `server/__tests__/config-route.test.ts` | +1 delta test; first-write asserts added/removed |
+| `src/components/layout/AppHeader.vue` | v10.238 → v10.239 |
+
+## v10.240 — Project matrix: quick filter + Comments column
+
+### Why
+Help users find a project code fast (quick-filter search) and capture free-text notes per row (new Comments column).
+
+### Changes
+- **Filter:** a search box above the table; `rowMatchesQuery` (projectMatrix.ts) does a case-insensitive substring match across 产品线, the 6 code fields, the composite code, and comments. Works while locked (read-only search). The table renders `{ row, idx }` pairs so edits/removes target the true draft row regardless of filtering; Add row clears the filter so the new blank row shows.
+- **Comments:** new persisted `comments` column at the right end (before the delete action). NOT part of 综合编码. Optional in both validators (backward-compatible with rows lacking it).
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/config/projectMatrix.ts` | `comments` field; `emptyRow`/seed include it; `rowMatchesQuery` helper |
+| `public/config/project-matrix.json` | seed `comments: ""` on 13 rows |
+| `src/components/config/ProjectConfig.vue` | filter input, `filteredRows`, Comments column, addRow clears filter, no-match state |
+| `server/config-store.ts` · `src/composables/useRuntimeConfig.ts` | validators accept optional `comments` string |
+| `src/i18n/en.ts` · `zh.ts` | `projColComments`, `projFilter`, `projNoMatch` |
+| `src/config/__tests__/projectMatrix.test.ts` · `server/__tests__/config-route.test.ts` | filter + comments tests |
+| `src/components/layout/AppHeader.vue` | v10.239 → v10.240 |
+
+## v10.241 — Project matrix: CSV export / import
+
+### Why
+Let users move the product-coding matrix in/out via a CSV whose columns follow the Project page design.
+
+### Design
+- New pure util `src/utils/projectMatrixCsv.ts`: `projectMatrixToCsv(rows, headerLabels)` (RFC-4180 escaping; emits the derived 综合编码 column for readers) + `parseProjectMatrixCsv(text)` (own RFC-4180 `parseCsv`, BOM-tolerant; maps columns by header **alias** — zh label / en label / field key — so either-language CSVs import; the composite column is ignored/recomputed; product line normalized to the 3 options, unknown → '').
+- ProjectConfig toolbar: **Export CSV** (always; reads current rows, prepends a UTF-8 BOM for Excel) reusing `downloadFile` from exportFormats.ts; **Import CSV** (unlocked only) loads into the draft (dirty → user reviews → Save through the existing `projects` auth + audit). Replace semantics; no new server endpoint.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/utils/projectMatrixCsv.ts` | **New** — CSV serialize/parse + header-alias mapping |
+| `src/components/config/ProjectConfig.vue` | Export/Import toolbar + handlers (`fmt` helper) |
+| `src/i18n/en.ts` · `zh.ts` | `projExportCsv`/`projImportCsv`/`projImportDone`/`projImportError` |
+| `src/utils/__tests__/projectMatrixCsv.test.ts` | **New** — round-trip, quoting, zh/en headers, BOM, missing-composite, normalization, RFC-4180 |
+| `src/components/layout/AppHeader.vue` | v10.240 → v10.241 |
+
+## v10.242 — Project matrix: duplicate composite-code validation
+
+### Why
+The matrix must never hold two rows with the same 综合编码. A duplicate (from import or manual edits to 产品线…产品类型代号) must error, red the offending cells, and block Save.
+
+### Design
+- `src/config/projectMatrix.ts`: `isBlankComposite` (all 6 code fields empty → skipped) + `duplicateCompositeRows(rows)` → `{ indices, codes }`. Composite excludes 产品线, so rows differing only in product line still collide.
+- ProjectConfig: `dup`/`hasDuplicates` computeds; duplicate rows get `.pc-dup` → reds the 产品线 select + 6 code inputs + composite cell (not Comments); an error banner lists the codes; Save is disabled (`hasDuplicates`); import toasts the dup error (rows still load for fixing). Blank rows never trigger it.
+- Server guard: `config-store.duplicateComposites`; PUT `/api/config/projects` returns 400 `{error:'duplicate', detail}` so the rule holds even if the client is bypassed.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/config/projectMatrix.ts` | `isBlankComposite`, `duplicateCompositeRows` |
+| `src/components/config/ProjectConfig.vue` | dup computeds, red cells, error banner, blocked Save, import toast |
+| `server/config-store.ts` · `server/routes/config.ts` | `duplicateComposites` + PUT 400 |
+| `src/i18n/en.ts` · `zh.ts` | `projDupError` |
+| `src/config/__tests__/projectMatrix.test.ts` · `server/__tests__/config-route.test.ts` | dup detection + 400/200 tests |
+| `src/components/layout/AppHeader.vue` | v10.241 → v10.242 |
+
+## v10.243 — Wire Composite-Code into Task Summary
+
+### Why
+The Task-mode JIRA Summary was a five-part `[Vehicle][Product][Layer][Component][Detail]`, with Vehicle and Product as two free dropdowns disconnected from the Project matrix. Merge them into a single **Composite-Code** sourced from the saved matrix (`project-matrix.json`), so titles reference a real, unique product code. Title becomes four-part `[CompositeCode][Layer][Component][Detail]`.
+
+### Design
+- `SummaryState`: `vehicle`/`product` → one `compositeCode`. `computedSummary` parts, `canSubmit`, and `reset()` follow. `ROLE_WEIGHTS`: every role's `vehicle` + `product` weights merge into one `compositeCode` weight = their sum, preserving each role's 100-point total; `qualityScore` counts it once.
+- New `CompositeCodeCombobox.vue`: self-contained searchable select (Assignee-style inline filter + keyboard nav). Options sourced from `runtimeProjectMatrix` non-blank rows → `{ code, productLine, projectNo }`; search matches all three; the label shows a static `· N` count.
+- Coach skills (mapped disciplines × en/zh) + `analyze-skill-{en,zh}.md`: summary spec five-part → four-part `[CompositeCode][Layer][Component][Task Summary]`; sub-task inheritance "first four/前四段" → "first three/前三段".
+- n8n payload unchanged (sends only `summary`), so the change is contained to title/score/validate/export/prompts.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/types/form.ts` · `src/composables/useForm.ts` | model + title/score/validate |
+| `src/components/form/CompositeCodeCombobox.vue` (new) · `SummaryBuilder.vue` | searchable field + count |
+| `src/utils/exportFormats.ts` · `src/i18n/{en,zh}.ts` | Composite Code row + keys |
+| `src/config/skills/*.md` | four-part summary spec sweep |
+| `src/composables/__tests__/useForm.test.ts` · `CompositeCodeCombobox.test.ts` (new) | updated/new tests |
+| `src/components/layout/AppHeader.vue` | v10.242 → v10.243 |
+
+## v10.244 — Composite-Code: font parity + scoped duplicate highlight
+
+### Why
+Two follow-ups on v10.243: (1) the Composite-Code field rendered in monospace, unlike its sibling TASK SUMMARY fields; (2) a duplicate composite reddened the whole row's identity inputs, when the rule is really a *vertical* check down the Composite-Code column.
+
+### Design
+- `CompositeCodeCombobox.vue`: `.combobox-input` font `var(--font-mono)` → `var(--font-sans)` (and dropped from the placeholder); left padding 10px → 8px to match Layer/Component/Detail. The dropdown `.option-code` stays mono (code-list readability).
+- `ProjectConfig.vue` (CSS only): the `.pc-dup` red is scoped to `.pc-composite` (the composite cell) only — 产品线 + the 6 code inputs no longer redden. Detection (`duplicateCompositeRows`), error banner, and Save-block are unchanged.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/form/CompositeCodeCombobox.vue` | input font mono → sans; padding align |
+| `src/components/config/ProjectConfig.vue` | scope duplicate red to the composite cell only |
+| `src/components/layout/AppHeader.vue` | v10.243 → v10.244 |
+
+## v10.245 — FUSA (Functional Safety) layer + coach skills
+
+### Why
+Task mode needed a Functional-Safety discipline. Added a new **FUSA** Layer element for the FuSa team of automotive chassis control development, with a dedicated role and a bilingual ISO 26262 coach skill. Layer selection auto-routes the role (skill/weights/context/questions), so FUSA ships with all of them.
+
+### Design
+- New layer `FUSA` (after VV) in the runtime `summary-options.json` + the `LAYER_OPTIONS` fallback.
+- New role `fusa-engineer` (FUSA Engineer / 功能安全工程师). Every exhaustive `Record<UserRole,…>` updated or `tsc` fails: `UserRole` union + `ROLES` (ISO 26262 chassis context/placeholder), `LAYER_ROLE_MAP`, `ROLE_WEIGHTS` (traceability/description-heavy, sums to 100), and `ROLE_QUESTIONS` in both `elicitation.task.ts` and `elicitation.explore.ts`.
+- New `coach-skill-task-fusa-{en,zh}.md` following the canonical sw-zh format (codename FS01, four-part summary spec, safety-keyword trigger/boundary, checklist tables, worked ASIL-D ESC example, FAIL pitfalls). Full ISO 26262 scope: HARA/ASIL/safety goals, FSR/TSR & safety mechanisms (FTTI), analyses (FMEA/FMEDA/FTA/DFA, SPFM/LFM/PMHF), and process work products (DIA/safety case/confirmation measures). Wired into `TASK_SKILL_MAP`; the `coach-skill-task-fusa-<lang>.md` name is auto-derived from the layer code.
+
+### Deploy note
+Production loads `summary-options.json` from a mounted volume (the `LAYER_OPTIONS` constant is only a load-failure fallback). After deploy, ops must add `"FUSA"` to the mounted `summary-options.json` for the option to appear in production.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `public/config/summary-options.json` · `src/config/constants.ts` | add `FUSA` layer (+ fallback) |
+| `src/composables/useRole.ts` | `UserRole` union + `fusa-engineer` ROLES entry |
+| `src/composables/useForm.ts` | `LAYER_ROLE_MAP` + `ROLE_WEIGHTS` (fusa-engineer) |
+| `src/config/domain/elicitation.task.ts` · `elicitation.explore.ts` | `ROLE_QUESTIONS` fusa-engineer |
+| `src/config/skills/coach-skill-task-fusa-{en,zh}.md` (new) · `src/config/skills/index.ts` | new skills + wiring |
+| `src/components/layout/AppHeader.vue` | v10.244 → v10.245 |
+
+## v10.246 — Explore chat management: Claude-style sidebar Recents (Step 1 of 3)
+
+### Why
+Explore-mode past chats were hidden behind a separate History tab. Per the Claude reference, surface every past chat as a clickable list in the left sidebar so users open/continue a chat in one click. Staged: **Step 1** = sidebar Recents list + remove the Explore History tab; Step 2 = per-chat ⋯ menu (Star/Rename/Add-to-project[future]/Delete); Step 3 = search.
+
+### Design (Step 1)
+- `ExploreChat.vue`: the left rail drops the Chat/History tab toggle and now shows **New chat** + a scrollable **Recents** list (`getSessionGroups(recordsForChannel('explore')).grouped`, newest-first). Each row = `getSessionName(id) ?? firstUserPreview(records)`; click → `continue-session` (reuses the existing `restoreExploreCoachMessages` path that also re-points the session so new turns append). Active chat highlighted via `currentExploreSessionId`. Main column always renders the conversation; `<CoachHistoryTab>` usage + the `replay` emit removed from Explore.
+- `useCoachHistory.ts`: export reactive `currentExploreSessionId` (= `sessionByChannel.value.explore`).
+- Scope guard: `CoachHistoryTab.vue` is untouched — **Task mode** still uses it (`channel='task'`). The Explore History tab's search/bulk-delete/export go away by design; per-chat delete returns in Step 2, search in Step 3.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/chat/ExploreChat.vue` | rail Recents list; remove Chat/History tabs + CoachHistoryTab usage |
+| `src/composables/useCoachHistory.ts` | export `currentExploreSessionId` |
+| `src/App.vue` | drop dead `@replay`/`handleExploreReplay` (Explore) |
+| `src/i18n/en.ts` · `zh.ts` | `coach.exploreRecents`, `coach.exploreNoChats` |
+| `src/components/layout/AppHeader.vue` | v10.245 → v10.246 |
+
+## v10.247 — Explore chat management: per-chat ⋯ menu (Step 2 of 3)
+
+### Why
+Step 2 of the Claude-style sidebar: each Recents row gets a ⋯ menu (per `three-dot-feature.jpg`) so users can manage a chat in place — Star · Rename · Add to project (future) · Delete.
+
+### Design
+- `useCoachHistory.ts`: new `starredSessions` store (localStorage `coach-starred-sessions`) with `isSessionStarred`/`toggleSessionStar`; `deleteSession(id)` (deletes all records of a chat); `pruneOrphanStars` wired into `deleteRecords`/`clearHistory`.
+- `ExploreChat.vue`: each row shows a ⋯ button (revealed on hover / when active / menu open) and a star icon when pinned. Recents now sort **starred-first**, then newest. The ⋯ opens a menu **teleported to `<body>`** (positioned at the button so the rail's overflow can't clip it; a transparent backdrop + Escape close it). Menu: **Star/Unstar** (toggle), **Rename** (inline input, reuses `setSessionName`), **Add to project** (rendered disabled — future), **Delete** (`deleteSession`; if the deleted chat is active, emits `new-chat` to drop to a fresh conversation).
+- i18n: `coach.chatMore/chatStar/chatUnstar/chatRename/chatAddToProject/chatDelete` (EN+ZH).
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/composables/useCoachHistory.ts` | star store, `deleteSession`, orphan-star prune |
+| `src/components/chat/ExploreChat.vue` | ⋯ menu, star/rename/delete, star-first sort |
+| `src/i18n/en.ts` · `zh.ts` | `coach.chat*` menu strings |
+| `src/components/layout/AppHeader.vue` | v10.246 → v10.247 |
+
+## v10.248 — Fix: unreliable ⋯ menu clicks in Explore Recents
+
+### Why
+The v10.247 ⋯ menu closed via a full-screen teleported backdrop (`fixed; inset:0; z-index:2000`). While open it covered every ⋯ button, so the next click hit the backdrop (close-only) instead of the button — the menu needed several clicks and switching chats ate a click.
+
+### Design
+- `ExploreChat.vue`: removed the `.recent-menu-backdrop`; the menu now teleports bare. Outside-close is a `window` `pointerdown` listener (added/removed via `watch(menuOpenId)`, cleaned up on unmount) that **ignores `.recent-menu` and `.recent-more`**, so a single click opens / switches / toggles. `openMenu` now clamps x within the viewport and flips the menu above the button near the bottom edge. `.recent-menu` carries `z-index: 2000` itself.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/chat/ExploreChat.vue` | backdrop → scoped outside-pointer listener; viewport-clamped/flipping position |
+| `src/components/layout/AppHeader.vue` | v10.247 → v10.248 |
+
+## v10.249 — Fix ⋯ click reliability (real cause) + match Claude sidebar font
+
+### Why
+v10.248 didn't fix the "click many times" ⋯ bug. Real cause (found by comparing to the saved Claude sidebar): `.recent-more` hid with `opacity: 0`, which keeps the button **in layout and hit-testable** — it permanently overlaid the right edge of every row, stealing/confusing clicks. Claude reveals its ⋯ with `display: none → flex` (not hit-testable until shown) and keeps the active chat's ⋯ always visible. Also matched the sidebar font to Claude's `text-sm` (14px).
+
+### Design
+- `ExploreChat.vue`: `.recent-more` reveal switched `opacity` → **`display`** (`none` → `inline-flex` on `:hover` / `:focus-within` / `.active` / `.menu-open`); hit area 22→28px. Menu now anchors at the trigger's left (`min(rect.left, innerWidth - MENU_W - 8)`), clamped + bottom-flip. Outside-close `pointerdown` listener (v10.248) kept — it was correct. Sidebar font/layout aligned to Claude: 14px titles + New-chat item, 32px rows, `border-radius: 9px`, `px-3`; active row = solid `--bg-tertiary` (not blue tint); "Recents" header un-uppercased, muted.
+- Test: `ExploreChat.test.ts` gains a single-click open + switch case (teleported `.recent-menu` appears after one click; clicking another row's ⋯ keeps exactly one menu).
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/chat/ExploreChat.vue` | ⋯ reveal opacity→display; bigger hit area; menu anchor; Claude font/row styling |
+| `src/components/chat/__tests__/ExploreChat.test.ts` | single-click open + switch test |
+| `src/components/layout/AppHeader.vue` | v10.248 → v10.249 |
+
+## v10.250 — Explore sidebar: vertical ⋮, icon dead-zone, width, rename prefill
+
+### Why
+Post-v10.249 testing found four sidebar issues: ⋯ was horizontal; clicking *on* the icon never opened the menu (only the area around it); chat names were cut off; Rename started from a blank field.
+
+### Design (`ExploreChat.vue`)
+- **Vertical ⋮** — ⋯ SVG circles changed to `cx=12, cy=6/12/18`.
+- **Icon dead-zone (real click fix)** — `.recent-more svg { pointer-events: none }`. Clicking the icon was making the `<svg>`/`<circle>` the `event.target` so the button's `@click` missed; now the whole 28px button is one target. Also keeps `onDocPointerDown`'s `closest('.recent-more')` reliable (target is always the button).
+- **Wider rail** — `.explore-rail` 168px → 280px (Claude ≈18rem); collapsed stays 52px. Titles keep truncate + `:title` tooltip.
+- **Rename prefill** — `startRename` seeds `renameText` with the current effective title (`getSessionName(id) ?? firstUserPreview(records)`), text selected for immediate editing.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/chat/ExploreChat.vue` | vertical ⋮; icon `pointer-events:none`; rail 280px; rename prefill |
+| `src/components/layout/AppHeader.vue` | v10.249 → v10.250 |
+
+## v10.251 — Explore chat search command palette (Step 3 of 3)
+
+### Why
+Final step of the Claude-style chat management: a search. A magnifier sits left of the sidebar toggle; clicking it opens a centered command-palette modal to find and open any past chat (per `search-UX-claude.jpg`).
+
+### Design
+- New `ChatSearchModal.vue` (built on the `HotkeyModal`/`useFocusTrap` overlay pattern, anchored top-center): autofocused search input + ✕, a keyboard-navigable result list (↑/↓ highlight, Enter/click select, Esc/✕/backdrop close). Each row shows a chat icon + title + a right-side label that reads **Enter** on the highlighted row, else a time bucket (Today/Yesterday/Past week/Past month/Older via `timeBucketLabel`). Props `open`/`items`; emits `update:open`/`select`.
+- `ExploreChat.vue`: magnifier added in a new `.rail-top` row left of the toggle (`.rail-iconbtn` shared style); `searchItems` computed from `recentSessions` (haystack = title + message text, newest-first); `onSearchSelect` reuses the existing `continue-session` path.
+- i18n: `coach.searchChats/searchPlaceholder/searchNoResults/searchEnterHint` + `coach.time*` buckets (EN+ZH).
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/chat/ChatSearchModal.vue` (new) | command-palette search modal |
+| `src/components/chat/ExploreChat.vue` | rail search button, `searchItems`, modal wiring |
+| `src/components/chat/__tests__/ChatSearchModal.test.ts` (new) | filter / keyboard / click / close tests |
+| `src/i18n/en.ts` · `zh.ts` | search + time-bucket strings |
+| `src/components/layout/AppHeader.vue` | v10.250 → v10.251 |
+
+## v10.252 — Search palette polish: "Enter" = active chat + hover darken
+
+### Why
+Two UX fixes on the v10.251 search palette (per `search-UX-claude.jpg`): the "Enter" hint should mark the chat that was **active before search opened** (so Enter returns there), and **hovering** a row should darken it independently of the keyboard selection.
+
+### Design (`ChatSearchModal.vue`)
+- New `activeId` prop. On open, the keyboard selection (and the "Enter" badge) defaults to the active chat's row (`filtered.findIndex(sessionId === activeId)`, else first), so Enter returns the user to where they were.
+- Hover decoupled from selection: removed `@mouseenter` highlight; added a CSS `.search-result:hover` darken. Arrow keys still move the selection; typing selects the top match (`watch(query)→0`).
+- `ExploreChat.vue` passes `:active-id="currentExploreSessionId"`.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/chat/ChatSearchModal.vue` | `activeId` pre-select; hover/selection decoupled |
+| `src/components/chat/ExploreChat.vue` | pass `:active-id` |
+| `src/components/chat/__tests__/ChatSearchModal.test.ts` | active-chat pre-select test |
+| `src/components/layout/AppHeader.vue` | v10.251 → v10.252 |
+
+## v10.253 — Explore rail: "Chats" nav + New-chat polish
+
+### Why
+Per `UX-Newchat-Chats-design-claude.jpg`: add a "Chats" nav item under New chat, with Claude-style hover polish (circular icons that intensify on hover, row highlight, and a Ctrl+⇧+O shortcut revealed when hovering New chat). The Chats page content is deferred ("coming soon").
+
+### Design (`ExploreChat.vue`)
+- **New chat**: `+` now sits in a circular `.rail-item-icon` badge; a right-aligned `.rail-shortcut` ("Ctrl+⇧+O") appears on hover; icon badge brightens on hover.
+- **Chats (new)**: nav item with a speech-bubbles icon; `active` when `activeView==='chats'`; clicking switches the main area to a placeholder `.explore-chats-page` ("Chats — coming soon").
+- **View switch**: `activeView` ref ('chat' | 'chats'); chat scroll + composer wrapped in `v-if==='chat'`. `onNewChat` / `onContinue` / `send` reset to 'chat'. Background streaming unaffected (App owns messages).
+- **Ctrl+⇧+O**: consolidated window keydown (`onGlobalKeydown`, replacing `onKeydownEsc`) fires `onNewChat()`; also still closes the ⋯ menu on Escape.
+- i18n: `coach.newChatShortcut`, `coach.chatsNav`, `coach.chatsComingSoon` (EN+ZH).
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/chat/ExploreChat.vue` | Chats nav, circular icons + hover, shortcut hint+key, `activeView` + placeholder page |
+| `src/components/chat/__tests__/ExploreChat.test.ts` | Chats-nav switch + Ctrl+Shift+O tests |
+| `src/i18n/en.ts` · `zh.ts` | chats/shortcut strings |
+| `src/components/layout/AppHeader.vue` | v10.252 → v10.253 |
+
+## v10.254 — Chats page: full list + select-mode bulk actions
+
+### Why
+Filled in the deferred Chats page (`chats-UX-Details.jpg`): a full list of all Explore chats with relative dates, plus a "Select chats" mode with checkboxes and a bulk bar (DownloadRaw / Select all / Move to project / Delete / Cancel). Reuses the existing Download-Raw export and delete plumbing.
+
+### Design
+- New `ChatsPage.vue` (rendered for `activeView === 'chats'`, replacing the v10.253 placeholder). Self-contained; emits `select(sessionId)` + `new-chat` (wired to `onContinue`/`onNewChat`). Data from `getSessionGroups(recordsForChannel('explore'))`; title = `getSessionName ?? firstUserPreview`; search filters title + message text.
+- Select mode: checkboxes, "N selected", Select all, Cancel; **DownloadRaw** reuses `DownloadModal` + `exportRecords`/`exportSessionsZip`/`sanitizeFilename`; **Delete** uses `ConfirmDialog` → `deleteSession` per id; **Move to project** is a disabled placeholder (future, parity with the ⋯ menu). "Shared" badge omitted (no sharing feature).
+- Relative date: Today / Yesterday / "N days ago" (<7d) else `Intl.DateTimeFormat` month-day (+year), locale by `isZh`.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/chat/ChatsPage.vue` (new) | full Chats page + select-mode bulk actions |
+| `src/components/chat/ExploreChat.vue` | placeholder → `<ChatsPage>`; removed placeholder CSS |
+| `src/components/chat/__tests__/ChatsPage.test.ts` (new) | list/search/select/download/delete tests |
+| `src/i18n/en.ts` · `zh.ts` | chatsSelect/Selected/SelectAll/MoveToProject/Cancel/DaysAgo |
+| `src/components/layout/AppHeader.vue` | v10.253 → v10.254 |
+
+## v10.255 — Fix: Create-JIRA re-gating on a 2nd authoring cycle
+
+### Why
+Task buttons follow Review → Analysis → Create JIRA (each gated on the prior's response). Bug: after creating ticket #1, editing the description and clicking Review again left **Create JIRA enabled off the stale first-cycle analysis** — the user could create again without re-running Analysis.
+
+### Design
+- `App.vue handleCoachRequest`: the existing "new iteration" reset cleared the workflow + `lastCreatedKey` but not `analyzeResponse`. Create JIRA gates on `hasAiResponse = !!analyzeResponse`, so the old analysis kept it live. Fix: in that reset block, also `clearAnalyzeResponse()` + `localStorage.removeItem(LS_ANALYZE_RESPONSE)`. Now a new Review clears the stale analysis → Create JIRA hides/disables until a fresh Analysis runs; Analysis re-enables after the new Review; Create re-enables after the new Analysis. No gating conditions in `TaskForm.vue` changed.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/App.vue` | clear analyze response (+ its cache) when a new Review iteration starts |
+| `src/components/layout/AppHeader.vue` | v10.254 → v10.255 |
+
+## v10.256 — Fix: page scroll in Task Analysis tab
+
+### Why
+In Task mode → Analysis tab, scrolling long analysis content (esp. at the bottom) scrolled the whole page instead of staying in the panel.
+
+### Design
+- Root cause: `PanelShell` `.panel-body` (the scroller, `flex:1; overflow-y:auto`) lacked `min-height: 0`. Default `min-height:auto` + CoachPanel's `max-height:2500px` let the body inflate to content height, overflow the bounded column, and chain the scroll to the page (the ancestors — grid `minmax(0,1fr)`, `.col-left` overflow, `.panel` min-height:0 — were already fixed; the innermost body was missed). Added `min-height: 0` (clamps the scroller to the column → internal scroll) and `overscroll-behavior: contain` (no wheel chaining). Resizable panels are unaffected (inline `min-height` overrides).
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/layout/PanelShell.vue` | `.panel-body`: add `min-height:0` + `overscroll-behavior:contain` |
+| `src/components/layout/AppHeader.vue` | v10.255 → v10.256 |
+
+## v10.257 — Gate Create JIRA behind the human review checklist
+
+### Why
+The Task sequence is complete form → Review → Analysis → Create JIRA, but the human review checklist (`ReviewStatusBar`) was only informational. Per Ethan, Create JIRA must stay disabled until the reviewer checks the checklist — a human checkpoint between Analysis and Create.
+
+### Design
+- Reuses `useReviewWorkflow.allChecked` (already passed to TaskForm + in App scope; `true` when the checklist is empty, so it only bites in Task mode where it's non-empty; resets each new cycle via `resetWorkflow`).
+- `TaskForm.vue`: Create button `:disabled` gains `|| !allChecked`; `:title` shows `form.createNeedsChecklist` when `hasAiResponse && !allChecked`.
+- `App.vue handleCreateClick`: guard `!canCoachSubmit.value || !allChecked.value` (also covers the Ctrl+Shift+C hotkey).
+- i18n `form.createNeedsChecklist`.
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/form/TaskForm.vue` | Create gate `+ !allChecked`; checklist tooltip |
+| `src/App.vue` | `handleCreateClick` guards `allChecked` (hotkey path) |
+| `src/i18n/en.ts` · `zh.ts` | `form.createNeedsChecklist` |
+| `src/components/layout/AppHeader.vue` | v10.256 → v10.257 |
+
+## v10.253 — Explore rail: "Chats" nav + New-chat polish
+
+### Why
+Per `UX-Newchat-Chats-design-claude.jpg`: add a "Chats" nav item under New chat, with Claude-style hover polish (circular icons that intensify on hover, row highlight, and a Ctrl+⇧+O shortcut revealed on New-chat hover). The Chats page content is deferred ("coming soon").
+
+### Design (`ExploreChat.vue`)
+- **New chat:** `+` now sits in a circular `.rail-item-icon` badge; a right-aligned `.rail-shortcut` ("Ctrl+⇧+O") reveals on hover; the icon badge brightens on hover. **Ctrl+Shift+O** is wired (window keydown, Explore-scoped) to start a new chat.
+- **Chats (new):** nav item with a speech-bubbles icon; `active` when `activeView==='chats'`; clicking shows a placeholder **Chats page** (centered icon + title + "coming soon") in the main area. New chat / opening a recent / search / sending returns `activeView` to `'chat'`.
+- `.rail-item.active` recolored to neutral `--bg-tertiary` (was blue tint) to match Claude.
+- Consolidated the window keydown into one `onGlobalKeydown` (menu Escape + Ctrl+Shift+O).
+- i18n: `coach.chatsNav`, `coach.chatsComingSoon`, `coach.newChatShortcut` (EN+ZH).
+
+### Changes
+
+| File | Change |
+|---|---|
+| `src/components/chat/ExploreChat.vue` | Chats nav + placeholder page; New-chat circular icon + shortcut hint/key; hover icon intensify; `activeView` |
+| `src/components/chat/__tests__/ExploreChat.test.ts` | Chats-nav switch + Ctrl+Shift+O tests |
+| `src/i18n/en.ts` · `zh.ts` | chatsNav / chatsComingSoon / newChatShortcut |
+| `src/components/layout/AppHeader.vue` | v10.252 → v10.253 |

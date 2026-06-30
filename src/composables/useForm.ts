@@ -27,8 +27,7 @@ export function useForm() {
   })
 
   const summary = reactive<SummaryState>({
-    vehicle: '',
-    product: '',
+    compositeCode: '',
     layer: '',
     component: '',
     detail: ''
@@ -49,8 +48,7 @@ export function useForm() {
   // Computed summary string
   const computedSummary = computed(() => {
     const parts = [
-      summary.vehicle,
-      summary.product,
+      summary.compositeCode,
       summary.layer,
       summary.component,
       summary.detail
@@ -68,8 +66,7 @@ export function useForm() {
       form.assignee &&
       form.estimatedPoints &&
       form.description.trim() &&
-      summary.vehicle &&
-      summary.product &&
+      summary.compositeCode &&
       summary.layer &&
       summary.component &&
       summary.detail
@@ -87,47 +84,52 @@ export function useForm() {
   const ROLE_WEIGHTS: Record<UserRole, Record<string, number>> = {
     '': {
       projectKey: 10, issueType: 10, assignee: 5, estimatedPoints: 5,
-      vehicle: 5, product: 5, layer: 5, component: 5, detail: 10,
+      compositeCode: 10, layer: 5, component: 5, detail: 10,
       descriptionPresent: 15, descriptionLength: 25
     },
     'system-architect': {
       projectKey: 6, issueType: 6, assignee: 4, estimatedPoints: 2,
-      vehicle: 8, product: 8, layer: 8, component: 8, detail: 8,
+      compositeCode: 16, layer: 8, component: 8, detail: 8,
       descriptionPresent: 14, descriptionLength: 28
     },
     'sw-developer': {
       projectKey: 8, issueType: 8, assignee: 8, estimatedPoints: 6,
-      vehicle: 6, product: 6, layer: 6, component: 8, detail: 12,
+      compositeCode: 12, layer: 6, component: 8, detail: 12,
       descriptionPresent: 12, descriptionLength: 20
     },
     'app-developer': {
       projectKey: 8, issueType: 8, assignee: 8, estimatedPoints: 6,
-      vehicle: 6, product: 6, layer: 6, component: 8, detail: 12,
+      compositeCode: 12, layer: 6, component: 8, detail: 12,
       descriptionPresent: 12, descriptionLength: 20
     },
     'hw-designer': {
       projectKey: 6, issueType: 6, assignee: 6, estimatedPoints: 4,
-      vehicle: 8, product: 8, layer: 8, component: 10, detail: 10,
+      compositeCode: 16, layer: 8, component: 10, detail: 10,
       descriptionPresent: 12, descriptionLength: 22
     },
     'me-designer': {
       projectKey: 6, issueType: 6, assignee: 6, estimatedPoints: 4,
-      vehicle: 8, product: 8, layer: 8, component: 10, detail: 10,
+      compositeCode: 16, layer: 8, component: 10, detail: 10,
       descriptionPresent: 12, descriptionLength: 22
     },
     'vv-engineer': {
       projectKey: 6, issueType: 6, assignee: 4, estimatedPoints: 2,
-      vehicle: 6, product: 6, layer: 6, component: 6, detail: 8,
+      compositeCode: 12, layer: 6, component: 6, detail: 8,
       descriptionPresent: 16, descriptionLength: 34
+    },
+    'fusa-engineer': {
+      projectKey: 6, issueType: 6, assignee: 4, estimatedPoints: 2,
+      compositeCode: 14, layer: 8, component: 6, detail: 10,
+      descriptionPresent: 16, descriptionLength: 28
     },
     'devops-engineer': {
       projectKey: 8, issueType: 8, assignee: 6, estimatedPoints: 4,
-      vehicle: 4, product: 4, layer: 6, component: 8, detail: 12,
+      compositeCode: 8, layer: 6, component: 8, detail: 12,
       descriptionPresent: 14, descriptionLength: 26
     },
     'pmo-manager': {
       projectKey: 8, issueType: 8, assignee: 6, estimatedPoints: 6,
-      vehicle: 4, product: 4, layer: 6, component: 4, detail: 10,
+      compositeCode: 8, layer: 6, component: 4, detail: 10,
       descriptionPresent: 14, descriptionLength: 30
     }
   }
@@ -140,8 +142,7 @@ export function useForm() {
     if (form.issueType) score += weights.issueType
     if (form.assignee) score += weights.assignee
     if (form.estimatedPoints) score += weights.estimatedPoints
-    if (summary.vehicle) score += weights.vehicle
-    if (summary.product) score += weights.product
+    if (summary.compositeCode) score += weights.compositeCode
     if (summary.layer) score += weights.layer
     if (summary.component) score += weights.component
     if (summary.detail) score += weights.detail
@@ -188,6 +189,7 @@ export function useForm() {
     HW:     'hw-designer',
     ME:     'me-designer',
     VV:     'vv-engineer',
+    FUSA:   'fusa-engineer',
     Devops: 'devops-engineer',
     PMO:    'pmo-manager',
   }
@@ -223,8 +225,7 @@ export function useForm() {
     form.requirementLevel = 'none'
     form.parentReqId = ''
     form.verificationMethod = ''
-    summary.vehicle = ''
-    summary.product = ''
+    summary.compositeCode = ''
     summary.layer = ''
     summary.component = ''
     summary.detail = ''

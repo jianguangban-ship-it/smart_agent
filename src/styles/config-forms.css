@@ -14,6 +14,21 @@
   gap: var(--space-5);
 }
 
+/* Wider canvas for pages that lay sections out in columns (Skills 2×2). */
+.config-form--wide { max-width: 1700px; }
+
+/* Skills page: four editor sections in a 2×2 grid. align-items:start so an
+   expanded Template Chips <details> grows only its own cell. */
+.config-form .skills-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .config-form .skills-grid { grid-template-columns: 1fr; }
+}
+
 /* Page header */
 .config-form .config-page-header {
   display: flex;

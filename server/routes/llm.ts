@@ -21,7 +21,9 @@ type ChatRole = 'system' | 'user' | 'assistant'
 /** Content is a string (text turn) or OpenAI content parts (multi-modal/vision). */
 type ChatContent = string | Array<Record<string, unknown>>
 interface ChatMessageBody { role: ChatRole; content: ChatContent }
-interface ChatRequestBody { model: string; messages: ChatMessageBody[] }
+/** Optional traceability context the SPA attaches for Activity logs. */
+interface TeamContext { team_key?: string; project?: string; assignee?: string }
+interface ChatRequestBody { model: string; messages: ChatMessageBody[]; context?: TeamContext }
 
 const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN ?? ''
 
@@ -49,6 +51,17 @@ const REQUEST_BODY_SCHEMA = {
           // validates the real content shape.
           content: {}
         }
+      }
+    },
+    // Optional traceability context (who/which team is acting) for Activity
+    // logs. additionalProperties:false keeps the open intranet endpoint tight.
+    context: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        team_key: { type: 'string' },
+        project: { type: 'string' },
+        assignee: { type: 'string' }
       }
     }
   }
@@ -115,7 +128,7 @@ export async function llmRoutes(app: FastifyInstance) {
     schema: { body: REQUEST_BODY_SCHEMA },
     onRequest: requireInternalTokenIfConfigured
   }, async (req, reply) => {
-    const { model, messages } = req.body
+    const { model, messages, context } = req.body
 
     // SSE headers written directly to the raw socket. We don't call
     // `reply.hijack()` because: (a) the handler stays async and only returns
@@ -159,7 +172,9 @@ export async function llmRoutes(app: FastifyInstance) {
           model,
           tools: tools.length,
           multimodal: messages.some(m => Array.isArray(m.content)),
-          contentTypes: messages.map(m => Array.isArray(m.content) ? 'array' : typeof m.content)
+          contentTypes: messages.map(m => Array.isArray(m.content) ? 'array' : typeof m.content),
+          team_key: context?.team_key,
+          teamInformation: context
         },
         'llm/chat request'
       )
@@ -249,7 +264,7 @@ export async function llmRoutes(app: FastifyInstance) {
       // deep-serialize `.cause`, so log it explicitly and append the code to the
       // surfaced message — that's what tells TLS vs network vs proxy apart.
       const cause = (err as { cause?: { code?: string; message?: string } }).cause
-      req.log.error({ err, model, causeCode: cause?.code, causeMsg: cause?.message }, 'llm/chat upstream error')
+      req.log.error({ err, model, causeCode: cause?.code, causeMsg: cause?.message, team_key: context?.team_key, teamInformation: context }, 'llm/chat upstream error')
       const detail = `${(err as Error).message}${cause?.code ? ` (${cause.code})` : ''} [model=${model}]`
       if (!reply.raw.headersSent) {
         reply.code(502).send({ error: 'upstream', message: detail })

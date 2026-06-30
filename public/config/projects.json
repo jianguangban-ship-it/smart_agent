@@ -27,7 +27,8 @@
   { "name": "IDC_ADBS", "key": "ADBS", "teamName": "Assembly Development, Braking System Team" },
   { "name": "IDC_ADSS", "key": "ADSS", "teamName": "Assembly Development, Steering System Team" },
   { "name": "IDC_ADSU", "key": "ADSU", "teamName": "Assembly Development, Suspension Support Team" },
-  { "name": "IDC_ADSIM", "key": "ADSIM", "teamName": "Assembly Development, System Simulation Team" }
+  { "name": "IDC_ADSIM", "key": "ADSIM", "teamName": "Assembly Development, System Simulation Team" },
+  { "name": "IDC_PMO", "key": "PMO", "teamName": "Project Management Office" }
 
 
 ]

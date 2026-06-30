@@ -3,61 +3,117 @@
     <!-- Left vertical rail: New chat / Chat / History (Claude-style sidebar).
          Collapses to icons via the toggle; state persisted. -->
     <nav class="explore-rail" :aria-label="t('coach.titleExplore')">
-      <button
-        type="button"
-        class="rail-toggle"
-        :title="t('coach.railToggle')"
-        :aria-label="t('coach.railToggle')"
-        @click="toggleRail"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="4" width="18" height="16" rx="2" />
-          <line x1="9" y1="4" x2="9" y2="20" />
-        </svg>
-      </button>
+      <div class="rail-top">
+        <button
+          type="button"
+          class="rail-iconbtn rail-search"
+          :title="t('coach.searchChats')"
+          :aria-label="t('coach.searchChats')"
+          @click="searchOpen = true"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="rail-iconbtn rail-toggle"
+          :title="t('coach.railToggle')"
+          :aria-label="t('coach.railToggle')"
+          @click="toggleRail"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <line x1="9" y1="4" x2="9" y2="20" />
+          </svg>
+        </button>
+      </div>
       <button
         type="button"
         class="rail-item explore-newchat"
         :title="t('coach.exploreNewChat')"
         @click="onNewChat"
       >
-        <svg class="rail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
+        <span class="rail-item-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </span>
         <span class="rail-label">{{ t('coach.exploreNewChat') }}</span>
+        <span class="rail-shortcut">{{ t('coach.newChatShortcut') }}</span>
       </button>
       <button
         type="button"
-        role="tab"
-        class="rail-item explore-tab"
-        :class="{ active: activeTab === 'chat' }"
-        :aria-selected="activeTab === 'chat'"
-        :title="t('coach.tabChat')"
-        @click="activeTab = 'chat'"
+        class="rail-item explore-chats"
+        :class="{ active: activeView === 'chats' }"
+        :title="t('coach.chatsNav')"
+        @click="activeView = 'chats'"
       >
-        <svg class="rail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-        <span class="rail-label">{{ t('coach.tabChat') }}</span>
+        <span class="rail-item-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7.5 8h9M7.5 11.5h6" />
+            <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v8a1.5 1.5 0 0 1-1.5 1.5H9l-4 3.5V15H5.5A1.5 1.5 0 0 1 4 13.5z" />
+          </svg>
+        </span>
+        <span class="rail-label">{{ t('coach.chatsNav') }}</span>
       </button>
-      <button
-        type="button"
-        role="tab"
-        class="rail-item explore-tab"
-        :class="{ active: activeTab === 'history' }"
-        :aria-selected="activeTab === 'history'"
-        :title="t('coach.tabHistory')"
-        @click="activeTab = 'history'"
-      >
-        <svg class="rail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 16 14" />
-        </svg>
-        <span class="rail-label">{{ t('coach.tabHistory') }}</span>
-      </button>
+      <!-- Recents: the past Explore chats, newest first. Click to open/continue
+           (Claude-style sidebar). Hidden when the rail is collapsed. -->
+      <div v-show="!railCollapsed" class="rail-recents">
+        <div class="rail-recents-header">{{ t('coach.exploreRecents') }}</div>
+        <div class="rail-recents-list">
+          <p v-if="recentSessions.length === 0" class="rail-recents-empty">{{ t('coach.exploreNoChats') }}</p>
+          <div
+            v-for="g in recentSessions"
+            :key="g.sessionId"
+            class="recent-row"
+            :class="{ active: g.sessionId === currentExploreSessionId, 'menu-open': menuOpenId === g.sessionId }"
+          >
+            <input
+              v-if="renamingId === g.sessionId"
+              :ref="setRenameRef"
+              v-model="renameText"
+              class="recent-rename-input"
+              :placeholder="firstUserPreview(g.records)"
+              @click.stop
+              @keyup.enter="saveRename"
+              @keyup.esc="cancelRename"
+              @blur="saveRename"
+            />
+            <template v-else>
+              <button
+                type="button"
+                class="recent-item"
+                :title="sessionTitle(g)"
+                @click="onContinue(g.sessionId)"
+              >
+                <svg v-if="isStarred(g.sessionId)" class="recent-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <span class="recent-title">{{ sessionTitle(g) }}</span>
+              </button>
+              <button
+                type="button"
+                class="recent-more"
+                :title="t('coach.chatMore')"
+                :aria-label="t('coach.chatMore')"
+                @click.stop="openMenu($event, g.sessionId)"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="12" cy="6" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="18" r="1.6" />
+                </svg>
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
     </nav>
 
     <div class="explore-main">
-    <template v-if="activeTab === 'chat'">
+      <!-- Chats page: full list + select-mode bulk actions. -->
+      <ChatsPage v-if="activeView === 'chats'" @select="onContinue" @new-chat="onNewChat" />
+
+      <template v-else>
       <div class="explore-scroll-wrap">
         <div ref="scrollEl" class="explore-scroll" @scroll="onScroll">
           <div v-if="messages.length === 0" class="explore-empty">
@@ -192,17 +248,42 @@
           </span>
         </div>
       </div>
-    </template>
-
-    <div v-else class="explore-history">
-      <CoachHistoryTab
-        :channel="'explore'"
-        @replay="onReplay"
-        @continue-session="onContinue"
-      />
-    </div>
+      </template>
     </div>
   </section>
+
+  <!-- Per-chat ⋯ menu. Teleported to <body> + positioned at the button so the
+       rail's overflow can't clip it; an outside-pointer listener (which ignores
+       the ⋯ buttons) closes it, so a single click reliably opens/switches. -->
+  <Teleport to="body">
+      <div v-if="menuOpenId" class="recent-menu" :style="{ top: menuPos.y + 'px', left: menuPos.x + 'px' }">
+        <button type="button" class="recent-menu-item" @click="onStar(menuOpenId)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+          {{ isStarred(menuOpenId) ? t('coach.chatUnstar') : t('coach.chatStar') }}
+        </button>
+        <button type="button" class="recent-menu-item" @click="startRename(menuOpenId)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+          </svg>
+          {{ t('coach.chatRename') }}
+        </button>
+        <button type="button" class="recent-menu-item recent-menu-item--disabled" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          </svg>
+          {{ t('coach.chatAddToProject') }}
+          <span class="recent-menu-caret">›</span>
+        </button>
+        <button type="button" class="recent-menu-item recent-menu-item--danger" @click="onDelete(menuOpenId)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg>
+          {{ t('coach.chatDelete') }}
+        </button>
+      </div>
+  </Teleport>
 
   <!-- v10.130: Explore-mode floating composer popout (mirrors Task-mode's
        coach composer UX from v10.129). Teleports to <body>, so DOM position
@@ -216,23 +297,32 @@
     send-accent="var(--accent-blue)"
     @submit="send"
   />
+
+  <!-- Claude-style chat search (command palette), opened from the rail magnifier. -->
+  <ChatSearchModal v-model:open="searchOpen" :items="searchItems" :active-id="currentExploreSessionId" @select="onSearchSelect" />
 </template>
 
 <script setup lang="ts">
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from '@/i18n'
 import ChatBubble from './ChatBubble.vue'
-import CoachHistoryTab from '@/components/coach/CoachHistoryTab.vue'
 import DescriptionEditor from '@/components/form/DescriptionEditor.vue'
 import ComposerPopout from '@/components/form/ComposerPopout.vue'
 import VoiceControls from './VoiceControls.vue'
 import ComposerModelMenu from './ComposerModelMenu.vue'
+import ChatSearchModal from './ChatSearchModal.vue'
+import ChatsPage from './ChatsPage.vue'
 import { useAttachment, inlineAttachments, type AttachError, ATTACH_ACCEPT_HINT, IMAGE_ACCEPT_HINT } from '@/composables/useAttachment'
 import { useToast } from '@/composables/useToast'
 import { exploreModel, setExploreModel, getContextLimitTokens, isVisionModel } from '@/config/llm'
 import { getResponseFormat } from '@/config/skills'
 import { contextUsage, formatTokens } from '@/utils/contextCalculator'
-import type { ChatMessage, LLMChatMessage } from '@/types/api'
+import {
+  getSessionGroups, recordsForChannel, getSessionName, setSessionName,
+  currentExploreSessionId, isSessionStarred, toggleSessionStar, deleteSession,
+  type SessionGroup,
+} from '@/composables/useCoachHistory'
+import type { ChatMessage, LLMChatMessage, CoachHistoryRecord } from '@/types/api'
 
 const { t } = useI18n()
 // Image attachment is offered only when a vision model is selected; text models
@@ -253,19 +343,151 @@ const emit = defineEmits<{
   (e: 'send', text: string): void
   (e: 'cancel'): void
   (e: 'new-chat'): void
-  (e: 'replay', text: string): void
   (e: 'continue-session', sessionId: string): void
   (e: 'regenerate', id: string): void
   (e: 'edit-message', payload: { id: string; content: string }): void
 }>()
 
-const activeTab = ref<'chat' | 'history'>('chat')
 // Left rail collapse state (persisted). Labels hide → icon-only when collapsed.
 const LS_RAIL_KEY = 'explore_rail_collapsed'
 const railCollapsed = ref<boolean>(localStorage.getItem(LS_RAIL_KEY) === '1')
 function toggleRail() {
   railCollapsed.value = !railCollapsed.value
   localStorage.setItem(LS_RAIL_KEY, railCollapsed.value ? '1' : '0')
+}
+
+// ── Recents: past Explore chats as a clickable sidebar list ───────────────────
+// Newest-first, with starred (pinned) chats floated to the top.
+const recentSessions = computed<SessionGroup[]>(() => {
+  const groups = getSessionGroups(recordsForChannel('explore')).grouped
+  return [...groups].sort((a, b) => {
+    const sa = isSessionStarred(a.sessionId) ? 1 : 0
+    const sb = isSessionStarred(b.sessionId) ? 1 : 0
+    if (sa !== sb) return sb - sa
+    return b.lastTimestamp - a.lastTimestamp
+  })
+})
+function firstUserPreview(records: CoachHistoryRecord[]): string {
+  const first = records.find(r => r.role === 'user')
+  const text = first?.content || '...'
+  return text.length <= 60 ? text : text.slice(0, 60) + '...'
+}
+// Custom name when set, else the first user message preview (mirrors CoachHistoryTab).
+function sessionTitle(group: SessionGroup): string {
+  return getSessionName(group.sessionId) ?? firstUserPreview(group.records)
+}
+function isStarred(id: string): boolean {
+  return isSessionStarred(id)
+}
+
+// Explore main-area view: the conversation, or the (placeholder) Chats page.
+const activeView = ref<'chat' | 'chats'>('chat')
+
+// ── Chat search (command palette) ─────────────────────────────────────────────
+const searchOpen = ref(false)
+// Newest-first searchable items; haystack matches the title AND message text.
+const searchItems = computed(() =>
+  [...recentSessions.value]
+    .sort((a, b) => b.lastTimestamp - a.lastTimestamp)
+    .map(g => {
+      const title = sessionTitle(g)
+      return {
+        sessionId: g.sessionId,
+        title,
+        lastTimestamp: g.lastTimestamp,
+        haystack: (title + ' ' + g.records.map(r => r.content).join(' ')).toLowerCase(),
+      }
+    })
+)
+function onSearchSelect(sessionId: string) {
+  searchOpen.value = false
+  onContinue(sessionId)
+}
+
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (menuOpenId.value && e.key === 'Escape') { closeMenu(); return }
+  // Ctrl+Shift+O → new chat (matches the rail's New-chat shortcut hint).
+  if (e.ctrlKey && e.shiftKey && (e.key === 'o' || e.key === 'O')) {
+    e.preventDefault()
+    onNewChat()
+  }
+}
+
+// ── Per-chat ⋯ menu (Star / Rename / Add to project [future] / Delete) ────────
+const menuOpenId = ref<string | null>(null)
+const menuPos = ref({ x: 0, y: 0 })
+const MENU_W = 180
+const MENU_H = 168 // approx 4 items; only used to decide flip direction
+
+function openMenu(e: MouseEvent, sessionId: string) {
+  const btn = e.currentTarget as HTMLElement
+  const rect = btn.getBoundingClientRect()
+  // Anchor under the button, but keep the menu fully on-screen: clamp x, and flip
+  // above the button when it would overflow the viewport bottom. Teleported to
+  // <body> so the rail's overflow can't clip it.
+  const x = Math.min(rect.left, window.innerWidth - MENU_W - 8)
+  const y = rect.bottom + MENU_H > window.innerHeight ? rect.top - MENU_H : rect.bottom + 4
+  menuPos.value = { x: Math.max(8, x), y: Math.max(8, y) }
+  menuOpenId.value = menuOpenId.value === sessionId ? null : sessionId
+}
+function closeMenu() {
+  menuOpenId.value = null
+}
+
+// Close on any outside pointer-down — but ignore the ⋯ buttons so clicking
+// another chat's ⋯ switches in one click (its own @click runs openMenu) and
+// clicking the same ⋯ toggles shut via openMenu, rather than this listener
+// eating the click (the v10.247 full-screen-backdrop bug).
+function onDocPointerDown(e: PointerEvent) {
+  const t = e.target as HTMLElement
+  if (t.closest('.recent-menu') || t.closest('.recent-more')) return
+  closeMenu()
+}
+watch(menuOpenId, (id) => {
+  if (id) window.addEventListener('pointerdown', onDocPointerDown)
+  else window.removeEventListener('pointerdown', onDocPointerDown)
+})
+
+function onStar(sessionId: string) {
+  toggleSessionStar(sessionId)
+  closeMenu()
+}
+function onDelete(sessionId: string) {
+  const wasActive = sessionId === currentExploreSessionId.value
+  deleteSession(sessionId)
+  closeMenu()
+  // Deleting the open chat → drop back to a fresh conversation.
+  if (wasActive) emit('new-chat')
+}
+
+// Inline rename (mirrors CoachHistoryTab's rename UX).
+const renamingId = ref<string | null>(null)
+const renameText = ref('')
+const renameInputEl = ref<HTMLInputElement | null>(null)
+function setRenameRef(el: unknown) {
+  if (el) renameInputEl.value = el as HTMLInputElement
+}
+function startRename(sessionId: string) {
+  closeMenu()
+  renamingId.value = sessionId
+  // Pre-fill with the current effective title (custom name, else the auto
+  // first-message preview) so the user edits from what's shown, not a blank.
+  const g = recentSessions.value.find(x => x.sessionId === sessionId)
+  renameText.value = getSessionName(sessionId) ?? (g ? firstUserPreview(g.records) : '')
+  nextTick(() => {
+    renameInputEl.value?.focus()
+    renameInputEl.value?.select()
+  })
+}
+function saveRename() {
+  if (renamingId.value === null) return
+  setSessionName(renamingId.value, renameText.value)
+  renamingId.value = null
+  renameText.value = ''
+}
+function cancelRename() {
+  renamingId.value = null
+  renameText.value = ''
 }
 const draft = ref('')
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -373,18 +595,22 @@ function thumbDown(e: PointerEvent) {
   window.addEventListener('pointerup', thumbUp)
 }
 
+
 let resizeObs: ResizeObserver | null = null
 onMounted(() => {
   if (scrollEl.value && 'ResizeObserver' in window) {
     resizeObs = new ResizeObserver(() => updateThumb())
     resizeObs.observe(scrollEl.value)
   }
+  window.addEventListener('keydown', onGlobalKeydown)
   nextTick(updateThumb)
 })
 onBeforeUnmount(() => {
   resizeObs?.disconnect()
   window.removeEventListener('pointermove', thumbMove)
   window.removeEventListener('pointerup', thumbUp)
+  window.removeEventListener('keydown', onGlobalKeydown)
+  window.removeEventListener('pointerdown', onDocPointerDown)
 })
 
 // Live context-size guard: project the payload we would send (system prompt +
@@ -435,13 +661,14 @@ function send() {
       .replace('{limit}', formatTokens(u.limit)))
     return
   }
+  activeView.value = 'chat'
   emit('send', text)
   draft.value = ''
   stick.value = true
 }
 
 function onNewChat() {
-  activeTab.value = 'chat'
+  activeView.value = 'chat'
   draft.value = ''
   stick.value = true
   emit('new-chat')
@@ -450,12 +677,8 @@ function onNewChat() {
     updateThumb()
   })
 }
-function onReplay(content: string) {
-  activeTab.value = 'chat'
-  emit('replay', content)
-}
 function onContinue(sessionId: string) {
-  activeTab.value = 'chat'
+  activeView.value = 'chat'
   emit('continue-session', sessionId)
 }
 
@@ -485,7 +708,7 @@ watch(
 /* Left vertical rail (New chat / Chat / History), collapsible to icons. */
 .explore-rail {
   flex-shrink: 0;
-  width: 168px;
+  width: 280px;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -499,14 +722,24 @@ watch(
 .rail-collapsed .explore-rail {
   width: 52px;
 }
-.rail-toggle {
+/* Top row: search (left) + sidebar toggle (right). Stacks when collapsed. */
+.rail-top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+.rail-collapsed .rail-top {
+  flex-direction: column;
+  align-items: center;
+}
+.rail-iconbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 30px;
   height: 30px;
-  align-self: flex-end;
-  margin-bottom: var(--space-1);
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -514,14 +747,11 @@ watch(
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.rail-collapsed .rail-toggle {
-  align-self: center;
-}
-.rail-toggle:hover {
+.rail-iconbtn:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
 }
-.rail-toggle svg {
+.rail-iconbtn svg {
   width: 17px;
   height: 17px;
 }
@@ -529,13 +759,15 @@ watch(
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-3);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 9px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-sm);
-  font-weight: 600;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   text-align: left;
@@ -546,19 +778,232 @@ watch(
   color: var(--text-primary);
 }
 .rail-item.active {
-  color: var(--accent-blue);
-  background: var(--blue-subtle, rgba(96, 165, 250, 0.12));
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
 }
-.rail-icon {
-  width: 18px;
-  height: 18px;
+/* Circular icon badge (Claude-style); intensifies on row hover/active. */
+.rail-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+.rail-item:hover .rail-item-icon,
+.rail-item.active .rail-item-icon {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.rail-item-icon svg {
+  width: 15px;
+  height: 15px;
+}
+/* Keyboard-shortcut hint on New chat — revealed on hover (Claude-style). */
+.rail-shortcut {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: var(--font-xs, 11px);
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.rail-item:hover .rail-shortcut {
+  opacity: 1;
 }
 .rail-collapsed .rail-item {
   justify-content: center;
 }
-.rail-collapsed .rail-label {
+.rail-collapsed .rail-label,
+.rail-collapsed .rail-shortcut {
   display: none;
+}
+/* Recents: scrollable list of past chats under New chat. */
+.rail-recents {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  margin-top: var(--space-2);
+}
+.rail-recents-header {
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--font-xs, 12px);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.rail-recents-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  scrollbar-width: thin;
+}
+.rail-recents-empty {
+  padding: var(--space-2);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+/* A recents row = clickable title (flex) + a ⋯ button revealed on hover/active.
+   Matches the Claude sidebar: 32px rows, 9px radius, 14px titles. */
+.recent-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+.recent-row:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.recent-row.active {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+.recent-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  padding-right: 30px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+.recent-star {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--accent-orange, #f0a020);
+}
+.recent-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* ⋯ button: removed from layout at rest (display:none) so it never overlays/steals
+   row clicks; shown when the row is hovered, focused, active, or its menu is open
+   (mirrors Claude's `hidden group-hover:flex` + always-on for the current chat). */
+.recent-more {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.recent-row:hover .recent-more,
+.recent-row:focus-within .recent-more,
+.recent-row.active .recent-more,
+.recent-row.menu-open .recent-more {
+  display: inline-flex;
+}
+.recent-more:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.recent-more svg {
+  width: 16px;
+  height: 16px;
+  /* Make the whole button a single click target — without this, clicking the
+     icon makes the <svg>/<circle> the event.target and the button's @click can
+     miss, leaving the icon a dead zone (only the padding around it worked). */
+  pointer-events: none;
+}
+.recent-rename-input {
+  flex: 1;
+  min-width: 0;
+  margin: 1px 0;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-blue);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+}
+/* Teleported ⋯ menu (Star / Rename / Add to project / Delete). */
+.recent-menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 168px;
+  padding: var(--space-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-panel, 0 8px 24px rgba(0, 0, 0, 0.3));
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.recent-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.recent-menu-item:hover {
+  background: var(--bg-tertiary);
+}
+.recent-menu-item svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.recent-menu-caret {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+.recent-menu-item--disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.recent-menu-item--disabled:hover {
+  background: transparent;
+}
+.recent-menu-item--danger {
+  color: var(--accent-red);
+}
+.recent-menu-item--danger:hover {
+  background: var(--red-subtle, rgba(248, 81, 73, 0.12));
 }
 /* Main column to the right of the rail: chat scroll + composer / history. */
 .explore-main {
@@ -644,11 +1089,6 @@ watch(
 .explore-backoff {
   color: var(--accent-orange, var(--text-muted));
   font-size: var(--font-sm);
-}
-.explore-history {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 /* Bottom control bar of the composer box: + add-file (left) | model + Send (right) */
 .explore-composer {

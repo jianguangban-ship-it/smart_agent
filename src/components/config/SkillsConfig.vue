@@ -1,10 +1,12 @@
 <template>
-  <div class="config-form">
+  <div class="config-form config-form--wide">
     <header class="config-page-header">
       <h1 class="config-page-title">{{ t('config.skills') }}</h1>
       <p class="config-page-subtitle">{{ t('config.skillsSubtitle') }}</p>
     </header>
 
+    <!-- 2×2 grid: Task Coach | Analyze · Response Format | Template Chips -->
+    <div class="skills-grid">
     <!-- Task Coach Skill -->
     <div class="field-group">
       <div class="skill-header">
@@ -108,6 +110,7 @@
         </div>
       </div>
     </details>
+    </div><!-- /skills-grid -->
 
     <div class="config-save-bar">
       <button class="btn btn-primary" @click="save">{{ t('settings.save') }}</button>

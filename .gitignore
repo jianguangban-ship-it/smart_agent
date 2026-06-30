@@ -30,3 +30,7 @@ tools/local-stt/models/
 # The committed sample (deploy/team-codes.sample.json) shows the shape.
 # Default dev location is <root>/data/team-codes.json (already covered by data/).
 team-codes.json
+# Config-editor backups written at runtime (CONFIG_DIR/../backups). In dev this
+# lands at public/backups; prod backups sit under dist/ (already ignored).
+public/backups/
+backups/

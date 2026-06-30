@@ -25,7 +25,7 @@ beforeAll(async () => {
   codesPath = join(dir, 'team-codes.json')
   writeFileSync(join(dir, 'team-members.json'), JSON.stringify(MEMBERS, null, 2))
   writeFileSync(join(dir, 'components.json'), JSON.stringify(COMPONENTS, null, 2))
-  writeFileSync(codesPath, JSON.stringify({ HW: 'hw123', '*': 'master9' }))
+  writeFileSync(codesPath, JSON.stringify({ HW: 'hw123', projects: 'proj123', '*': 'master9' }))
 
   process.env.SMART_AGENT_CONFIG_DIR = dir
   process.env.TEAM_CODES_PATH = codesPath
@@ -124,5 +124,110 @@ describe('PUT /api/config/team/:key', () => {
       payload: { members: [{ id: 'D1', name: 'A' }, { id: 'D1', name: 'B' }], components: [] }
     })
     expect(res.statusCode).toBe(400)
+  })
+})
+
+describe('Project matrix (Config → Project)', () => {
+  const ROW = {
+    productLine: 'X-line', customerCode: 'GWM', projectNo: 'DE06',
+    yearInfo: 'MY2026', companyCode: 'J500', serialNo: '0009', productTypeCode: 'EDC'
+  }
+  function readMatrix() { return JSON.parse(readFileSync(join(dir, 'project-matrix.json'), 'utf8')) }
+
+  it('unlock accepts the projects code and the master, rejects others', async () => {
+    expect((await app.inject({ method: 'POST', url: '/api/config/projects/unlock', payload: { code: 'proj123' } })).statusCode).toBe(200)
+    expect((await app.inject({ method: 'POST', url: '/api/config/projects/unlock', payload: { code: 'master9' } })).statusCode).toBe(200)
+    expect((await app.inject({ method: 'POST', url: '/api/config/projects/unlock', payload: { code: 'nope' } })).statusCode).toBe(401)
+  })
+
+  it('PUT writes the whole matrix with a valid code', async () => {
+    const res = await app.inject({
+      method: 'PUT', url: '/api/config/projects',
+      headers: { 'x-team-code': 'proj123' },
+      payload: { rows: [ROW, { ...ROW, projectNo: 'DE07', serialNo: '0010' }] }
+    })
+    expect(res.statusCode).toBe(200)
+    expect(readMatrix()).toHaveLength(2)
+    expect(readMatrix()[1].projectNo).toBe('DE07')
+    // first write — both rows are "added" (no previous file), none removed
+    const saved = res.json() as { added: string[]; removed: string[] }
+    expect(saved.added).toContain('GWM-DE06-MY2026-J500-0009-EDC')
+    expect(saved.added).toContain('GWM-DE07-MY2026-J500-0010-EDC')
+    expect(saved.removed).toEqual([])
+  })
+
+  it('PUT reports the added/removed composite-code delta for the audit', async () => {
+    // Drop DE07, add DE08 → delta is computed against the previous save above.
+    const res = await app.inject({
+      method: 'PUT', url: '/api/config/projects',
+      headers: { 'x-team-code': 'proj123' },
+      payload: { rows: [ROW, { ...ROW, projectNo: 'DE08', serialNo: '0011' }] }
+    })
+    expect(res.statusCode).toBe(200)
+    const saved = res.json() as { added: string[]; removed: string[] }
+    expect(saved.added).toEqual(['GWM-DE08-MY2026-J500-0011-EDC'])
+    expect(saved.removed).toEqual(['GWM-DE07-MY2026-J500-0010-EDC'])
+  })
+
+  it('PUT persists an optional comments field', async () => {
+    const res = await app.inject({
+      method: 'PUT', url: '/api/config/projects',
+      headers: { 'x-team-code': 'proj123' },
+      payload: { rows: [{ ...ROW, comments: 'pilot batch' }] }
+    })
+    expect(res.statusCode).toBe(200)
+    expect(readMatrix()[0].comments).toBe('pilot batch')
+  })
+
+  it('PUT rejects a wrong code with 401 and does not write', async () => {
+    const res = await app.inject({
+      method: 'PUT', url: '/api/config/projects',
+      headers: { 'x-team-code': 'wrong' },
+      payload: { rows: [ROW] }
+    })
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('PUT rejects an invalid product line with 400', async () => {
+    const res = await app.inject({
+      method: 'PUT', url: '/api/config/projects',
+      headers: { 'x-team-code': 'proj123' },
+      payload: { rows: [{ ...ROW, productLine: 'Suspension' }] }
+    })
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('PUT rejects a missing field with 400', async () => {
+    const { serialNo, ...partial } = ROW
+    void serialNo
+    const res = await app.inject({
+      method: 'PUT', url: '/api/config/projects',
+      headers: { 'x-team-code': 'proj123' },
+      payload: { rows: [partial] }
+    })
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('PUT rejects duplicate composite codes with 400', async () => {
+    const res = await app.inject({
+      method: 'PUT', url: '/api/config/projects',
+      headers: { 'x-team-code': 'proj123' },
+      payload: { rows: [ROW, { ...ROW }] } // identical composite
+    })
+    expect(res.statusCode).toBe(400)
+    expect((res.json() as { error: string }).error).toBe('duplicate')
+  })
+
+  it('PUT accepts unique rows plus blank rows', async () => {
+    const blank = {
+      productLine: '', customerCode: '', projectNo: '', yearInfo: '',
+      companyCode: '', serialNo: '', productTypeCode: '', comments: ''
+    }
+    const res = await app.inject({
+      method: 'PUT', url: '/api/config/projects',
+      headers: { 'x-team-code': 'proj123' },
+      payload: { rows: [ROW, { ...ROW, projectNo: 'DE07', serialNo: '0010' }, blank, blank] }
+    })
+    expect(res.statusCode).toBe(200)
   })
 })

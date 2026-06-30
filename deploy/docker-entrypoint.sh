@@ -17,7 +17,7 @@ CFG=/app/dist/config
 DEFAULTS=/app/config-defaults
 mkdir -p "$CFG"
 
-for f in projects.json team-members.json components.json summary-options.json; do
+for f in projects.json team-members.json components.json summary-options.json project-matrix.json; do
   if [ ! -f "$CFG/$f" ]; then
     cp "$DEFAULTS/$f" "$CFG/$f"
     echo "[entrypoint] seeded $CFG/$f from baked defaults"

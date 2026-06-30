@@ -203,7 +203,7 @@ onUnmounted(() => {
 }
 .model-chart-host {
   width: 100%;
-  height: 300px;
+  height: 450px;
 }
 .model-trend {
   margin-top: var(--space-2);

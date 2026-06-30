@@ -7,7 +7,7 @@
 你将接收到一个 JSON 对象，包含：
 - `project_name`: 项目/团队名称
 - `issue_type`: 条目类型 (Story/Task/Bug)
-- `summary`: 标题（遵循五段式规则：[产品][分类][分层][组件][需求标题]）
+- `summary`: 标题（遵循四段式规则：[综合编码][分层][组件][需求标题]）
 - `description`: 详细描述与验收标准
 - `estimated_points`: 工程师的人工预估值
 

@@ -2,7 +2,6 @@ import type { FastifyInstance, FastifyBaseLogger } from 'fastify'
 import { upsertTicket, listTickets, rowToTicket } from '../db.js'
 import { requireApiKey } from '../auth.js'
 import { audit } from '../logs/log-bus.js'
-import { emitTicketsChanged, onTicketsChanged } from '../events.js'
 
 // Emit the `ticket.write` audit event for a POST /api/tickets response — this is
 // n8n's quality-grid write (the AI verdict for a ticket), NOT the user's create
@@ -34,6 +33,7 @@ export function auditTicketResponse(
       project: body?.project,
       team_key: body?.team_key,
       points,
+      assignee: body?.displayName ?? body?.assignee,  // who the ticket is for
       action,
       actionTime: body?.timestamp,  // n8n ISO time
       verdict: body?.status         // AI quality grade (A/B/C/D/…)
@@ -65,7 +65,6 @@ export async function ticketRoutes(app: FastifyInstance) {
     // that the OK (201/200) and NOK (400 — sentinel key, no real ticket id)
     // cases are handled uniformly with access to the status code.
     const result = upsertTicket(req.body)
-    emitTicketsChanged({ issueKey: req.body.issueKey, result }) // wake the View dashboard
     reply
       .code(result === 'created' ? 201 : 200)
       .send({ issueKey: req.body.issueKey, result })
@@ -78,28 +77,4 @@ export async function ticketRoutes(app: FastifyInstance) {
     return rows.map(rowToTicket)
   })
 
-  // GET /api/tickets/stream — SSE "tickets changed" ping so the dashboard
-  // refreshes in near-real-time (the client refetches, coalesced) instead of
-  // polling. Reuses the SSE shape from routes/llm.ts (X-Accel-Buffering off so
-  // the GWM proxy flushes immediately; reply.raw close guard to unsubscribe).
-  app.get('/tickets/stream', async (req, reply) => {
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    })
-    reply.raw.write('retry: 3000\n\n') // EventSource reconnect backoff
-
-    const unsubscribe = onTicketsChanged(info => {
-      if (reply.raw.writableEnded) return
-      reply.raw.write(`data: ${JSON.stringify({ type: 'changed', ...info })}\n\n`)
-    })
-    const heartbeat = setInterval(() => {
-      if (!reply.raw.writableEnded) reply.raw.write(': ping\n\n')
-    }, 25_000)
-
-    reply.raw.on('close', () => { clearInterval(heartbeat); unsubscribe() })
-    return new Promise<void>(() => { /* closed via 'close' */ })
-  })
 }

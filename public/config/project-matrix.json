@@ -1,0 +1,1102 @@
+[
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "DE06",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0301",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "P032G",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0302",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "DE06EV",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0301",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "P3012GPHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0305",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "BJ",
+    "projectNo": "B60VSLT",
+    "yearInfo": "MY2026",
+    "companyCode": "F410",
+    "serialNo": "0103",
+    "productTypeCode": "REPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "DE09EV",
+    "yearInfo": "MY2026",
+    "companyCode": "F410",
+    "serialNo": "0104",
+    "productTypeCode": "REPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "P023G",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0307",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "H501",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0701",
+    "productTypeCode": "IEHPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "M821",
+    "yearInfo": "MY2026",
+    "companyCode": "F410",
+    "serialNo": "0105",
+    "productTypeCode": "REPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "BJ",
+    "projectNo": "BJ81",
+    "yearInfo": "MY2026",
+    "companyCode": "F410",
+    "serialNo": "0106",
+    "productTypeCode": "REPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "M81GR",
+    "yearInfo": "MY2026",
+    "companyCode": "F410",
+    "serialNo": "0108",
+    "productTypeCode": "REPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "DE09G",
+    "yearInfo": "MY2026",
+    "companyCode": "F410",
+    "serialNo": "0107",
+    "productTypeCode": "REPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "H01",
+    "yearInfo": "MY2027",
+    "companyCode": "F410",
+    "serialNo": "0109",
+    "productTypeCode": "REPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "P01G",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0311",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "P05GCY2RHD",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0311",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "P05CY2",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0313",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "V713",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0314",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "P11G1",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0315",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "X-line",
+    "customerCode": "GWM",
+    "projectNo": "P034",
+    "yearInfo": "MY2026",
+    "companyCode": "F380",
+    "serialNo": "0316",
+    "productTypeCode": "DPEPS",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE09PHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0301",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE09GPHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0301",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE08PHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0301",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE07PHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0301",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06PHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0301",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06GPHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0301",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15EV",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC151HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC151ICE",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC152HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC152ICE",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15S1HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15S1ICE",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15CEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15CGHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15C1HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15C1ICE",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15GTEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15GT1EV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15WAEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15WA1HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15WA1PHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15WA1ICE",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15WGEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15WGHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15WAGHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "EC15WAGEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0303",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "D037",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0103",
+    "productTypeCode": "EPB",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "P01YQ",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0102",
+    "productTypeCode": "EPB",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B26GHEV",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0304",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B26GPHEV",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0304",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B26A",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0104",
+    "productTypeCode": "EPB",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "P3011PHEV",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0105",
+    "productTypeCode": "EPB",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "P3012PHEV",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0106",
+    "productTypeCode": "EPB",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "FAW",
+    "projectNo": "1CE1",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0307",
+    "productTypeCode": "DrumMGU",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "H01",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0302",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "P023 PHEV",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0307",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B073",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0305",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B07GHEV",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0306",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B07GPHEV",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0306",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE09G",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0108",
+    "productTypeCode": "EPB",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "EA",
+    "projectNo": "P01YQ",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0800",
+    "productTypeCode": "ERC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "ES117",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0308",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "ES131",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0309",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "ZZ",
+    "projectNo": "R101",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0200",
+    "productTypeCode": "EPB",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B065ICE",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0311",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "H01",
+    "yearInfo": "MY2025",
+    "companyCode": "J370",
+    "serialNo": "0109",
+    "productTypeCode": "EPB",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "M821",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0310",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "IBC12",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0500",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "V713PHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0313",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "V71EHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0313",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B262PHEVFX",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0304",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B262PHEVAX",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0304",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B065HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0304",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B162PHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0304",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B162HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0304",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B074HEVAx",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0304",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B074ICE",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0311",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Y-Line",
+    "customerCode": "GWM",
+    "projectNo": "B074HEVFX",
+    "yearInfo": "MY2026",
+    "companyCode": "J370",
+    "serialNo": "0304",
+    "productTypeCode": "IBC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE07",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0114",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0405",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0108",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "C06A",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0115",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "C06AHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0600",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "C06APHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0600",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE09EV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0100",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "C062.0T",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0100",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "C061.5T",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0115",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "C06A",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0100",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "C06",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0100",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "C06AHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0116",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "C06APHEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0116",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06EV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0106",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0109",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE50",
+    "yearInfo": "MY2027",
+    "companyCode": "J501",
+    "serialNo": "0114",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE07",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0115",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE08",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0116",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE09G",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0100",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE09HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0100",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE08HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0116",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE07HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0115",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06HEV",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0404",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06GEV",
+    "yearInfo": "MY2027",
+    "companyCode": "J500",
+    "serialNo": "0404",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06GHEV",
+    "yearInfo": "MY2027",
+    "companyCode": "J500",
+    "serialNo": "0404",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06GPHEV",
+    "yearInfo": "MY2027",
+    "companyCode": "J500",
+    "serialNo": "0404",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06GEV",
+    "yearInfo": "MY2027",
+    "companyCode": "J500",
+    "serialNo": "0120",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06GHEV",
+    "yearInfo": "MY2027",
+    "companyCode": "J500",
+    "serialNo": "0404",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "DE06GPHEV",
+    "yearInfo": "MY2027",
+    "companyCode": "J500",
+    "serialNo": "0404",
+    "productTypeCode": "EAS",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "D07",
+    "yearInfo": "MY2027",
+    "companyCode": "J500",
+    "serialNo": "0108",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "H01",
+    "yearInfo": "MY2027",
+    "companyCode": "J500",
+    "serialNo": "0100",
+    "productTypeCode": "EDC",
+    "comments": ""
+  },
+  {
+    "productLine": "Z-Line",
+    "customerCode": "GWM",
+    "projectNo": "MC01",
+    "yearInfo": "MY2026",
+    "companyCode": "J500",
+    "serialNo": "0600",
+    "productTypeCode": "EDC",
+    "comments": ""
+  }
+]

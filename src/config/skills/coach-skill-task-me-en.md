@@ -6,7 +6,7 @@ You receive a JSON object containing:
 - `project_key`: Project space key
 - `project_name`: Project space name
 - `issue_type`: Item type (Story/Task/Bug)
-- `summary`: Original title following the five-part rule: [Vehicle][Product][Layer][Component][Task Summary]
+- `summary`: Original title following the four-part rule: [CompositeCode][Layer][Component][Task Summary]
 - `description`: Detailed description and acceptance criteria
 - `estimated_points`: Engineer's manual effort estimate
 

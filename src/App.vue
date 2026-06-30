@@ -57,7 +57,6 @@
           @send="handleExploreSend"
           @cancel="cancelExploreCoach"
           @new-chat="handleExploreNewChat"
-          @replay="handleExploreReplay"
           @continue-session="handleExploreContinueSession"
           @regenerate="handleExploreRegenerate"
           @edit-message="handleExploreEditMessage"
@@ -217,6 +216,7 @@ const configVisited = ref(appMode.value === 'config')
 watch(appMode, m => { if (m === 'config') configVisited.value = true })
 import { loadRuntimeConfig, runtimeTeamMembers, runtimeProjects } from '@/composables/useRuntimeConfig'
 import { setSelectedProjectName } from '@/composables/useSprint'
+import { setSelectionContext } from '@/composables/useSelectionContext'
 import { useToast } from '@/composables/useToast'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { addTicket } from '@/composables/useTicketHistory'
@@ -269,10 +269,17 @@ const {
 // stores form.projectKey (e.g. "DKKF"); the cadence rule operates on the
 // project name string, so we look it up via runtimeProjects.
 watch(
-  [() => form.projectKey, runtimeProjects],
+  [() => form.projectKey, () => form.assignee, runtimeProjects],
   ([key]) => {
     const proj = runtimeProjects.value.find(p => p.key === key)
     setSelectedProjectName(proj?.name ?? '')
+    // Mirror the current selection into the shared traceability context that
+    // every Activity log entry is stamped with (who/which team is acting).
+    setSelectionContext({
+      team_key: key || '',
+      project: getProjectName(),
+      assignee: buildAssignee()?.displayName ?? '',
+    })
   },
   { immediate: true }
 )
@@ -645,7 +652,9 @@ async function handleBulkAnalyze() {
 }
 
 function handleCreateClick() {
-  if (!canCoachSubmit.value) return
+  // Require the full form AND the human review checklist (allChecked) before
+  // creating — also guards the Ctrl+Shift+C hotkey path.
+  if (!canCoachSubmit.value || !allChecked.value) return
   // Show the exact payload that will be sent (action: 'create', not 'preview')
   jsonPayload.value = JSON.stringify(buildPayload('create'), null, 2)
   showConfirmModal.value = true
@@ -667,7 +676,10 @@ async function confirmCreate() {
     logClientEvent('jira.create', {
       level: 'warn',
       msg: `jira.create · ${form.projectKey || '?'} · NOK`,
-      detail: { outcome: 'NOK', error: err, project: getProjectName(), team_key: form.projectKey, issueType: form.issueType }
+      detail: {
+        outcome: 'NOK', error: err, project: getProjectName(), team_key: form.projectKey,
+        issueType: form.issueType, points: form.estimatedPoints, assignee: buildAssignee()?.displayName
+      }
     })
   } else {
     addToast('success', t('toast.createSuccess'))
@@ -720,10 +732,15 @@ async function handleCoachRequest(force = false) {
     return
   }
   errorMessage.value = ''
-  // Re-clicking Task Guidance starts a new workflow iteration — reset to Draft
+  // Re-clicking Task Guidance starts a new workflow iteration — reset to Draft.
+  // Also invalidate the prior analysis so the Review → Analysis → Create JIRA gate
+  // restarts: without this, a 2nd cycle (after a create + description edit) keeps
+  // Create JIRA enabled off the stale first-cycle analysis (hasAiResponse).
   if (appMode.value === 'task' && reviewStatus.value !== 'draft') {
     resetWorkflow()
     lastCreatedKey.value = ''
+    clearAnalyzeResponse()
+    localStorage.removeItem(LS_ANALYZE_RESPONSE)
   }
   const payload = buildPayload('coach')
   pendingPromptOverride.value = null  // consumed — clear so it doesn't affect anything else
@@ -785,10 +802,6 @@ function handleExploreNewChat() {
   detachAll()  // drop any pending composer attachment so it isn't carried into the new chat
   localStorage.removeItem(LS_EXPLORE_RESPONSE)
   startNewSession('explore')
-}
-function handleExploreReplay(content: string) {
-  // Resend the message through the Explore channel (own composer path).
-  handleExploreSend(content)
 }
 function handleExploreContinueSession(sessionId: string) {
   const records = getSessionRecords(sessionId)

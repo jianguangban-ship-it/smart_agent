@@ -182,8 +182,8 @@
             v-show="appMode === 'task'"
             class="action-btn action-create"
             :class="{ 'invisible-slot': !hasAiResponse }"
-            :disabled="!hasAiResponse || isSubmitting || isCoachLoading || isAnalyzeLoading || !canCoachSubmit || jiraCreated"
-            :title="t('form.confirmCreate') + ' (Ctrl+Shift+C)'"
+            :disabled="!hasAiResponse || isSubmitting || isCoachLoading || isAnalyzeLoading || !canCoachSubmit || jiraCreated || !allChecked"
+            :title="hasAiResponse && !allChecked ? t('form.createNeedsChecklist') : t('form.confirmCreate') + ' (Ctrl+Shift+C)'"
             @click="$emit('create')"
           >
             <svg v-if="isSubmitting && currentAction === 'create'" class="action-icon animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">

@@ -131,6 +131,9 @@ export interface CoachHistoryRecord {
 export interface LLMRequestBody {
   model: string
   messages: LLMChatMessage[]
+  /** Optional traceability context (team_key/project/assignee) for server-side
+   *  Activity logs. Brokered Explore path only; omitted when nothing selected. */
+  context?: { team_key?: string; project?: string; assignee?: string }
 }
 export interface LLMResponseBody {
   choices: Array<{ message: { content: string } }>

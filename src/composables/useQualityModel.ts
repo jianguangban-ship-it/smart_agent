@@ -50,6 +50,9 @@ export interface ModelSeries {
   counts: number[]
   /** FORECAST_HORIZON damped scores; empty when history is too thin. */
   forecast: number[]
+  /** Fitted trend value at the window's last slot ("now") — the point the
+   *  dashed forecast projects from. null when history is too thin to fit. */
+  forecastAnchor: number | null
   /** ±1.96·se envelope around the forecast; null under 3 fitted points. */
   band: ForecastBand | null
 }
@@ -109,20 +112,26 @@ export function trendSlope(history: (number | null)[], counts?: number[]): numbe
 
 /**
  * Damped, count-weighted forecast with an uncertainty band.
- * Anchored at the FITTED value of the last history bucket (not the noisy raw
- * point); step k ahead adds slope × Σ_{j=1..k} DAMPING^j, so the total advance
- * is bounded (≈ 2.28 slopes at φ=0.7) and can never run away. Band half-width
- * is 1.96·se·√(1 + k/N); no band under 3 fitted points (se is meaningless).
+ * Anchored at the FITTED value of the window's last bucket ("now") — not the
+ * noisy raw point, and not the last bucket that happened to have data: when the
+ * latest bucket(s) are empty the trend is extrapolated to now so the dashed
+ * line projects from where the window ends, keeping the +1/+2/+3 slots a true
+ * 1/2/3 steps ahead. Step k ahead adds slope × Σ_{j=1..k} DAMPING^j, so the
+ * total advance is bounded (≈ 2.28 slopes at φ=0.7) and can never run away.
+ * Band half-width is 1.96·se·√(1 + k/N); no band under 3 fitted points.
  */
 export function forecastSeries(
   history: (number | null)[],
   counts: number[] | undefined,
   horizon: number,
-): { forecast: number[]; band: ForecastBand | null } {
+): { forecast: number[]; forecastAnchor: number | null; band: ForecastBand | null } {
   const fit = weightedFit(history, counts)
-  if (!fit) return { forecast: [], band: null }
+  if (!fit) return { forecast: [], forecastAnchor: null, band: null }
 
-  const anchor = fit.intercept + fit.slope * fit.lastX
+  // Project from the window's last slot ("now"), not fit.lastX — identical when
+  // the last bucket has data, correct when trailing buckets are empty.
+  const anchor = fit.intercept + fit.slope * (history.length - 1)
+  const forecastAnchor = clamp(Math.round(anchor))
   let dampSum = 0
   const raw: number[] = []
   const forecast: number[] = []
@@ -133,7 +142,7 @@ export function forecastSeries(
     forecast.push(clamp(Math.round(v)))
   }
 
-  if (fit.n < 3) return { forecast, band: null }
+  if (fit.n < 3) return { forecast, forecastAnchor, band: null }
   const lower: number[] = []
   const upper: number[] = []
   raw.forEach((v, i) => {
@@ -141,7 +150,7 @@ export function forecastSeries(
     lower.push(clamp(Math.round(v - half)))
     upper.push(clamp(Math.round(v + half)))
   })
-  return { forecast, band: { lower, upper } }
+  return { forecast, forecastAnchor, band: { lower, upper } }
 }
 
 /**
@@ -188,8 +197,8 @@ export function buildSeries(
       agg.counts[i] > 0
         ? Math.round((sum + SHRINK_K * baseline) / (agg.counts[i] + SHRINK_K))
         : null)
-    const { forecast, band } = forecastSeries(history, agg.counts, horizon)
-    return { team_key, team: agg.team, history, counts: agg.counts, forecast, band }
+    const { forecast, forecastAnchor, band } = forecastSeries(history, agg.counts, horizon)
+    return { team_key, team: agg.team, history, counts: agg.counts, forecast, forecastAnchor, band }
   }
 
   return [
