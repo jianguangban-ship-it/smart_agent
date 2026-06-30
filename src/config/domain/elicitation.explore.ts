@@ -145,6 +145,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       hintZh: '确保客观评估'
     }
   ],
+  'fusa-engineer': [
+    {
+      questionEn: 'What hazard and safety goal (with ASIL) is in scope, and what is the safe state?',
+      questionZh: '涉及哪个危害与安全目标（含 ASIL）？安全状态是什么？',
+      hintEn: 'Frames the safety concept from the HARA',
+      hintZh: '从 HARA 出发界定安全概念'
+    },
+    {
+      questionEn: 'What safety mechanism and analysis (FMEDA/FTA/DFA) will demonstrate it?',
+      questionZh: '用什么安全机制与分析（FMEDA/FTA/DFA）来论证？',
+      hintEn: 'Links mechanism to quantified evidence',
+      hintZh: '将安全机制与量化证据关联'
+    }
+  ],
   'devops-engineer': [
     {
       questionEn: 'What environments and toolchain versions must this run reproducibly on?',
@@ -157,6 +171,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       questionZh: '故障时期望什么样的监控、告警或回滚？',
       hintEn: 'Defines operational behavior under failure',
       hintZh: '定义故障下的运维行为'
+    }
+  ],
+  'pmo-manager': [
+    {
+      questionEn: 'What is the project scope, and what is explicitly out of scope?',
+      questionZh: '项目范围是什么？哪些明确不在范围内？',
+      hintEn: 'Prevents scope ambiguity',
+      hintZh: '避免范围歧义'
+    },
+    {
+      questionEn: 'Who are the stakeholders, and what are the key deliverables and deadlines?',
+      questionZh: '利益相关方是谁？关键交付物和截止日期是什么？',
+      hintEn: 'Aligns expectations and timeline',
+      hintZh: '对齐预期与时间线'
     }
   ]
 }

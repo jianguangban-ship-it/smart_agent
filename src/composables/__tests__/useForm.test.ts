@@ -39,7 +39,7 @@ import { useForm } from '../useForm'
 
 // sw-developer weights (mirrors ROLE_WEIGHTS['sw-developer'] in useForm.ts):
 //   projectKey 8, issueType 8, assignee 8, estimatedPoints 6,
-//   vehicle 6, product 6, layer 6, component 8, detail 12,
+//   compositeCode 12, layer 6, component 8, detail 12,
 //   descriptionPresent 12, descriptionLength 20
 
 describe('useForm', () => {
@@ -62,8 +62,7 @@ describe('useForm', () => {
       form.assignee = 'user1'
       form.estimatedPoints = 3
       form.description = 'Some description'
-      summary.vehicle = 'VehicleA'
-      summary.product = 'ProductB'
+      summary.compositeCode = 'GWM-DE06-MY2026-J500-0009-EDC'
       summary.layer = 'LayerC'
       summary.component = 'CompD'
       summary.detail = 'DetailE'
@@ -78,8 +77,7 @@ describe('useForm', () => {
       form.assignee = 'user1'
       form.estimatedPoints = 3
       form.description = ''
-      summary.vehicle = 'V'
-      summary.product = 'P'
+      summary.compositeCode = 'CC'
       summary.layer = 'L'
       summary.component = 'C'
       summary.detail = 'D'
@@ -94,8 +92,7 @@ describe('useForm', () => {
       form.assignee = 'user1'
       form.estimatedPoints = 3
       form.description = 'desc'
-      summary.vehicle = 'V'
-      summary.product = ''
+      summary.compositeCode = ''
       summary.layer = 'L'
       summary.component = 'C'
       summary.detail = 'D'
@@ -116,13 +113,12 @@ describe('useForm', () => {
       form.assignee = 'user1'
       form.estimatedPoints = 3
       form.description = 'x'.repeat(200)
-      summary.vehicle = 'V'
-      summary.product = 'P'
+      summary.compositeCode = 'CC'
       summary.layer = 'L'
       summary.component = 'C'
       summary.detail = 'D'
       await nextTick()
-      // 8 + 8 + 8 + 6 + 6 + 6 + 6 + 8 + 12 + 12 + 20 = 100
+      // 8 + 8 + 8 + 6 + 12 + 6 + 8 + 12 + 12 + 20 = 100
       expect(formApi.qualityScore.value).toBe(100)
     })
 
@@ -133,8 +129,7 @@ describe('useForm', () => {
       form.assignee = 'user1'
       form.estimatedPoints = 3
       form.description = 'x'.repeat(1000)
-      summary.vehicle = 'V'
-      summary.product = 'P'
+      summary.compositeCode = 'CC'
       summary.layer = 'L'
       summary.component = 'C'
       summary.detail = 'D'
@@ -171,8 +166,7 @@ describe('useForm', () => {
       form.assignee = 'user1'
       form.estimatedPoints = 3
       form.description = 'x'.repeat(200)
-      summary.vehicle = 'V'
-      summary.product = 'P'
+      summary.compositeCode = 'CC'
       summary.layer = 'L'
       summary.component = 'C'
       summary.detail = 'D'
@@ -225,20 +219,19 @@ describe('useForm', () => {
     })
 
     it('fills missing parts with [...]', async () => {
-      formApi.summary.vehicle = 'A'
+      formApi.summary.compositeCode = 'A'
       await nextTick()
-      expect(formApi.computedSummary.value).toBe('[A][...][...][...][...]')
+      expect(formApi.computedSummary.value).toBe('[A][...][...][...]')
     })
 
     it('joins all parts when filled', async () => {
       const { summary } = formApi
-      summary.vehicle = 'V'
-      summary.product = 'P'
+      summary.compositeCode = 'CC'
       summary.layer = 'L'
       summary.component = 'C'
       summary.detail = 'D'
       await nextTick()
-      expect(formApi.computedSummary.value).toBe('[V][P][L][C][D]')
+      expect(formApi.computedSummary.value).toBe('[CC][L][C][D]')
     })
   })
 })

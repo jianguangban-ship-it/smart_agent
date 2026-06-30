@@ -1,16 +1,16 @@
 import { ref } from 'vue'
 import { setCoachSkillEnabled } from '@/composables/useLLM'
 
-export type AppMode = 'explore' | 'task' | 'view'
+export type AppMode = 'explore' | 'task' | 'view' | 'config'
 
 const LS_KEY_MODE = 'app-mode'
 
-export const validModes: AppMode[] = ['explore', 'task', 'view']
+export const validModes: AppMode[] = ['explore', 'task', 'view', 'config']
 
 /** Drive coachSkillEnabled from the current mode. */
 export function applyModeFlags(mode: AppMode): void {
   // Task is the only mode that uses the structured task-coach skill.
-  // Explore is free-chat. View is read-only — no LLM at all.
+  // Explore is free-chat. View and Config are read-only — no LLM at all.
   setCoachSkillEnabled(mode === 'task')
 }
 

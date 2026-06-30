@@ -2,6 +2,9 @@ import { ref, type Ref } from 'vue'
 import type { ProjectConfig, TeamMember } from '@/types/team'
 import { PROJECT_CONFIG as FALLBACK_PROJECTS, TEAM_MEMBERS as FALLBACK_MEMBERS } from '@/config/projects'
 import {
+  PROJECT_MATRIX_FALLBACK, PRODUCT_LINE_OPTIONS, type ProjectMatrixRow
+} from '@/config/projectMatrix'
+import {
   VEHICLE_OPTIONS as FALLBACK_VEHICLES,
   PRODUCT_OPTIONS as FALLBACK_PRODUCTS,
   LAYER_OPTIONS as FALLBACK_LAYERS,
@@ -16,7 +19,7 @@ export interface SummaryOptions {
 
 export type ComponentsByProject = Record<string, string[]>
 
-export type ConfigFileKey = 'projects' | 'team' | 'summary' | 'components'
+export type ConfigFileKey = 'projects' | 'team' | 'summary' | 'components' | 'projectMatrix'
 export type ConfigFileStatus = 'pending' | 'runtime' | 'fallback' | 'invalid'
 
 const projects = ref<ProjectConfig[]>([...FALLBACK_PROJECTS])
@@ -27,12 +30,14 @@ const summaryOptions = ref<SummaryOptions>({
   layers: [...FALLBACK_LAYERS]
 })
 const componentsByProject = ref<ComponentsByProject>({ ...FALLBACK_COMPONENTS_BY_PROJECT })
+const projectMatrix = ref<ProjectMatrixRow[]>([...PROJECT_MATRIX_FALLBACK])
 const configLoaded = ref(false)
 const configStatus = ref<Record<ConfigFileKey, ConfigFileStatus>>({
   projects: 'pending',
   team: 'pending',
   summary: 'pending',
-  components: 'pending'
+  components: 'pending',
+  projectMatrix: 'pending'
 })
 
 interface FetchResult<T> {
@@ -88,17 +93,31 @@ function validateComponentsByProject(data: unknown): data is ComponentsByProject
   return Object.values(data as Record<string, unknown>).every(isStringArray)
 }
 
+const PRODUCT_LINE_SET = new Set<string>([...PRODUCT_LINE_OPTIONS, ''])
+const PROJECT_MATRIX_FIELDS = ['customerCode', 'projectNo', 'yearInfo', 'companyCode', 'serialNo', 'productTypeCode']
+function validateProjectMatrix(data: unknown): data is ProjectMatrixRow[] {
+  if (!Array.isArray(data)) return false
+  return data.every(r => {
+    if (!r || typeof r !== 'object') return false
+    const row = r as Record<string, unknown>
+    if (typeof row.productLine !== 'string' || !PRODUCT_LINE_SET.has(row.productLine)) return false
+    if (row.comments !== undefined && typeof row.comments !== 'string') return false
+    return PROJECT_MATRIX_FIELDS.every(f => typeof row[f] === 'string')
+  })
+}
+
 function warn(file: string, reason: string) {
   console.warn(`[runtime-config] /config/${file}: ${reason} — using fallback`)
 }
 
 export async function loadRuntimeConfig(): Promise<void> {
   const cacheBust = `?v=${Date.now()}`
-  const [projRes, teamRes, summRes, compRes] = await Promise.all([
+  const [projRes, teamRes, summRes, compRes, matrixRes] = await Promise.all([
     fetchJsonWithReason<unknown>(`/config/projects.json${cacheBust}`),
     fetchJsonWithReason<unknown>(`/config/team-members.json${cacheBust}`),
     fetchJsonWithReason<unknown>(`/config/summary-options.json${cacheBust}`),
-    fetchJsonWithReason<unknown>(`/config/components.json${cacheBust}`)
+    fetchJsonWithReason<unknown>(`/config/components.json${cacheBust}`),
+    fetchJsonWithReason<unknown>(`/config/project-matrix.json${cacheBust}`)
   ])
 
   if (projRes.data === null) {
@@ -145,10 +164,21 @@ export async function loadRuntimeConfig(): Promise<void> {
     configStatus.value.components = 'invalid'
   }
 
+  if (matrixRes.data === null) {
+    warn('project-matrix.json', matrixRes.reason || 'fetch failed')
+    configStatus.value.projectMatrix = 'fallback'
+  } else if (validateProjectMatrix(matrixRes.data)) {
+    projectMatrix.value = matrixRes.data
+    configStatus.value.projectMatrix = 'runtime'
+  } else {
+    warn('project-matrix.json', 'invalid shape (expect ProjectMatrixRow[])')
+    configStatus.value.projectMatrix = 'invalid'
+  }
+
   configLoaded.value = true
   const s = configStatus.value
   console.info(
-    `[runtime-config] loaded: projects=${s.projects}, team=${s.team}, summary=${s.summary}, components=${s.components}`
+    `[runtime-config] loaded: projects=${s.projects}, team=${s.team}, summary=${s.summary}, components=${s.components}, projectMatrix=${s.projectMatrix}`
   )
 }
 
@@ -156,5 +186,6 @@ export const runtimeProjects: Ref<ProjectConfig[]> = projects
 export const runtimeTeamMembers: Ref<Record<string, TeamMember[]>> = teamMembers
 export const runtimeSummaryOptions: Ref<SummaryOptions> = summaryOptions
 export const runtimeComponentsByProject: Ref<ComponentsByProject> = componentsByProject
+export const runtimeProjectMatrix: Ref<ProjectMatrixRow[]> = projectMatrix
 export const runtimeConfigLoaded: Ref<boolean> = configLoaded
 export const runtimeConfigStatus: Ref<Record<ConfigFileKey, ConfigFileStatus>> = configStatus

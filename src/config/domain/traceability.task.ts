@@ -21,7 +21,7 @@ export const TASK_LEVELS: TaskLevelDef[] = [
     labelZh: '史诗',
     shortEn: 'EPIC',
     shortZh: '史诗',
-    roles: ['system-architect'],
+    roles: ['system-architect', 'pmo-manager'],
     parentLevels: [],
     childLevels: ['story']
   },
@@ -31,7 +31,7 @@ export const TASK_LEVELS: TaskLevelDef[] = [
     labelZh: '用户故事',
     shortEn: 'STORY',
     shortZh: '故事',
-    roles: ['system-architect', 'sw-developer', 'hw-designer', 'me-designer', 'vv-engineer'],
+    roles: ['system-architect', 'sw-developer', 'hw-designer', 'me-designer', 'vv-engineer', 'pmo-manager'],
     parentLevels: ['epic'],
     childLevels: ['task', 'subtask']
   },
@@ -41,7 +41,7 @@ export const TASK_LEVELS: TaskLevelDef[] = [
     labelZh: '任务',
     shortEn: 'TASK',
     shortZh: '任务',
-    roles: ['sw-developer', 'hw-designer', 'me-designer', 'vv-engineer', ''],
+    roles: ['sw-developer', 'hw-designer', 'me-designer', 'vv-engineer', 'pmo-manager', ''],
     parentLevels: ['story', 'epic'],
     childLevels: ['subtask']
   },

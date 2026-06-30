@@ -41,6 +41,13 @@ COPY server/ ./server/
 COPY deploy/mcp-servers.json ./deploy/mcp-servers.json
 COPY --from=spa-builder /app/dist ./dist
 
+# Bake the canonical config defaults (built from public/config) to a path OUTSIDE
+# the /app/dist/config volume mount, so the entrypoint can seed an empty volume
+# on first boot. public/config is the single source of truth.
+COPY --from=spa-builder /app/dist/config /app/config-defaults
+COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # SQLite DB lives in /app/data (mount a volume here in docker-compose)
 RUN mkdir -p /app/data
 
@@ -49,5 +56,7 @@ ENV HOST=0.0.0.0
 ENV QUALITY_DB_PATH=/app/data/quality.db
 EXPOSE 5181
 
-# tsx runs TS directly (no build step for the server)
+# Entrypoint seeds the config volume on first boot, then runs the server.
+# tsx runs TS directly (no build step for the server).
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["npx", "tsx", "server/index.ts"]

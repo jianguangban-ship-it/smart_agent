@@ -14,6 +14,7 @@ import type { TaskLevel } from '@/config/domain/traceability.task'
 import { useI18n } from '@/i18n'
 import { addRecord, setSessionId } from '@/composables/useCoachHistory'
 import { inlineAttachments, buildMultimodalContent, stripImageContent } from '@/composables/useAttachment'
+import { selectionContextFields } from '@/composables/useSelectionContext'
 import type { CoachHistoryRecord, CoachChannel, Attachment } from '@/types/api'
 
 // Hoisted function (no TDZ) so the localStorage key is reachable from
@@ -565,6 +566,10 @@ export function useLLM() {
       model: getExploreModel(),
       messages: apiMessages
     }
+    // Attach the current selection (team/project/assignee) for server-side
+    // Activity-log traceability. Omitted entirely when nothing is selected.
+    const ctx = selectionContextFields()
+    if (Object.keys(ctx).length > 0) body.context = ctx
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     const internalToken = import.meta.env.VITE_INTERNAL_API_TOKEN
@@ -723,6 +728,7 @@ export function useLLM() {
     requestTaskCoach: (p: WebhookPayload) => taskCoach.request(p),
     cancelTaskCoach: taskCoach.cancel,
     retryTaskCoach: taskCoach.retry,
+    regenerateTaskCoach: taskCoach.regenerate,
     clearTaskCoach: () => { taskCoach.clear(); activeSkill.value = null; ignoredSkillId.value = null },
 
     // Explore channel

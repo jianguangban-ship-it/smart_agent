@@ -3,14 +3,7 @@
     <div class="review-content">
       <div v-if="response || isAnalyzing" class="review-toolbar">
         <span class="header-actions">
-          <span v-if="isAnalyzing" class="status-badge status-loading">
-            <svg class="mini-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4">
-              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-linecap="round" opacity="0.25"/>
-              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
-            </svg>
-            {{ t('status.loading') }}
-          </span>
-          <span v-else-if="response && !hasError" class="status-badge status-success">{{ t('status.success') }}</span>
+          <span v-if="response && !hasError && !isAnalyzing" class="status-badge status-success">{{ t('status.success') }}</span>
           <span v-else-if="hasError" class="status-badge status-error">{{ t('status.error') }}</span>
           <!-- AI result badges (visible even when collapsed) -->
           <span v-if="aiPoints != null && !isAnalyzing" class="result-badge points-badge">
@@ -72,24 +65,11 @@
             <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
           </svg>
           <p class="loading-text" style="color: var(--accent-purple);">{{ t('panel.aiAnalyzing') }}</p>
-          <button class="cancel-btn" @click="$emit('cancel')">
-            <svg class="cancel-icon" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-            </svg>
-            {{ t('settings.cancel') }}
-          </button>
+          <!-- Cancel moved to the action-bar Analysis→Cancel toggle (v10.207). -->
         </div>
 
         <!-- LLM markdown result (streaming or complete) -->
         <div v-else-if="isMarkdownResponse">
-          <div v-if="isAnalyzing" class="cancel-row">
-            <button class="cancel-btn" @click="$emit('cancel')">
-              <svg class="cancel-icon" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
-              {{ t('settings.cancel') }}
-            </button>
-          </div>
           <div v-if="hasPerspectiveTabs && !showDiff" class="perspective-tabs">
             <button
               class="perspective-tab"
@@ -328,11 +308,6 @@ async function copyResponse() {
   padding: 1px 8px;
   border-radius: var(--radius-sm);
 }
-.status-loading {
-  color: var(--accent-orange);
-  background-color: color-mix(in srgb, var(--accent-orange) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-orange) 25%, transparent);
-}
 .status-success {
   color: var(--accent-green);
   background-color: color-mix(in srgb, var(--accent-green) 10%, transparent);
@@ -342,12 +317,6 @@ async function copyResponse() {
   color: var(--accent-red);
   background-color: color-mix(in srgb, var(--accent-red) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent-red) 25%, transparent);
-}
-
-.mini-spinner {
-  width: 12px;
-  height: 12px;
-  animation: spin 1s linear infinite;
 }
 
 /* AI result badges */
@@ -401,19 +370,22 @@ async function copyResponse() {
 .loading-text { font-size: 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Markdown response styles (mirrors CoachPanel) */
+/* Markdown response styles — mirrors the Explore/Review polish (serif body,
+   airy rhythm, Claude-style borderless tables); review-specific accent chrome
+   (purple headings-accent, status/issue colors) is preserved below. */
 .coach-response {
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-primary);
 }
 .coach-response :deep(h1),
-.coach-response :deep(h2) { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
-.coach-response :deep(h3) { font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 10px 0 5px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
+.coach-response :deep(h2) { font-family: var(--font-serif); font-size: 1.4rem; line-height: 1.3; font-weight: 600; color: var(--text-primary); margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
+.coach-response :deep(h3) { font-family: var(--font-serif); font-size: 1.15rem; line-height: 1.35; font-weight: 600; color: var(--text-primary); margin: 10px 0 5px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
 .coach-response :deep(h4),
 .coach-response :deep(h5),
-.coach-response :deep(h6) { font-size: 12px; font-weight: 600; color: var(--accent-purple); margin: 8px 0 4px; }
-.coach-response :deep(p) { margin: 0 0 6px; }
+.coach-response :deep(h6) { font-family: var(--font-serif); font-size: 12px; font-weight: 600; color: var(--accent-purple); margin: 8px 0 4px; }
+.coach-response :deep(p) { margin: 0 0 0.85em; }
 .coach-response :deep(strong) { color: var(--accent-purple); font-weight: 600; }
 .coach-response :deep(em) { font-style: italic; }
 .coach-response :deep(code) { background-color: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: var(--font-mono); color: var(--accent-blue); }
@@ -424,40 +396,45 @@ async function copyResponse() {
 .coach-response :deep(hr.coach-response-divider) { border-top: 2px solid var(--accent-purple); margin: 16px 0; opacity: 0.4; }
 .coach-response :deep(ul),
 .coach-response :deep(ol) { margin: 4px 0; padding-left: 20px; }
-.coach-response :deep(li) { margin: 2px 0; }
+.coach-response :deep(li) { margin: 0.25em 0; }
 .coach-response :deep(li::marker) { color: var(--text-muted); }
 .coach-response :deep(ol li::marker) { color: var(--accent-purple); font-weight: 600; }
 .coach-response :deep(blockquote) { border-left: 3px solid var(--accent-purple); margin: 6px 0; padding: 4px 10px; background-color: var(--bg-tertiary); border-radius: 0 6px 6px 0; color: var(--text-secondary); }
 .coach-response :deep(blockquote p) { margin: 0; }
 .coach-response :deep(a) { color: var(--accent-blue); text-decoration: none; }
 .coach-response :deep(a:hover) { text-decoration: underline; }
+/* Claude-style borderless tables (mirrors the Review chat). Horizontal scroll is
+   provided by the global .coach-response .table-scroll wrapper from
+   coach-response.css, so no display:block/overflow hack here. */
 .coach-response :deep(table) {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  border: none;
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
   margin: 8px 0;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  overflow: hidden;
-  display: block;
-  overflow-x: auto;
 }
-.coach-response :deep(thead) { background-color: var(--bg-tertiary); }
+.coach-response :deep(thead) { background: transparent; }
 .coach-response :deep(th) {
+  border: none;
+  border-bottom: 1px solid var(--text-muted);
+  padding: 0.55em 1.25em 0.55em 0;
+  font-weight: 700;
   color: var(--text-primary);
-  font-weight: 600;
-  padding: 6px 10px;
-  border: 1px solid var(--border-color);
   white-space: nowrap;
   text-align: left;
 }
 .coach-response :deep(td) {
-  padding: 5px 10px;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  line-height: 1.4;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.6em 1.25em 0.6em 0;
+  color: var(--text-primary);
+  line-height: 1.5;
+  vertical-align: top;
 }
-.coach-response :deep(tbody tr:hover) { background-color: var(--bg-secondary); }
+.coach-response :deep(tbody tr:hover) { background: transparent; }
+.coach-response :deep(tbody tr:last-child td) { border-bottom: none; }
 .coach-response :deep(.coach-status-badge) {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; margin-bottom: 8px;
@@ -468,7 +445,9 @@ async function copyResponse() {
 .coach-response :deep(.coach-info-row) { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--border-color); font-size: 12px; }
 .coach-response :deep(.coach-info-label) { color: var(--text-muted); }
 .coach-response :deep(.coach-info-value) { color: var(--text-primary); font-weight: 500; }
-.coach-response :deep(.coach-main-message) { background-color: var(--bg-tertiary); border-radius: 6px; padding: 8px 10px; margin: 6px 0; border-left: 3px solid var(--accent-purple); }
+/* No card box — let the report flow directly on the panel like the Review chat
+   (the global .coach-main-message is padding:0; v10.210). */
+.coach-response :deep(.coach-main-message) { background: transparent; border: none; border-radius: 0; padding: 0; margin: 0; }
 .coach-response :deep(.coach-comment-title) { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
 .coach-response :deep(.coach-issues-list) { display: flex; flex-direction: column; gap: 5px; }
 .coach-response :deep(.coach-issue-item) { display: flex; align-items: flex-start; gap: 8px; padding: 5px 8px; background-color: var(--red-subtle); border-radius: 6px; border-left: 3px solid var(--accent-red); }
@@ -578,11 +557,6 @@ async function copyResponse() {
   margin-bottom: 12px;
 }
 
-.cancel-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
 .cancel-btn {
   display: inline-flex;
   align-items: center;
@@ -599,7 +573,6 @@ async function copyResponse() {
   margin-top: 12px;
 }
 .cancel-btn:hover { background-color: var(--red-border); }
-.cancel-icon { width: 12px; height: 12px; }
 
 .retry-row {
   display: flex;

@@ -21,4 +21,16 @@ deploy/.env.*
 *-api-settings-*.json
 # Local tooling / crash dumps
 .antigravitycli/
+bash.exe.stackdump
+# Local STT verification server (tools/local-stt) — venv + model weights are machine-local
+tools/local-stt/.venv/
+tools/local-stt/models/
 *.stackdump
+# Per-team edit codes for the Config-mode Team editor — secret, ops-managed.
+# The committed sample (deploy/team-codes.sample.json) shows the shape.
+# Default dev location is <root>/data/team-codes.json (already covered by data/).
+team-codes.json
+# Config-editor backups written at runtime (CONFIG_DIR/../backups). In dev this
+# lands at public/backups; prod backups sit under dist/ (already ignored).
+public/backups/
+backups/

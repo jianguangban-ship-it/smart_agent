@@ -734,11 +734,8 @@ class LateralEstimator:
       expect(html).toContain('<pre>')
       expect(html).toContain('LateralEstimator')
       expect(html).toContain('整车质量')
-      // Code block content should not be math-rendered. Syntax highlighting wraps
-      // `self` in a token span, but the `.m = m` assignment stays literal text —
-      // if the `m`s had been turned into KaTeX, this contiguous string would be
-      // broken up by katex markup.
-      expect(html).toContain('.m = m')
+      // Code block content should not be math-rendered
+      expect(html).toContain('self.m = m')
     })
 
     it('handles mixed English/Chinese with math in same paragraph', () => {
@@ -898,3 +895,24 @@ $$c_{ij} = \\sum_{k=1}^{n} a_{ik} \\cdot b_{kj}$$`
 })
 
 import { beforeAll } from 'vitest'
+
+describe('middle-dot units inside math', () => {
+  it('renders · inside \\text{} without a KaTeX error (W/m·K, N·m)', () => {
+    const html = renderMarkdown('Thermal: $8 \\, \\text{W/m·K}$; torque $8 \\pm 1 \\, \\text{N·m}$.')
+    expect(html).toContain('class="katex"')
+    expect(html).not.toContain('katex-error')
+    expect(html).not.toContain('\\cdotp')
+  })
+
+  it('renders a bare · in inline math as a centered dot', () => {
+    const html = renderMarkdown('Product $a · b$ here.')
+    expect(html).toContain('class="katex"')
+    expect(html).not.toContain('katex-error')
+  })
+
+  it('leaves prose middle dots untouched (no math)', () => {
+    const html = renderMarkdown('120 chars · ~30 tokens')
+    expect(html).not.toContain('katex')
+    expect(html).toContain('·')
+  })
+})

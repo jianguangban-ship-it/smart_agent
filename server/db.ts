@@ -97,6 +97,103 @@ export function listTickets(filter: {
   return db().prepare(sql).all(params) as TicketRow[]
 }
 
+// ─── Activity log (v10.228) ──────────────────────────────────────────────────
+// Structural input type (avoids importing LogEntry from logs/log-bus, which
+// imports this module). detail is stored as a JSON string.
+export interface AuditRowIn {
+  ts: string
+  level: string
+  evt?: string
+  msg: string
+  source?: string
+  ip?: string
+  team_key?: string
+  detail?: Record<string, unknown>
+}
+
+export interface AuditRow {
+  id: number
+  ts: string
+  level: string
+  evt: string | null
+  msg: string
+  source: string | null
+  ip: string | null
+  team_key: string | null
+  detail: string | null
+}
+
+const LOG_RETENTION_ROWS = Math.max(100, Number(process.env.LOG_RETENTION_ROWS ?? 5000))
+const LOG_RETENTION_DAYS = Math.max(1, Number(process.env.LOG_RETENTION_DAYS ?? 90))
+let auditInserts = 0
+
+export function insertAuditLog(e: AuditRowIn): void {
+  db().prepare(`
+    INSERT INTO audit_log (ts, level, evt, msg, source, ip, team_key, detail)
+    VALUES (@ts, @level, @evt, @msg, @source, @ip, @team_key, @detail)
+  `).run({
+    ts: e.ts,
+    level: e.level,
+    evt: e.evt ?? null,
+    msg: e.msg ?? '',
+    source: e.source ?? null,
+    ip: e.ip ?? null,
+    team_key: e.team_key ?? null,
+    detail: e.detail ? JSON.stringify(e.detail) : null
+  })
+  // Throttled prune: never a DELETE on every write.
+  if (++auditInserts % 200 === 0) pruneAuditLog()
+}
+
+export function listAuditLog(opts: {
+  limit?: number
+  beforeId?: number
+  level?: string
+  evt?: string
+  q?: string
+} = {}): AuditRow[] {
+  const where: string[] = []
+  const params: Record<string, unknown> = {}
+  if (opts.beforeId) { where.push('id < @beforeId'); params.beforeId = opts.beforeId }
+  if (opts.level)    { where.push('level = @level'); params.level = opts.level }
+  if (opts.evt)      { where.push('evt = @evt');     params.evt = opts.evt }
+  if (opts.q)        { where.push('(msg LIKE @q OR detail LIKE @q OR evt LIKE @q)'); params.q = `%${opts.q}%` }
+  params.limit = Math.min(Math.max(1, opts.limit ?? 200), 1000)
+  const sql = `
+    SELECT id, ts, level, evt, msg, source, ip, team_key, detail
+    FROM audit_log
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+    ORDER BY id DESC
+    LIMIT @limit
+  `
+  return db().prepare(sql).all(params) as AuditRow[]
+}
+
+export function pruneAuditLog(): void {
+  const d = db()
+  // Age-based prune.
+  d.prepare(`DELETE FROM audit_log WHERE ts < datetime('now', @age)`).run({ age: `-${LOG_RETENTION_DAYS} days` })
+  // Row-cap prune: keep the newest N.
+  d.prepare(`
+    DELETE FROM audit_log
+    WHERE id <= (SELECT MAX(id) FROM audit_log) - @keep
+  `).run({ keep: LOG_RETENTION_ROWS })
+}
+
+export function auditRowToEntry(r: AuditRow): Record<string, unknown> {
+  return {
+    id: r.id,
+    ts: r.ts,
+    level: r.level,
+    ...(r.evt ? { evt: r.evt } : {}),
+    msg: r.msg,
+    ...(r.source ? { source: r.source } : {}),
+    ...(r.ip ? { ip: r.ip } : {}),
+    ...(r.team_key ? { team_key: r.team_key } : {}),
+    ...(r.detail ? { detail: JSON.parse(r.detail) } : {})
+  }
+}
+
 // Wire-format: snake_case row → spec §3.1 camelCase payload.
 export function rowToTicket(r: TicketRow): TicketBody & { updatedAt: string } {
   return {

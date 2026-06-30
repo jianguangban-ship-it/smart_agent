@@ -16,8 +16,8 @@ export interface FormState {
 }
 
 export interface SummaryState {
-  vehicle: string
-  product: string
+  /** Composite code from the Project matrix — replaces the old vehicle+product. */
+  compositeCode: string
   layer: string
   component: string
   detail: string

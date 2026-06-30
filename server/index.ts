@@ -3,10 +3,14 @@ import fastifyStatic from '@fastify/static'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
-import { ticketRoutes } from './routes/tickets.js'
+import { ticketRoutes, auditTicketResponse } from './routes/tickets.js'
 import { llmRoutes } from './routes/llm.js'
-import { initMCP } from './mcp/client.js'
+import { transcribeRoutes } from './routes/transcribe.js'
+import { configRoutes } from './routes/config.js'
+import { logRoutes } from './routes/logs.js'
+import { initMCP, getMCPTools } from './mcp/client.js'
 import { db } from './db.js'
+import { logTap, audit } from './logs/log-bus.js'
 import type { TicketBody } from './schemas.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -19,7 +23,11 @@ const HOST = process.env.HOST ?? '0.0.0.0'
 // handler. Tunable via LLM_BODY_LIMIT_MB.
 const BODY_LIMIT_MB = Number(process.env.LLM_BODY_LIMIT_MB ?? 8)
 const app = Fastify({
-  logger: { level: process.env.LOG_LEVEL ?? 'info' },
+  // logTap forwards every line to stdout unchanged AND taps warn/error into the
+  // activity bus (server/logs/log-bus.ts). trustProxy makes req.ip the real
+  // client behind the GWM reverse proxy (so audit events record the right IP).
+  logger: { level: process.env.LOG_LEVEL ?? 'info', stream: logTap },
+  trustProxy: true,
   bodyLimit: BODY_LIMIT_MB * 1024 * 1024
 })
 
@@ -28,6 +36,9 @@ db()
 
 app.register(ticketRoutes, { prefix: '/api' })
 app.register(llmRoutes, { prefix: '/api' })
+app.register(transcribeRoutes, { prefix: '/api' })
+app.register(configRoutes, { prefix: '/api' })
+app.register(logRoutes, { prefix: '/api' })
 
 // In production the same container serves the SPA build. In dev, Vite owns the
 // UI and proxies /api here — so this block is a no-op when dist/ is absent.
@@ -68,23 +79,16 @@ app.setErrorHandler((err, req, reply) => {
   reply.code(500).send({ error: 'internal' })
 })
 
-// Spec §7 — per-request summary log for POST /api/tickets so operators can
-// see at a glance: which ticket was posted, what verdict, which team, what
-// code we returned, and (when validation failed) what the schema rejected.
-// agentCheck is intentionally NOT logged — too noisy.
+// Spec §7 + Activity log — for POST /api/tickets, emit the JIRA audit event.
+// This is the user's "create task" action as reported by n8n's callback: it
+// carries the real issue key on success, so the feed records it without any
+// client code. OK = a real key was accepted (201/200); NOK = n8n produced no
+// real ticket id (400 — the `未知KEY` sentinel / pattern reject), logged at warn.
+// We do this in onResponse because only here do we have BOTH the body and the
+// final status code. 401 (bad API key) is logged separately as auth.fail.
 app.addHook('onResponse', (req, reply, done) => {
   if (req.method === 'POST' && req.url?.startsWith('/api/tickets')) {
-    const body = req.body as Partial<TicketBody> | undefined
-    const details = (req as { qualityValidationDetails?: string[] })
-      .qualityValidationDetails
-    app.log.info({
-      issueKey:   body?.issueKey,
-      status:     body?.status,
-      team_key:   body?.team_key,
-      code:       reply.statusCode,
-      latency_ms: Math.round(reply.elapsedTime),
-      ...(details ? { validation: details } : {})
-    }, 'POST /api/tickets')
+    auditTicketResponse(app.log, reply.statusCode, req.body as Partial<TicketBody> | undefined, req.ip)
   }
   done()
 })
@@ -93,9 +97,17 @@ app.addHook('onResponse', (req, reply, done) => {
 // MCP_CONFIG_PATH). Never rejects: failures degrade to no-tools, and Explore
 // mode falls back to plain chat. See server/mcp/client.ts.
 await initMCP({ log: app.log })
+{
+  const n = getMCPTools().length
+  audit(app.log, n > 0 ? 'mcp.ready' : 'mcp.disabled', {
+    source: 'system',
+    msg: n > 0 ? `mcp.ready · ${n} tool${n === 1 ? '' : 's'}` : 'mcp.disabled · no tools',
+    detail: { tools: n }
+  })
+}
 
 app.listen({ port: PORT, host: HOST })
-  .then(() => app.log.info(`quality-grid listening on http://${HOST}:${PORT}`))
+  .then(() => audit(app.log, 'server.start', { source: 'system', msg: `listening on http://${HOST}:${PORT}`, detail: { port: PORT } }))
   .catch(err => {
     app.log.error(err)
     process.exit(1)

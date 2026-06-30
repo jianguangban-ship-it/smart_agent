@@ -1,33 +1,10 @@
 {
   "HW": [
-    "PIU",
-    "MCU",
-    "MDU",
-    "CSU",
-    "TBIU",
-    "VCU",
-    "PMU",
-    "COM",
-    "STCU",
-    "MPS",
-    "EPB",
-    "IMU",
-    "HBU",
-    "HWC",
-    "SFU",
-    "HU",
-    "CU",
-    "PCB",
-    "CON",
-    "NSC",
-    "MU",
-    "HDSU",
-    "ECU",
-    "SU",
-    "FU",
-    "TCAU"
+    "TLE9461", "L9300", "L9301", "L9369", "L9369S", "FS65", "FS6523",
+    "DRV3245", "SC900719(BE13)", "TJA1145",
+    "Gate Driver", "Valve Driver", "Switch Driver", "CanTrsv",
+    "PWM_Controller"
   ],
-
   "DKKF": [
     "MCAL", "Wdg", "Gpt", "Dma", "CRC", "Crypto", "Mem Driver", "Eep", "Mem",
     "Com Drv", "Eth", "Spi", "Lin", "Fr", "Uart", "I2C", "I/O Drv", "Port",
@@ -41,8 +18,6 @@
   ],
   "DKKG": ["System", "SwIntegration", "ArchDev", "Calibration", "CDD_MotCtrl", "PID_Control"],
   "DKKFT": ["System", "MCAL", "EcuM", "BswM", "Dcm", "CanTp"],
-
-  
   "SWSS": ["CDD_MotCtrl", "PID_Control", "Calibration"],
   "SWBS": ["CDD_MotCtrl", "PID_Control", "Calibration"],
   "SWVV": ["System", "MCAL", "EcuM", "BswM", "Dcm", "CanTp"],
@@ -51,20 +26,9 @@
     "CAN_Driver", "LIN_Stack", "Diag_Module"
   ],
   "SWSU": ["CDD_MotCtrl", "PID_Control", "Calibration"],
-
   "PMVSS": ["System", "EcuM", "BswM", "Dcm", "CanTp"],
   "PMVBS": ["System", "EcuM", "BswM", "Dcm", "CanTp"],
   "PMVSU": ["System", "EcuM", "BswM", "Dcm", "CanTp"],
-
-
-  "SDBS":  ["System", "EcuM", "BswM", "Dcm", "CanTp"],
-  "SDSS":  ["System", "EcuM", "BswM", "Dcm", "CanTp"],
-  "SDVV":  ["System", "EcuM", "BswM", "Dcm", "CanTp"],
-  "SDTS":  ["System", "EcuM", "BswM", "Dcm", "CanTp"],
-  "SDSC":  ["System", "EcuM", "BswM", "Dcm", "CanTp"],
-
-  "ADBS": ["System", "EcuM", "BswM", "Dcm", "CanTp"],
-  "ADSS": ["System", "EcuM", "BswM", "Dcm", "CanTp"],
-  "ADSU": ["System", "EcuM", "BswM", "Dcm", "CanTp"],
-  "ADSIM": ["System", "EcuM", "BswM", "Dcm", "CanTp"]
+  "PMO": ["Project Management", "Process Improvement", "Resource Allocation"]
 }
+

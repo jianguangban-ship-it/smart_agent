@@ -14,14 +14,25 @@ services:
       QUALITY_API_KEY: ${QUALITY_API_KEY:?QUALITY_API_KEY must be set in deploy/.env}
       PORT: "5181"
       QUALITY_DB_PATH: /app/data/quality.db
+      # Per-team edit codes for the Config-mode Team editor. Lives in the data
+      # volume (below), NOT under dist/config — that dir is web-served. This is
+      # the default the server already computes; set explicitly for clarity.
+      TEAM_CODES_PATH: /app/data/team-codes.json
       # LLM proxy (GWM internal). env_file injects deploy/.env into the container;
       # these provide explicit defaults at interpolation time. EXPLORE_DISABLE_MCP and
       # INTERNAL_API_TOKEN, when set in deploy/.env, are injected via env_file above.
       LLMPROXY_API_KEY: ${LLMPROXY_API_KEY:-}
       LLMPROXY_BASE_URL: ${LLMPROXY_BASE_URL:-https://llmproxy.gwm.cn/v1}
     volumes:
-      # Editable runtime configs (projects, team-members, etc.) override the baked-in defaults.
+      # Editable runtime configs (projects, team-members, components, summary-options).
+      # No manual seeding needed: on first boot the entrypoint copies the baked
+      # defaults (built from public/config) into this volume for any missing file.
+      # Thereafter this volume is the live source of truth — the Config-mode Team
+      # editor reads AND writes it, and edits persist across restarts.
       - /usr/local/smart_agent/data:/app/dist/config
-      # SQLite database for the View-mode quality grid. Survives container restarts.
+      # SQLite DB for the View-mode quality grid + team-codes.json (per-team edit
+      # codes; NOT web-served, NOT auto-seeded — it's a secret). Survives restarts.
+      # Drop team-codes.json (see deploy/team-codes.sample.json) into this host dir
+      # to enable in-app editing.
       - /usr/local/smart_agent/quality-db:/app/data
     restart: unless-stopped

@@ -1,6 +1,8 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { refDebounced } from '@vueuse/core'
 import type { QualityTicket } from '@/types/quality'
 import { range, buckets, type PhaseBucket } from '@/composables/useTimingPhase'
+import { bucketBounds, bucketIndexOf } from '@/utils/bucketIndex'
 
 const tickets = ref<QualityTicket[]>([])
 const loading = ref(false)
@@ -10,6 +12,14 @@ const lastFetched = ref<number>(0)
 export const filterTeam = ref<string>('')
 export const filterStatus = ref<string>('')
 export const searchText = ref<string>('')
+// Search filtering lags typing by 250ms so the O(n) scan in filteredTickets
+// doesn't run per keystroke; the input itself stays bound to searchText and
+// remains instant. Team/status selects are discrete picks — no debounce.
+const debouncedSearch = refDebounced(searchText, 250)
+
+// A "refresh" is a fetch happening while stale rows are still on screen —
+// the grid keeps showing them (stale-while-revalidate) and only dims.
+const isRefreshing = computed(() => loading.value && tickets.value.length > 0)
 
 async function fetchTickets() {
   loading.value = true
@@ -34,7 +44,7 @@ async function fetchTickets() {
 }
 
 const filteredTickets = computed(() => {
-  const q = searchText.value.trim().toLowerCase()
+  const q = debouncedSearch.value.trim().toLowerCase()
   return tickets.value.filter(t => {
     if (filterTeam.value && t.team_key !== filterTeam.value) return false
     if (filterStatus.value && t.status !== filterStatus.value) return false
@@ -91,9 +101,9 @@ function tally(target: StatusCounts, status: string): void {
 }
 
 /**
- * Pure aggregation over the (already date-filtered) ticket set.
- * Describes the whole period independent of the grid's team/status/search
- * filters. A ticket is assigned to the first bucket whose [from, to] window
+ * Pure aggregation over a (already date-filtered) ticket set. Called twice:
+ * once on the full period (chips bar) and once on the filtered set (trend
+ * matrix). A ticket is assigned to the first bucket whose [from, to] window
  * contains its `timestamp` (event_time / latest verdict — snapshot model).
  */
 export function summarize(list: QualityTicket[], bkts: PhaseBucket[]): PeriodSummary {
@@ -101,12 +111,7 @@ export function summarize(list: QualityTicket[], bkts: PhaseBucket[]): PeriodSum
   const teamMap = new Map<string, TeamSummary>()
   const matrixMap = new Map<string, MatrixRow>()
   const bucketLabels = bkts.map(b => b.label)
-
-  const cellFor = (row: MatrixRow, label: string): MatrixCell => {
-    let c = row.cells.find(x => x.bucketLabel === label)
-    if (!c) { c = { bucketLabel: label, counts: {}, total: 0 }; row.cells.push(c) }
-    return c
-  }
+  const bounds = bucketBounds(bkts)
 
   for (const tk of list) {
     const status = tk.status
@@ -125,10 +130,11 @@ export function summarize(list: QualityTicket[], bkts: PhaseBucket[]): PeriodSum
       row = { team_key: tk.team_key, team: tk.team || tk.team_key, cells: bkts.map(b => ({ bucketLabel: b.label, counts: {}, total: 0 })), total: 0 }
       matrixMap.set(tk.team_key, row)
     }
-    const ts = new Date(tk.timestamp).getTime()
-    const bucket = bkts.find(b => ts >= b.from.getTime() && ts <= b.to.getTime())
-    if (bucket) {
-      const cell = cellFor(row, bucket.label)
+    // Binary-search the containing bucket; row.cells is built from the same
+    // ordered `bkts`, so the cell index equals the bucket index (no .find).
+    const idx = bucketIndexOf(new Date(tk.timestamp).getTime(), bounds)
+    if (idx !== -1) {
+      const cell = row.cells[idx]
       tally(cell.counts, status)
       cell.total++
       row.total++
@@ -146,16 +152,34 @@ export function summarize(list: QualityTicket[], bkts: PhaseBucket[]): PeriodSum
   }
 }
 
-const summary = computed<PeriodSummary>(() => summarize(tickets.value, buckets.value))
+// v10.189: ONE summary, over the filtered set — the Mission Quality chips,
+// the per-team trend, and the ticket list all describe the same tickets.
+// (v10.187 briefly kept a second whole-period summary for the chips; the raw
+// period total still reaches the bar via its totalCount prop.)
+const filteredSummary = computed<PeriodSummary>(() => summarize(filteredTickets.value, buckets.value))
 
-// Auto-refresh when the tab becomes visible — keeps the grid fresh without
-// the cost of websockets. Manual refresh button covers the focused-tab case.
-function onVisibilityChange() {
-  if (document.visibilityState === 'visible') {
-    // Only refetch if it's been more than 30s since the last successful fetch
-    // (avoids hammering when the user alt-tabs frequently).
-    if (Date.now() - lastFetched.value > 30_000) fetchTickets()
+// v10.194: the panel is kept mounted across mode switches (v-show in App.vue,
+// same pattern as Task mode) so leaving View never pays the virtual-scroller
+// pool unmount at production row counts. While another mode is on screen the
+// grid is "inactive": tab-focus refresh is suppressed, and returning to
+// View always refetches.
+const gridActive = ref(true)
+
+export function setGridActive(active: boolean): void {
+  const wasActive = gridActive.value
+  gridActive.value = active
+  // lastFetched === 0 means the onMounted fetch hasn't happened yet;
+  // that fetch owns the initial load — avoid a double call.
+  if (active && !wasActive && lastFetched.value > 0) {
+    fetchTickets()
   }
+}
+
+// Refetch whenever the user returns to this browser tab (alt-tab, tab switch,
+// window restore). No staleness gate — tab focus signals intent to see fresh data.
+function onVisibilityChange() {
+  if (!gridActive.value) return
+  if (document.visibilityState === 'visible') fetchTickets()
 }
 
 let _wired = 0
@@ -165,13 +189,20 @@ export function useQualityGrid() {
     _wired++
     if (_wired === 1) {
       document.addEventListener('visibilitychange', onVisibilityChange)
-      // Re-fetch whenever the timing phase window changes (server-side range).
+      // Re-fetch only when the timing window's start/end actually change (preset
+      // switch, sprint boundary, day rollover). MUST be an array of getters, not
+      // a single getter returning an array: a getter returning a fresh [a,b] is
+      // never Object.is-equal to the previous array, so it would fire on every
+      // 60s `now` tick (the useSprint clock, which `range` depends on) and
+      // silently re-poll the server. See v10.234.
       _stopRangeWatch = watch(
-        () => [range.value.from.getTime(), range.value.to.getTime()],
+        [() => range.value.from.getTime(), () => range.value.to.getTime()],
         () => fetchTickets()
       )
     }
-    fetchTickets()
+    // Only fetch on mount if the grid is the active view (with the async-mounted
+    // panel this is true when entering View; avoids a cold-load fetch otherwise).
+    if (gridActive.value) fetchTickets()
   })
   onUnmounted(() => {
     _wired--
@@ -186,8 +217,10 @@ export function useQualityGrid() {
     tickets,
     filteredTickets,
     teamOptions,
-    summary,
+    filteredSummary,
     loading,
+    isRefreshing,
+    lastFetched,
     error,
     filterTeam,
     filterStatus,

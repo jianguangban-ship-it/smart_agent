@@ -209,7 +209,9 @@ details[open] > .agent-summary .summary-chevron { transform: rotate(90deg); }
 details:not([open]) > .agent-summary { margin-bottom: 0; }
 .agent-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Left column wider: it carries long values (Active Skill file name +
+     [modified] tag) while the right column holds short "No" states (v10.208). */
+  grid-template-columns: 1.5fr 1fr;
   gap: 10px var(--space-5);
   font-size: 12px;
 }

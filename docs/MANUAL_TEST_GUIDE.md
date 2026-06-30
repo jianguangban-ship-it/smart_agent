@@ -856,19 +856,20 @@ For a fast end-to-end pass, complete these steps in order:
 
 ## 36. Runtime Config Hot-Swap (Docker)
 
-Validates that **Basic Info** and **Task Summary** options can be updated by editing `deploy/config/*.json` and restarting the container — no image rebuild.
+Validates that **Basic Info** and **Task Summary** options auto-seed on first boot and can be updated by editing the mounted host file (or the in-app Config → Team editor) and restarting — no image rebuild. The single source is `public/config/`; the host volume `/usr/local/smart_agent/data/` is its prod runtime copy.
 
 | # | Input | Action | Expected Output |
 |---|-------|--------|-----------------|
-| 36.1 | Fresh container up (`docker compose up -d --build`) | Open app, open DevTools console | One line: `[runtime-config] loaded: projects=runtime, team=runtime, summary=runtime, components=runtime`. |
+| 36.0 | **Fresh empty volume** (`/usr/local/smart_agent/data` empty), `docker compose up -d --build` | Check logs | Entrypoint logs `[entrypoint] seeded ...` for the four files; volume now populated from baked defaults. |
+| 36.1 | Container up | Open app, open DevTools console | One line: `[runtime-config] loaded: projects=runtime, team=runtime, summary=runtime, components=runtime`. |
 | 36.2 | App open, no project selected | Inspect Task Summary Component field | Datalist suggestions empty. |
-| 36.3 | Basic Info → pick project **HW (Hardware Team)** | Focus Component input | Suggestions include HW chips (TLE9461, L9369, Gate Driver); **no MCAL/BSW entries**. |
+| 36.3 | Basic Info → pick project **HW (Hardware Team)** | Focus Component input | Suggestions include HW chips (PIU, MCU, ...); **no MCAL/BSW entries**. |
 | 36.4 | Still on HW | Switch project to **DKKF (Software Dev Team)** | Component suggestions switch to MCAL/BSW stack; HW driver chips gone. |
-| 36.5 | Shell on host | `echo a new component into deploy/config/components.json under "HW" key`, save | File valid JSON. |
-| 36.6 | After edit | `docker compose restart smart-agent` | Container healthy again. |
+| 36.5 | Shell on host | Add a new component into `/usr/local/smart_agent/data/components.json` under `"HW"`, save | File valid JSON. |
+| 36.6 | After edit | `docker compose restart smart-agent` | Container healthy; entrypoint seeds nothing (files already present). |
 | 36.7 | Browser | Reload page (no hard refresh needed — fetch URL carries `?v=<timestamp>`) | New component appears in HW dropdown. Console shows `components=runtime`. |
-| 36.8 | Put deliberately malformed JSON into `deploy/config/components.json` | `docker compose restart smart-agent`, reload | Console: `[runtime-config] /config/components.json: ... — using fallback`. Component dropdown still populates from baked-in fallback. |
-| 36.9 | Rename `deploy/config/components.json` to `components.bak.json` | Restart + reload | Console: `[runtime-config] /config/components.json: HTTP 404 — using fallback`. Fallback still works. |
+| 36.8 | Put deliberately malformed JSON into `/usr/local/smart_agent/data/components.json` | `docker compose restart smart-agent`, reload | Console: `[runtime-config] /config/components.json: ... — using fallback`. Component dropdown still populates from baked-in fallback. |
+| 36.9 | Rename the host `components.json` to `components.bak.json` | Restart + reload | Console: `[runtime-config] /config/components.json: HTTP 404 — using fallback`. (On a fresh empty volume the entrypoint would re-seed it instead.) |
 
 ---
 

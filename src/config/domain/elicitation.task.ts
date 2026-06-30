@@ -120,6 +120,26 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       hintZh: '资源规划'
     }
   ],
+  'fusa-engineer': [
+    {
+      questionEn: 'Which safety goal / ASIL and safe state does this address?',
+      questionZh: '本任务对应哪个安全目标/ASIL 与安全状态？',
+      hintEn: 'Anchors the task in the HARA → safety-goal chain',
+      hintZh: '将任务锚定到 HARA → 安全目标链路'
+    },
+    {
+      questionEn: 'What is the safety mechanism (detection + reaction) and its FTTI?',
+      questionZh: '安全机制是什么（故障探测+反应）及其 FTTI？',
+      hintEn: 'Defines the technical safety requirement',
+      hintZh: '界定技术安全需求（TSR）'
+    },
+    {
+      questionEn: 'How is it verified (FMEDA/FTA/DFA/review) and traced to which FSR/TSR?',
+      questionZh: '如何验证（FMEDA/FTA/DFA/评审）并追溯到哪个 FSR/TSR？',
+      hintEn: 'Analysis evidence + bidirectional traceability',
+      hintZh: '分析证据与双向可追溯性'
+    }
+  ],
   'devops-engineer': [
     {
       questionEn: 'Which pipeline stages or build/release jobs are affected?',
@@ -132,6 +152,20 @@ const ROLE_QUESTIONS: Record<UserRole, ElicitationQuestion[]> = {
       questionZh: '回滚/失败恢复策略是什么？',
       hintEn: 'Operational safety before deployment',
       hintZh: '部署前的运维安全保障'
+    }
+  ],
+  'pmo-manager': [
+    {
+      questionEn: 'What are the milestones, owners, and target dates?',
+      questionZh: '里程碑、负责人和目标日期是什么？',
+      hintEn: 'Schedule and accountability',
+      hintZh: '进度与责任归属'
+    },
+    {
+      questionEn: 'What cross-team dependencies or risks could affect delivery?',
+      questionZh: '哪些跨团队依赖或风险可能影响交付？',
+      hintEn: 'Dependency and risk management',
+      hintZh: '依赖与风险管理'
     }
   ]
 }

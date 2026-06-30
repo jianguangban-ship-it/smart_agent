@@ -132,15 +132,14 @@
           :key="msg.id"
           :message="msg"
           :hash-id="msg.hashId"
+          @retry="(id) => $emit('retryMsg', id)"
+          @edit="(p) => $emit('editMsg', p)"
         />
       </TransitionGroup>
 
       <!-- Typing indicator: waiting for first token -->
       <Transition name="chat-msg">
         <div v-if="isLoading && isWaitingFirstToken" class="typing-row">
-          <div class="typing-avatar-col">
-            <img :src="AGENT_AVATAR" class="typing-avatar avatar-thinking" alt="Coach" />
-          </div>
           <div class="typing-bubble">
             <span class="typing-label">{{ t('coach.agentLabel') }}</span>
             <div class="typing-dots">
@@ -193,6 +192,12 @@
          v10.125: Send/Stop button moved to TaskForm's action bar; the
          DescriptionEditor now spans the full footer width. -->
     <template v-if="appMode === 'task' && activeTab === 'chat'" #footer>
+      <div class="task-composer-footer">
+      <span
+        class="composer-context"
+        :class="{ over: taskCtxUsage.over }"
+        :title="`~${taskCtxUsage.percent}% of context window`"
+      >{{ taskCtxBadge }}</span>
       <DescriptionEditor
         variant="composer"
         v-model="descriptionModel"
@@ -201,6 +206,7 @@
         @submit="onComposerSubmit"
         @expand="isPopoutOpen = true"
       />
+      </div>
     </template>
   </PanelShell>
 
@@ -225,7 +231,9 @@ import { useToast } from '@/composables/useToast'
 import { copyText } from '@/utils/clipboard'
 import { activeSkill, ignoredSkillId } from '@/composables/useLLM'
 import { appMode } from '@/composables/useAppMode'
-import { taskModel } from '@/config/llm'
+import { taskModel, getContextLimitTokens } from '@/config/llm'
+import { contextUsage, formatTokens } from '@/utils/contextCalculator'
+import type { LLMChatMessage } from '@/types/api'
 import AsciiGlobe from '@/components/effects/AsciiGlobe.vue'
 import PanelShell from '@/components/layout/PanelShell.vue'
 import QuickChip from '@/components/shared/QuickChip.vue'
@@ -258,6 +266,8 @@ const isPopoutOpen = ref(false)
 const emit = defineEmits<{
   cancel: []
   retry: []
+  retryMsg: [id: string]
+  editMsg: [payload: { id: string; content: string }]
   applyChip: [key: string]
   elicit: []
   conflictCheck: []
@@ -272,10 +282,6 @@ const emit = defineEmits<{
 function onComposerSubmit() {
   if (props.canCoachSubmit && !props.isLoading) emit('coach')
 }
-
-// Bound (not a literal src) so Vite's static asset transform doesn't try to
-// resolve the public-path image — keeps the component unit-testable.
-const AGENT_AVATAR = '/agent_avy.png'
 
 const activeTab = ref<'chat' | 'analysis' | 'history'>('chat')
 
@@ -310,14 +316,28 @@ const retryCountdown = ref(0)
 let _cooldownTimer: number | null = null
 const chatContainerRef = ref<HTMLElement>()
 
-// Waiting for first token: loading + last message is assistant with empty content
+// Waiting for first token: loading + no assistant message in list yet.
+// Once the streaming assistant message is added (even with empty content),
+// the thinking orb inside ChatBubble takes over as the empty-state cue.
 const isWaitingFirstToken = computed(() => {
   if (!props.isLoading) return false
   const msgs = props.messages
   if (msgs.length === 0) return true
   const last = msgs[msgs.length - 1]
-  return last.role === 'assistant' && !last.content
+  return last.role === 'user'
 })
+
+// Context usage badge: estimate tokens from chat history + current draft
+const taskCtxUsage = computed(() => {
+  const projected: LLMChatMessage[] = [
+    ...props.messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    { role: 'user' as const, content: descriptionModel.value },
+  ]
+  return contextUsage(projected, getContextLimitTokens(taskModel.value))
+})
+const taskCtxBadge = computed(() =>
+  `${formatTokens(taskCtxUsage.value.tokens)} / ${formatTokens(taskCtxUsage.value.limit)} tok`
+)
 
 function handleRetry() {
   emit('retry')
@@ -471,6 +491,12 @@ const chips = computed(() =>
   min-height: 100px;
 }
 
+/* Analysis tab: plain block. It scrolls inside PanelShell's single `.panel-body`
+   scroller (like the Chat/History tabs). The Task-mode page-scroll is contained
+   by the grid-row clamp (App.vue `.grid-layout` grid-template-rows) + `.col-left`
+   overflow:hidden, so no inner overflow is needed here — adding one produced a
+   second, redundant scrollbar (v10.209 reverts the v10.204 inner-scroller). */
+
 /* Empty state */
 .empty-state {
   height: 100%;
@@ -571,23 +597,6 @@ const chips = computed(() =>
   align-items: flex-start;
   gap: 10px;
   margin-bottom: 16px;
-}
-.typing-avatar-col {
-  flex-shrink: 0;
-}
-.typing-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  object-fit: cover;
-  background-color: var(--bg-tertiary);
-}
-.avatar-thinking {
-  animation: breathe 2s ease-in-out infinite;
-}
-@keyframes breathe {
-  0%, 100% { box-shadow: 0 0 0 0 var(--green-glow); }
-  50% { box-shadow: 0 0 8px 4px var(--green-subtle); }
 }
 .typing-bubble {
   background-color: var(--bg-secondary);
@@ -875,4 +884,23 @@ const chips = computed(() =>
 /* v10.125: removed `.coach-composer`, `.coach-composer-input`,
    `.coach-send`, `.coach-stop` — Send/Stop relocated to TaskForm's
    action bar; the DescriptionEditor now spans the full panel footer. */
+
+/* v10.201: context badge + wrapper for the Task-mode composer footer */
+.task-composer-footer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.composer-context {
+  align-self: flex-end;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  padding: 2px var(--space-2);
+  letter-spacing: 0.3px;
+  transition: color 0.15s;
+}
+.composer-context.over {
+  color: var(--accent-red);
+  font-weight: 600;
+}
 </style>

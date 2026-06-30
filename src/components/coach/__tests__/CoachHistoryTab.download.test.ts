@@ -16,11 +16,11 @@ beforeAll(() => {
 // test never hits the DOM download path.
 vi.mock('@/composables/useCoachHistory', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/composables/useCoachHistory')>()
-  return { ...actual, exportRecords: vi.fn() }
+  return { ...actual, exportRecords: vi.fn(), exportSessionsZip: vi.fn() }
 })
 
 import CoachHistoryTab from '../CoachHistoryTab.vue'
-import { addRecord, clearHistory, startNewSession, setSessionName, coachHistory, exportRecords } from '@/composables/useCoachHistory'
+import { addRecord, clearHistory, startNewSession, setSessionName, coachHistory, exportRecords, exportSessionsZip } from '@/composables/useCoachHistory'
 
 // Stub the modal so we can drive the format selection.
 const DownloadModalStub = {
@@ -36,6 +36,7 @@ beforeEach(() => {
   startNewSession('explore')
   addRecord('user', 'EXPLORE_FIRST_MSG', 'explore')
   ;(exportRecords as unknown as ReturnType<typeof vi.fn>).mockClear()
+  ;(exportSessionsZip as unknown as ReturnType<typeof vi.fn>).mockClear()
 })
 
 function exploreSessionId(): string {
@@ -76,5 +77,34 @@ describe('CoachHistoryTab per-session download', () => {
     await wrapper.find('.dl-modal').trigger('click')
     const [, , baseName] = (exportRecords as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(baseName).toBe('EXPLORE_FIRST_MSG')
+  })
+})
+
+describe('CoachHistoryTab bulk "Download Raw" → per-chat', () => {
+  it('downloads a single plain file when only one chat exists (no zip)', async () => {
+    const wrapper = mount(CoachHistoryTab, { props: { channel: 'explore' }, global: { stubs } })
+    await wrapper.find('.action-download').trigger('click')   // open bulk modal
+    await wrapper.find('.dl-modal').trigger('click')          // select('markdown')
+    expect(exportRecords).toHaveBeenCalledTimes(1)
+    expect(exportSessionsZip).not.toHaveBeenCalled()
+  })
+
+  it('zips one file per chat (named by chat) when multiple chats are present', async () => {
+    setSessionName(exploreSessionId(), 'Chat One')
+    startNewSession('explore')
+    addRecord('user', 'SECOND_MSG', 'explore')
+    const wrapper = mount(CoachHistoryTab, { props: { channel: 'explore' }, global: { stubs } })
+    await wrapper.find('.action-download').trigger('click')
+    await wrapper.find('.dl-modal').trigger('click')
+
+    expect(exportSessionsZip).toHaveBeenCalledTimes(1)
+    expect(exportRecords).not.toHaveBeenCalled()
+    const [sessions, format] = (exportSessionsZip as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(format).toBe('markdown')
+    expect(sessions).toHaveLength(2)
+    const names = sessions.map((s: { name: string }) => s.name)
+    expect(names).toContain('Chat One')
+    expect(names).toContain('SECOND_MSG')
+    for (const s of sessions) expect(s.records.length).toBe(1)
   })
 })

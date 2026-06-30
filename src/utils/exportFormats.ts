@@ -41,8 +41,7 @@ export function exportMarkdown(data: ExportData): string {
   lines.push('## Summary Structure')
   lines.push(`| Field | Value |`)
   lines.push(`|-------|-------|`)
-  lines.push(`| Vehicle | ${data.summary.vehicle} |`)
-  lines.push(`| Product | ${data.summary.product} |`)
+  lines.push(`| Composite Code | ${data.summary.compositeCode} |`)
   lines.push(`| Layer | ${data.summary.layer} |`)
   lines.push(`| Component | ${data.summary.component} |`)
   lines.push(`| Detail | ${data.summary.detail} |`)
@@ -145,7 +144,7 @@ export function exportReqIF(data: ExportData): string {
 export function exportExcelCSV(data: ExportData): string {
   const headers = [
     'Summary', 'Project', 'Issue Type', 'Assignee', 'Story Points',
-    'Vehicle', 'Product', 'Layer', 'Component', 'Detail',
+    'Composite Code', 'Layer', 'Component', 'Detail',
     'Description', 'Requirement Level', 'Parent Requirement',
     'Verification Method', 'Quality Score', 'Review Status', 'Role', 'Date'
   ]
@@ -156,8 +155,7 @@ export function exportExcelCSV(data: ExportData): string {
     data.form.issueType,
     data.form.assignee || '',
     String(data.form.estimatedPoints),
-    data.summary.vehicle,
-    data.summary.product,
+    data.summary.compositeCode,
     data.summary.layer,
     data.summary.component,
     data.summary.detail,

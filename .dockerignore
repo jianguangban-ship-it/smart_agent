@@ -8,3 +8,18 @@ dist
 docs
 *.stackdump
 *.xmind
+# Local STT verification tool (v10.181) — Python venv + model weights are
+# ~1 GB and must never enter the docker build context. The image doesn't
+# need tools/ at all (Dockerfile COPYs selectively).
+tools/
+# Design reference snapshots
+*.png
+# Secrets / local runtime state — keep out of the build daemon context.
+# (The Dockerfile COPYs selectively, so these never reached the image; this
+# also stops them being sent to the daemon at all.)
+.env
+.env.*
+deploy/.env
+deploy/.env.*
+data/
+team-codes.json

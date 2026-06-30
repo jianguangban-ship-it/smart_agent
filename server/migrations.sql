@@ -24,3 +24,21 @@ CREATE INDEX IF NOT EXISTS idx_tickets_team_key   ON tickets (team_key);
 CREATE INDEX IF NOT EXISTS idx_tickets_status     ON tickets (status);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee   ON tickets (assignee);
 CREATE INDEX IF NOT EXISTS idx_tickets_event_time ON tickets (event_time DESC);
+
+-- Activity-log durable history (v10.228). Audit events (config saves, ticket
+-- writes, ...) and server errors are persisted here; the live tail uses an
+-- in-memory ring buffer (see server/logs/log-bus.ts). detail is a JSON string.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts        TEXT    NOT NULL,
+  level     TEXT    NOT NULL,
+  evt       TEXT,
+  msg       TEXT    NOT NULL DEFAULT '',
+  source    TEXT,
+  ip        TEXT,
+  team_key  TEXT,
+  detail    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_ts  ON audit_log (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_evt ON audit_log (evt);

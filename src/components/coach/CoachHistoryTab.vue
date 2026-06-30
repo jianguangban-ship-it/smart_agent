@@ -283,6 +283,7 @@ import {
   deleteRecords,
   clearHistory,
   exportRecords,
+  exportSessionsZip,
   sanitizeFilename,
   formatTime,
   getSessionGroups,
@@ -403,10 +404,25 @@ function handleDownload(format: 'json' | 'markdown' | 'both') {
       exportRecords(group.records, format, sanitizeFilename(sessionTitle(group)))
     }
   } else {
-    const records = selectedIds.value.size > 0
-      ? coachHistory.value.filter(r => selectedIds.value.has(r.id))
-      : coachHistory.value
-    exportRecords(records, format)
+    // Bulk: split the selected-or-all records into one file PER chat, named by
+    // the chat title, delivered as a single .zip (one plain file if only 1 chat).
+    const targetIds = selectedIds.value.size > 0
+      ? selectedIds.value
+      : new Set(coachHistory.value.map(r => r.id))
+    const sessions = sessionGroups.value.grouped
+      .map(g => ({ name: sessionTitle(g), records: g.records.filter(r => targetIds.has(r.id)) }))
+      .filter(s => s.records.length > 0)
+    // Defensive: any selected records not in a session group (legacy, no sessionId)
+    // → one fallback file so nothing is silently dropped.
+    const covered = new Set(sessions.flatMap(s => s.records.map(r => r.id)))
+    const leftover = coachHistory.value.filter(r => targetIds.has(r.id) && !covered.has(r.id))
+    if (leftover.length) sessions.push({ name: 'coach-history', records: leftover })
+
+    if (sessions.length <= 1) {
+      exportRecords(sessions[0]?.records ?? [], format, sessions[0] ? sanitizeFilename(sessions[0].name) : undefined)
+    } else {
+      exportSessionsZip(sessions, format)
+    }
   }
   closeDownloadModal()
 }

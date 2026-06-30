@@ -13,7 +13,7 @@ You will receive a JSON object containing:
 1. project_key: Project space key
 2. project_name: Project space name
 3. issue_type: Task type (Story/Task/Bug)
-4. summary: Original title (following the five-segment rule: [Vehicle Model][Product][Layer][Component][Task Summary])
+4. summary: Original title (following the four-segment rule: [CompositeCode][Layer][Component][Task Summary])
 5. description: Detailed description and acceptance criteria
 6. estimated_points: Manual estimate provided by the engineer
 
@@ -98,11 +98,11 @@ After each audit, the AI should output the following to the PM or Scrum Master:
 - Principle: Sub-tasks must be the smallest units of work that can be executed independently.
 
 ## 8. Sub-task Naming Rules
-- Inheritance: Sub-tasks must strictly inherit the first four segments of the parent Summary: [Vehicle Model][Product][Layer][Component].
+- Inheritance: Sub-tasks must strictly inherit the first three segments of the parent Summary: [CompositeCode][Layer][Component].
 
-- Generation: Re-generate only the fifth segment [Task Summary].
+- Generation: Re-generate only the fourth segment [Task Summary].
 
-- Requirement: The fifth segment must use a clear "Verb-Noun" structure (e.g., [Complete Detailed Design Doc], [Code Implementation & Static Check]).
+- Requirement: The fourth segment must use a clear "Verb-Noun" structure (e.g., [Complete Detailed Design Doc], [Code Implementation & Static Check]).
 
 --- 
 
@@ -119,7 +119,7 @@ You must output ONLY a strict JSON format. Do not include Markdown code blocks (
   "subtasks_list": 
   [ <br>
     {<br>
-      "summary_suffix": "Specific description of the 5th segment (without brackets)", <br>
+      "summary_suffix": "Specific description of the 4th segment (without brackets)", <br>
       "full_summary": "[Full Format][Summary]",<br>
       "points": Integer<br>
     }<br>

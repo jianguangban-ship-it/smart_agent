@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "server": "tsx watch --env-file-if-exists=deploy/.env server/index.ts",
     "dev:all": "concurrently -k -r -n vite,server -c blue,green \"npm:dev\" \"npm:server\"",
     "build": "vue-tsc -b && vite build",
@@ -22,7 +23,9 @@
     "@vueuse/core": "^14.2.1",
     "better-sqlite3": "^11.7.0",
     "dompurify": "^3.3.1",
+    "echarts": "^6.1.0",
     "fastify": "^4.28.1",
+    "fflate": "^0.8.3",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.33",
     "markdown-it": "^14.1.1",

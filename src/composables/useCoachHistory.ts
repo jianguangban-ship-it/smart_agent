@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { zipSync, strToU8 } from 'fflate'
 import type { CoachHistoryRecord, CoachChannel, ToolEvent, Attachment } from '@/types/api'
 
 const LS_KEY = 'coach-history'
@@ -77,6 +78,40 @@ export function setSessionName(id: string, name: string): void {
   saveNames()
 }
 
+// ─── Starred sessions (chat-log pin) ─────────────────────────────────────────
+// User-pinned chats, keyed by sessionId. Starred chats sort to the top of the
+// Recents list. Stored separately so it survives independent of names.
+
+const LS_STARRED = 'coach-starred-sessions'
+
+function loadStarred(): Record<string, true> {
+  try {
+    const raw = localStorage.getItem(LS_STARRED)
+    return raw ? (JSON.parse(raw) as Record<string, true>) : {}
+  } catch {
+    return {}
+  }
+}
+
+export const starredSessions = ref<Record<string, true>>(loadStarred())
+
+function saveStarred(): void {
+  localStorage.setItem(LS_STARRED, JSON.stringify(starredSessions.value))
+}
+
+export function isSessionStarred(id: string): boolean {
+  return starredSessions.value[id] === true
+}
+
+/** Toggle a session's starred (pinned) state. */
+export function toggleSessionStar(id: string): void {
+  const next = { ...starredSessions.value }
+  if (next[id]) delete next[id]
+  else next[id] = true
+  starredSessions.value = next
+  saveStarred()
+}
+
 // ─── Singleton state (module-level ref) ─────────────────────────────────────
 
 export const coachHistory = ref<CoachHistoryRecord[]>(loadFromStorage())
@@ -89,6 +124,10 @@ const sessionByChannel = ref<Record<CoachChannel, string | null>>({ task: null, 
 
 // Back-compat single ref used elsewhere (task-channel session).
 export const currentSessionId = ref<string | null>(null)
+
+/** Active Explore-channel session id — drives the sidebar Recents highlight.
+ *  Reactive: updated by startNewSession / setSessionId / restore (_restoreInto). */
+export const currentExploreSessionId = computed(() => sessionByChannel.value.explore)
 
 export function startNewSession(channel: CoachChannel = 'task'): void {
   const existingIds = new Set(
@@ -197,6 +236,13 @@ export function deleteRecords(ids: Set<string>): void {
   coachHistory.value = coachHistory.value.filter(r => !ids.has(r.id))
   saveToStorage(coachHistory.value)
   pruneOrphanNames()
+  pruneOrphanStars()
+}
+
+/** Delete a whole chat (all records sharing the sessionId). */
+export function deleteSession(sessionId: string): void {
+  const ids = new Set(getSessionRecords(sessionId).map(r => r.id))
+  if (ids.size) deleteRecords(ids)
 }
 
 /** Drop custom names whose session no longer has any records. */
@@ -216,6 +262,23 @@ function pruneOrphanNames(): void {
   }
 }
 
+/** Drop stars whose session no longer has any records. */
+function pruneOrphanStars(): void {
+  const liveSessions = new Set(
+    coachHistory.value.map(r => r.sessionId).filter(Boolean) as string[]
+  )
+  const next: Record<string, true> = {}
+  let changed = false
+  for (const id of Object.keys(starredSessions.value)) {
+    if (liveSessions.has(id)) next[id] = true
+    else changed = true
+  }
+  if (changed) {
+    starredSessions.value = next
+    saveStarred()
+  }
+}
+
 export function clearHistory(): void {
   coachHistory.value = []
   localStorage.removeItem(LS_KEY)
@@ -223,6 +286,8 @@ export function clearHistory(): void {
   currentSessionId.value = null
   sessionNames.value = {}
   localStorage.removeItem(LS_SESSION_NAMES)
+  starredSessions.value = {}
+  localStorage.removeItem(LS_STARRED)
 }
 
 // ─── Search & Filter ────────────────────────────────────────────────────────
@@ -273,23 +338,55 @@ export function sanitizeFilename(name: string): string {
   return cleaned || 'chat'
 }
 
+// Content builders — shared by the single-file exporters and the per-chat zip.
+export function recordsToJson(records: CoachHistoryRecord[]): string {
+  return JSON.stringify(records, null, 2)
+}
+export function recordsToMarkdown(records: CoachHistoryRecord[]): string {
+  return records.map(r => {
+    const roleLabel = r.role === 'user' ? 'USER' : 'COACH'
+    return `### ${roleLabel} — ${formatTime(r.timestamp)} (#${r.id})\n\n${r.content}\n\n<!-- ====== RECORD BOUNDARY ====== -->`
+  }).join('\n\n')
+}
+
 export function exportAsJson(records: CoachHistoryRecord[], baseName?: string): void {
-  const json = JSON.stringify(records, null, 2)
-  const blob = new Blob([json], { type: 'application/json' })
+  const blob = new Blob([recordsToJson(records)], { type: 'application/json' })
   downloadBlob(blob, `${baseName ?? `coach-history-${todayStr()}`}.json`)
 }
 
 export function exportAsMarkdown(records: CoachHistoryRecord[], baseName?: string): void {
-  const lines = records.map(r => {
-    const roleLabel = r.role === 'user' ? 'USER' : 'COACH'
-    return `### ${roleLabel} — ${formatTime(r.timestamp)} (#${r.id})\n\n${r.content}\n\n<!-- ====== RECORD BOUNDARY ====== -->`
-  })
-  const md = lines.join('\n\n')
-  const blob = new Blob([md], { type: 'text/markdown' })
+  const blob = new Blob([recordsToMarkdown(records)], { type: 'text/markdown' })
   downloadBlob(blob, `${baseName ?? `coach-history-${todayStr()}`}.md`)
 }
 
 export function exportRecords(records: CoachHistoryRecord[], format: 'json' | 'markdown' | 'both', baseName?: string): void {
   if (format === 'json' || format === 'both') exportAsJson(records, baseName)
   if (format === 'markdown' || format === 'both') exportAsMarkdown(records, baseName)
+}
+
+/** One chat → one file inside the export zip, named by the chat's title. */
+export interface SessionExport {
+  name: string
+  records: CoachHistoryRecord[]
+}
+
+/**
+ * Export several chats as a single .zip — one file per chat, each named by its
+ * (sanitized) chat title. Same-titled chats get a "(2)", "(3)" … suffix so no
+ * file overwrites another. `both` adds a .md and a .json per chat.
+ */
+export function exportSessionsZip(sessions: SessionExport[], format: 'json' | 'markdown' | 'both'): void {
+  const files: Record<string, Uint8Array> = {}
+  const used = new Set<string>()
+  for (const s of sessions) {
+    const base = sanitizeFilename(s.name)
+    let name = base
+    let n = 2
+    while (used.has(name)) name = `${base} (${n++})`
+    used.add(name)
+    if (format === 'markdown' || format === 'both') files[`${name}.md`] = strToU8(recordsToMarkdown(s.records))
+    if (format === 'json' || format === 'both') files[`${name}.json`] = strToU8(recordsToJson(s.records))
+  }
+  const zipped = zipSync(files)
+  downloadBlob(new Blob([zipped], { type: 'application/zip' }), `coach-history-${todayStr()}.zip`)
 }

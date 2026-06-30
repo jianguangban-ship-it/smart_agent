@@ -41,6 +41,9 @@ export default defineConfig({
           if (id.includes('node_modules/katex')) {
             return 'katex'
           }
+          if (id.includes('node_modules/echarts') || id.includes('node_modules/zrender')) {
+            return 'echarts'  // View-mode only — kept out of the main bundle
+          }
           if (id.includes('/src/config/')) {
             return 'config'  // fallback defaults only — runtime data loaded from /config/*.json
           }

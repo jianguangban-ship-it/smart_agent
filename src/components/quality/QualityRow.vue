@@ -1,10 +1,12 @@
 <template>
+  <!-- v10.185: Enter is handled by the panel's delegated keyboard nav
+       (useGridKeyboardNav) instead of per-row — recycled rows would
+       double-fire, and Enter on the JIRA link must keep its default. -->
   <div
     class="row"
     role="row"
     tabindex="0"
     @click="$emit('expand', ticket)"
-    @keydown.enter="$emit('expand', ticket)"
   >
     <div class="cell cell-status" role="cell"><StatusBadge :status="ticket.status" /></div>
     <div class="cell cell-team" role="cell">

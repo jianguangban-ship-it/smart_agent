@@ -21,7 +21,7 @@ import type { ChatMessage } from '@/types/api'
 
 const userMsg: ChatMessage = { id: 'u1', role: 'user', content: 'hello world', timestamp: Date.now() }
 
-describe('ChatBubble user meta-row (Explore/stacked)', () => {
+describe('ChatBubble user meta-row (both layouts)', () => {
   it('renders date + Retry/Edit/Copy buttons on a stacked user message', () => {
     const wrapper = mount(ChatBubble, { props: { message: userMsg, layout: 'stacked' } })
     expect(wrapper.find('.msg-user-meta').exists()).toBe(true)
@@ -29,9 +29,10 @@ describe('ChatBubble user meta-row (Explore/stacked)', () => {
     expect(wrapper.findAll('.msg-icon-btn')).toHaveLength(3)
   })
 
-  it('does NOT render the meta-row in bubble (Task) layout', () => {
+  it('also renders the meta-row in bubble (Task) layout (ported v10.201)', () => {
     const wrapper = mount(ChatBubble, { props: { message: userMsg, layout: 'bubble' } })
-    expect(wrapper.find('.msg-user-meta').exists()).toBe(false)
+    expect(wrapper.find('.msg-user-meta').exists()).toBe(true)
+    expect(wrapper.findAll('.msg-icon-btn')).toHaveLength(3)
   })
 
   it('emits retry with the message id', async () => {

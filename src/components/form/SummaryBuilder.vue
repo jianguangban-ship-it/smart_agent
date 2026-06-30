@@ -5,19 +5,16 @@
       <span class="section-subtitle">· {{ t('form.fivePartInput') }}</span>
     </h2>
     <div class="fields-grid">
-      <div class="field">
-        <label class="field-label" for="summary-vehicle">{{ t('form.vehicle') }}</label>
-        <select id="summary-vehicle" v-model="summary.vehicle" class="input-base field-select" :class="{ 'select-placeholder': !summary.vehicle }">
-          <option value="">{{ t('form.select') }}</option>
-          <option v-for="v in runtimeSummaryOptions.vehicles" :key="v" :value="v">{{ v }}</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="field-label" for="summary-product">{{ t('form.product') }}</label>
-        <select id="summary-product" v-model="summary.product" class="input-base field-select" :class="{ 'select-placeholder': !summary.product }">
-          <option value="">{{ t('form.select') }}</option>
-          <option v-for="p in runtimeSummaryOptions.products" :key="p" :value="p">{{ p }}</option>
-        </select>
+      <div class="field field-wide">
+        <label class="field-label">{{ t('form.compositeCode') }} <span class="field-count">· {{ codeOptions.length }}</span></label>
+        <CompositeCodeCombobox
+          v-model="summary.compositeCode"
+          :items="codeOptions"
+          :placeholder="t('form.compositeCodePlaceholder')"
+          :group-label="t('form.compositeCode')"
+          :results-label="t('form.codeResults')"
+          :no-results-label="t('form.codeNoResults')"
+        />
       </div>
       <div class="field">
         <label class="field-label" for="summary-layer">{{ t('form.layer') }}</label>
@@ -91,12 +88,22 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { SummaryState } from '@/types/form'
-import { runtimeSummaryOptions } from '@/composables/useRuntimeConfig'
+import { runtimeSummaryOptions, runtimeProjectMatrix } from '@/composables/useRuntimeConfig'
+import { compositeCode, isBlankComposite } from '@/config/projectMatrix'
 import { useI18n } from '@/i18n'
 import { useToast } from '@/composables/useToast'
 import { copyText } from '@/utils/clipboard'
 import QualityMeter from './QualityMeter.vue'
+import CompositeCodeCombobox from './CompositeCodeCombobox.vue'
+
+// Composite-code options from the saved Project matrix (blank rows skipped).
+const codeOptions = computed(() =>
+  runtimeProjectMatrix.value
+    .filter(r => !isBlankComposite(r))
+    .map(r => ({ code: compositeCode(r), productLine: r.productLine, projectNo: r.projectNo }))
+)
 
 const props = defineProps<{
   summary: SummaryState
@@ -147,9 +154,16 @@ async function copySummary() {
 }
 .fields-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin-bottom: 8px;
+}
+.field-wide {
+  grid-column: 1 / -1;
+}
+.field-count {
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 .field-label {
   display: block;
